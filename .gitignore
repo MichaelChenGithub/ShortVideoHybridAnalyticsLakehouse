@@ -1,0 +1,30 @@
+# --- Project Specific Data (最重要) ---
+minio_data/
+checkpoint/
+warehouse/
+spark-warehouse/
+metastore_db/
+derby.log
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# --- IDE Settings ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+# 如果你有把 docker logs 導出到檔案，也要忽略
+*.log
