@@ -6,10 +6,6 @@ from pyspark.sql.types import *
 def create_spark_session():
     return SparkSession.builder \
         .appName("IcebergLakehouseMedallion") \
-        .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-        .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog") \
-        .config("spark.sql.catalog.lakehouse.type", "hadoop") \
-        .config("spark.sql.catalog.lakehouse.warehouse", "s3a://warehouse/") \
         .getOrCreate()
 
 def init_tables(spark):
@@ -92,7 +88,42 @@ def process_batch(df, batch_id):
         USING (
             SELECT * FROM (
                 SELECT 
-                    *, 
+                    order_id,
+                    user_id, -- 假設 user_id 不會變，取最新即可
+                    
+
+                    first_value(current_status) OVER (
+                        PARTITION BY order_id 
+                        ORDER BY event_timestamp DESC
+                    ) as current_status,
+                    
+                    first_value(total_amount, true) OVER (
+                        PARTITION BY order_id 
+                        ORDER BY event_timestamp DESC
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                    ) as total_amount,
+                    
+                    first_value(currency, true) OVER (
+                        PARTITION BY order_id 
+                        ORDER BY event_timestamp DESC
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                    ) as currency,
+                    
+                    first_value(payment_method, true) OVER (
+                        PARTITION BY order_id 
+                        ORDER BY event_timestamp DESC
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                    ) as payment_method,
+
+                    first_value(items, true) OVER (
+                        PARTITION BY order_id 
+                        ORDER BY event_timestamp DESC
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                    ) as items,
+
+                    max(event_timestamp) OVER (PARTITION BY order_id) as event_timestamp,
+                    max(kafka_ts) OVER (PARTITION BY order_id) as kafka_ts,
+                    
                     ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY event_timestamp DESC) as rn
                 FROM batch_updates
             ) WHERE rn = 1

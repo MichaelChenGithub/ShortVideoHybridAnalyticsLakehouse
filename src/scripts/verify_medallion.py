@@ -4,10 +4,6 @@ from pyspark.sql.functions import col, count
 def main():
     spark = SparkSession.builder \
         .appName("VerifyMedallion") \
-        .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
-        .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog") \
-        .config("spark.sql.catalog.lakehouse.type", "hadoop") \
-        .config("spark.sql.catalog.lakehouse.warehouse", "s3a://warehouse/") \
         .getOrCreate()
 
     print("========================================")

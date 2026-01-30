@@ -10,12 +10,18 @@ services:
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: password
+      MINIO_DOMAIN: minio
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
        - ./minio_data:/data
     command: server /data --console-address ":9001"
+    networks:
+      default:
+        aliases:
+          - warehouse.minio
+          - checkpoints.minio
 
   minio-mc:
     image: minio/mc
@@ -27,14 +33,31 @@ services:
       sleep 5;
       until (/usr/bin/mc alias set myminio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
       /usr/bin/mc mb --ignore-existing myminio/warehouse;
-      # [Fix] 改用複數名 'checkpoints' 避免 S3 命名規則錯誤
       /usr/bin/mc mb --ignore-existing myminio/checkpoints;
       echo 'Buckets created successfully';
       exit 0;
       "
 
   # ---------------------------
-  # 2. Ingestion Layer (Kafka)
+  # 2. Metadata Layer (Iceberg REST) - [NEW]
+  # ---------------------------
+  iceberg-rest:
+    image: tabulario/iceberg-rest:latest
+    container_name: lakehouse-catalog
+    ports:
+      - "8181:8181"
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://warehouse/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+    depends_on:
+      - minio
+
+  # ---------------------------
+  # 3. Ingestion Layer (Kafka)
   # ---------------------------
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -62,19 +85,18 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
 
   # ---------------------------
-  # 3. Processing Layer (Spark)
+  # 4. Processing Layer (Spark)
   # ---------------------------
   spark:
     image: tabulario/spark-iceberg:latest
     container_name: lakehouse-spark
     depends_on:
-      minio:
-        condition: service_started
-      kafka:
-        condition: service_started
+      - minio
+      - kafka
+      - iceberg-rest  # Spark 現在依賴 Catalog
     volumes:
       - ./src:/home/iceberg/local/src
-      - ./warehouse:/home/iceberg/warehouse
+      # 移除 ./warehouse 掛載，因為現在透過 S3 協議走，不需要本地模擬
       - ./spark-events:/home/iceberg/spark-events
       - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
     environment:
@@ -85,5 +107,19 @@ services:
       AWS_ALLOW_HTTP: "true"
     ports:
       - "8888:8888"
-      - "8080:8080"
+      - "9090:8080"
       - "10000:10000"
+
+  # ---------------------------
+  # 5. Serving Layer (Trino) - [NEW]
+  # ---------------------------
+  trino:
+    image: trinodb/trino:latest
+    container_name: lakehouse-trino
+    ports:
+      - "8081:8080"  # 將 Trino UI 開在 8081 (避免跟 Spark UI 8080 衝突)
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog
+    depends_on:
+      - iceberg-rest
+      - minio
