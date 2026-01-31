@@ -8,7 +8,7 @@
     # fix: after diagnosing, we only got hundreds of row per batch, the window function should not cause OOM. Therefore, we make these changes in saprk-defaults.conf
         #   1. Decrease Memory Fraction (Make more space for Window Function)
         #   2. Set only 4 Spark Shuffle Partitions for prevent OOM in small cluster
-        #   3. Limit JVM Heap size to avoid OOM
+        #   3. Limit JVM Heap size to avoid OOM 
 ✔ ivy_cache for spark in docker-compose.yml @started(26-01-30 20:10) @done(26-01-30 20:13) @lasted(3m53s)
     # issue: each time we build docker-compose, spark try to download all dependencies and somehow it fails. 
     # root cause: no maven/ivy cache volume for spark in docker-compose.yml
