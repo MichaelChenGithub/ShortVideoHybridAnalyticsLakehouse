@@ -24,28 +24,28 @@ The system is designed to simulate a production-grade AdTech environment. The pr
 
 ```mermaid
 graph LR
-    Generator[Mock Generator (Python)] -->|"Key: impression_id"| Kafka[Apache Kafka]
-    Kafka -->|"Topic: ad_events"| Spark[Spark Structured Streaming]
+    Generator["Mock Generator (Python)"] -->|"Key: impression_id"| Kafka["Apache Kafka"]
+    Kafka -->|"Topic: ad_events"| Spark["Spark Structured Streaming"]
     
-    subgraph "Processing Layer (Spark Micro-batch)"
-        Spark -->|"Stream A: Append (Raw)"| Bronze[Table: ad_events]
-        Spark -->|"Stream B: Upsert (State Machine)"| Gold[Table: ad_performance_state]
+    subgraph Processing_Layer["Processing Layer (Spark Micro-batch)"]
+        Spark -->|"Stream A: Append (Raw)"| Bronze["Table: ad_events"]
+        Spark -->|"Stream B: Upsert (State Machine)"| Gold["Table: ad_performance_state"]
     end
     
-    subgraph "Storage Layer (S3/MinIO)"
+    subgraph Storage_Layer["Storage Layer (S3/MinIO)"]
         Bronze -->|"Parquet (Header+Body)"| S3_Bucket
         Gold -->|"Parquet + Delete Files"| S3_Bucket
     end
     
-    subgraph "Serving Layer (Multi-View)"
-        Grafana -->|"SQL (Trino)"| System_Metrics[Ops: Latency & Fraud]
-        Metabase -->|"SQL (Trino)"| Business_Metrics[Biz: ROAS & Performance]
-        Jupyter -->|"SQL (Trino)"| Data_Science[DS: User Journey & Path]
+    subgraph Serving_Layer["Serving Layer (Multi-View)"]
+        Grafana -->|"SQL (Trino)"| System_Metrics["Ops: Latency and Fraud"]
+        Metabase -->|"SQL (Trino)"| Business_Metrics["Biz: ROAS and Performance"]
+        Jupyter -->|"SQL (Trino)"| Data_Science["DS: User Journey and Path"]
     end 
 
-    subgraph "Dimension Management (SCD Type 2)"
-        DimSource[Mock Generator (Python)] -->|"Batch Update"| DimJob[Spark Batch Job]
-        DimJob -->|"Merge Logic"| DimTable[Dim: dim_campaigns]
+    subgraph Dimension_Management["Dimension Management (SCD Type 2)"]
+        DimSource["Mock Generator (Python)"] -->|"Batch Update"| DimJob["Spark Batch Job"]
+        DimJob -->|"Merge Logic"| DimTable["Dim: dim_campaigns"]
         DimTable -->|"History Tracking"| S3_Bucket
     end
 ```
