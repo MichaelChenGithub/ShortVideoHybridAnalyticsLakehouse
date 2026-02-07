@@ -6,8 +6,8 @@
 ☐ Design Doc
     ✔ pipeline 架構 （python -> kafka -> spark ss (Gold Upsert 邏輯, bronze(head/body)) -> Trino -> metabase/grafana @done(26-02-06 03:00)
     ✔ Metabase dashboard 設計 @done(26-02-06 15:55)
-    ☐ raw_events, virality_states schema 設計 (iceberg table schema)
-    ☐ silver data model 設計 (star schema -> fact table and dim table)
+    ✔ raw_events, virality_states schema 設計 (iceberg table schema) @started(26-02-06 16:40) @done(26-02-06 16:47) @lasted(7m25s)
+    ✔ silver data model 設計 (star schema -> fact table and dim table) @done(26-02-06 16:47)
     ☐ Python generator 事件設計(streaming, dim table init and update)
     ☐ airflow 管理 batch 事件 (compaction, batch bronze -> silver)
     ✔ Grafana dashboard 設計 @done(26-02-06 15:55)

@@ -94,7 +94,7 @@ graph LR
     subgraph Serving["4. Serving Layer"]
         direction TB
         Trino["Trino Query Engine"]:::serving
-        Metabase["Metabase<br/>(Ops Dashboard)"]:::serving
+        Metabase["Metabase<br/>(Product Growth Intelligence Dashboard)"]:::serving
         Grafana["Grafana<br/>(System Metrics)"]:::serving
     end
 
