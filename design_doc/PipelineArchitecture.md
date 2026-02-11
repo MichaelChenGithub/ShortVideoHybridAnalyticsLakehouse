@@ -9,16 +9,19 @@
 
 Build a high-throughput, low-latency **Kappa Architecture** Lakehouse. The pipeline ingests raw user interaction events, processes them in real-time for operational monitoring (The "Pulse"), and simultaneously archives raw history for strategic analysis (The "Diagnosis"), serving both needs from a unified **Apache Iceberg** storage layer.
 
-### 1.2 Core Design Principles
-
+**1.2 Core Design Principles**
 * **SLA-Driven Engineering:**
-* **Latency SLA:** Guarantee **< 60 seconds** data freshness for the Real-time Operational Dashboard.
+* **Latency SLA:** **P95 < 3 Minutes** for Real-time Operational Metrics. (Derived from: 1m Window + 10s Watermark + Iceberg Commit Time).
 * **Availability SLA:** Ensure T+1 Batch Datasets are ready by **09:00 AM daily** for strategic reporting.
 
 
-* **Lambda-Free:** Use a single processing code path (Spark Structured Streaming) for both real-time ingestion and historical replay to guarantee metric consistency.
-* **Decoupled Compute & Storage:** Use **Trino** as the serving layer to query **Iceberg** tables directly, avoiding data copying.
-* **Schema Resilience:** Implement a "Header + Body" pattern to handle upstream schema drift without pipeline failure.
+* **Hybrid Lakehouse Strategy (Polyglot Persistence):**
+* **High-Frequency Facts (Gold):** Use **Append-Only** pattern with Tumbling Windows to maximize throughput and eliminate write amplification.
+* **Mutable Metadata (Dims):** Use **Merge-on-Read (MoR)** pattern to guarantee strict consistency for slowly changing dimensions (SCD).
+
+
+* **Decoupled Compute & Storage:** Use **Trino** as the serving layer to query **Iceberg** tables directly.
+* **Schema Resilience:** Implement a "Header + Body" pattern to handle upstream schema drift.
 
 ---
 
@@ -70,7 +73,7 @@ graph LR
         direction TB
         spacer[" "]:::hidden
         Bronze["Bronze: raw_events<br/>(append-only)"]:::storage
-        Gold["Gold: virality_state<br/>(MoR upsert)"]:::storage
+        Gold["Gold: video_stats_1min<br/>(Append Log)"]:::storage
         Dims["Dims: users/videos<br/>(SCD Type 1/2)"]:::storage
         Silver["Silver: events_enriched<br/>(cleaned/sessionized)"]:::storage
     end
@@ -78,7 +81,7 @@ graph LR
     %% ==================== 4. Data Flow ====================
     %% Stream Writes (Hot Path)
     SparkSS -->|Append Body| Bronze
-    SparkSS -->|MERGE Upsert| Gold
+    SparkSS -->|Append (Windowed)| Gold
     SparkDims -->|MERGE Upsert| Dims
     
     %% Batch Writes (Cold Path)
@@ -133,13 +136,21 @@ graph LR
 * **Rationale:** The Real-time Dashboard is **Content-Centric** (Viral Velocity). Partitioning by `video_id` ensures all interactions (likes, shares) for a specific video land in the same Kafka partition, minimizing Shuffle overhead.
 
 
-### 3.2 Stream Processing Layer (The Core)
+### 3.2 Stream Processing Layer (The Core)**
+* **Engine:** Apache Spark Structured Streaming.
+* **Stream A (Bronze - Raw):**
+* **Pattern:** Append-Only.
+* **Logic:** Ingests raw events with "Header + Body" schema preservation.
 
-* **Engine:** Apache Spark Structured Streaming (Micro-batch Mode).
-* **Trigger Interval:** 10-30 seconds.
-* **Logic:** The `foreachBatch` pattern is used to split the stream into two write paths:
-* **Stream A (Bronze):** Append-only raw logs with "Header + Body" schema for full fidelity.
-* **Stream B (Gold):** Stateful Upsert (`MERGE INTO`) to maintain the real-time "Viral Score" of videos.
+
+* **Stream B (Gold - Metrics):**
+* **Pattern:** **Tumbling Window Aggregation (Append-Only)**.
+* **Window Size:** **1 Minute** (Event Time).
+* **Watermark:** **10 Seconds** (to handle late data while maintaining low latency).
+* **Trigger Interval:** **1 Minute** (Processing Time).
+* **Logic:** Aggregates metrics (`likes`, `impressions`, `completions`) per video per minute.
+* **Storage Target:** `lakehouse.gold.video_stats_1min`.
+* **Advantage:** Eliminates the "Small File Problem" and "Read Amplification" associated with high-frequency Upserts.
 
 
 ### 3.3 Dimension Management (CDC Streaming Ingestion)
@@ -164,13 +175,14 @@ graph LR
 ### 3.4 Serving Layer
 
 * **Engine:** Trino (PrestoSQL).
-* **Connection:** **JDBC (Java Database Connectivity)**.
-* *Note:* JDBC acts as the standard bridge allowing Metabase to send SQL queries to Trino and retrieve result sets for visualization.
+* **View Strategy (Read-Side Sliding Window):**
+* Since Gold data is stored as 1-minute buckets, Trino Views are used to calculate the final "Viral Velocity".
+* *Logic:* `SELECT sum(likes) FROM gold.video_stats_1min WHERE window_start >= now() - interval '10' minute`.
 
 
 * **Clients:**
-* **Metabase:** Queries Gold + Dims for Business Ops.
-* **Grafana:** Queries System Metrics (Lag, Latency).
+* **Metabase:** Queries Gold Views for "Viral Trends" and Dims for "Creator Segments".
+* **Grafana:** Queries System Metrics.
 
 ### 3.5 Maintenance Layer: Compaction Strategy (Airflow + Spark Batch)
 
@@ -211,11 +223,19 @@ graph LR
 
 
 
-### 4.3 SLA Definition
+### 4.3 Latency vs. Throughput (SLA Definition)
 
-* **Real-time (Gold):** < 1 min latency. Achieved via Spark Streaming Micro-batches + Iceberg Merge-on-Read.
-* **Batch (Silver/Dims):** T+1 Availability. Achieved via Airflow scheduling to ensure data consistency for morning reports.
+* **Decision:** Relaxed Real-time SLA to **~3 Minutes**.
+* **Trade-off:**
+* *Pros:* Significantly improved storage health (fewer small files) and pipeline stability.
+* *Cons:* Ops dashboard has a 3-minute lag compared to raw events.
+* *Justification:* Viral trends evolve over 15-30 minute windows; sub-minute latency is not required for the specific business action (boosting/banning), making this a worthwhile trade-off for system robustness.
 
+
+### 4.4 Hybrid Write Patterns (Append vs. Upsert)**
+* **Decision:** We apply different write patterns based on data characteristics.
+* **Gold Layer (Facts):** Uses **Append-Only**. High-frequency metric updates (e.g., 10k likes/sec) would choke an Upsert pipeline with small files and delete vectors. Appending pre-aggregated buckets creates clean, large Parquet files.
+* **Dimension Layer (Metadata):** Uses **Merge-on-Read (Upsert)**. User/Video profile changes are low volume but require strict consistency. The cost of MoR is justified here for data accuracy.
 ---
 
 ## 5. Infrastructure Stack (Docker)
@@ -230,3 +250,6 @@ graph LR
 | **Airflow** | `airflow-webserver` | 8081 | Workflow Orchestration. |
 | **Spark** | Spark UI | 4040 | Application monitoring and debugging |
 | **Spark** | Thrift Server (optional) | 10000 | SQL access for BI tools |
+
+
+---

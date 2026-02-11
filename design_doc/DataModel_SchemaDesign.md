@@ -5,13 +5,11 @@
 
 ## 1. Overview
 
-This document defines the **Apache Iceberg** table schemas for the Lakehouse. We follow the **Medallion Architecture**:
-
+This document defines the **Apache Iceberg** table schemas for the Lakehouse. We follow the **Medallion Architecture** with a **Hybrid Write Strategy**:
 * **Bronze:** Raw ingestion (Append-only).
 * **Silver:** Cleaned, enriched, and sessionized (Batch T+1).
-* **Gold:** Aggregated business metrics (Real-time Upsert).
-* **Dims:** Reference metadata (CDC Streaming / Fast Batch).
-
+* **Gold:** Pre-aggregated Metrics Log (**Real-time Append-Only**).
+* **Dims:** Reference metadata (CDC Streaming / **Real-time Upsert**).
 ---
 
 ## 2. Bronze Layer: Ingestion Log
@@ -98,28 +96,29 @@ This document defines the **Apache Iceberg** table schemas for the Lakehouse. We
 
 ## 4. Gold Layer: The "Pulse" (Real-time)
 
-### 4.1 Fact Table: Virality State
+### 4.1 Fact Table: Video Metrics Log
 
-**Table:** `lakehouse.gold.virality_state`
+**Table:** `lakehouse.gold.video_stats_1min`
+* **Pattern:** **Time-Series Log (Append-Only)**.
+* **Format:** Parquet (Iceberg Copy-on-Write).
+* **Update Frequency:** Streaming (Micro-batch 1 min Trigger).
+* **Partition Strategy:** `days(window_start)`, `bucket(16, video_id)` — Dual partitioning allows efficient pruning by both Time (Recency) and Video Entity.
 
-* **Pattern:** Accumulating Snapshot (State Machine).
-* **Format:** Parquet (Iceberg **Merge-on-Read**).
-* **Update Frequency:** Streaming (Micro-batch 10-30s).
-* **Partition Strategy:** `bucket(16, video_id)` — Critical for high-throughput Upserts (avoids full table scans).
 
 | Column Name | Type | Metric Type | Logic / Definition |
 | --- | --- | --- | --- |
-| `video_id` | `STRING` | **Dimension** | Primary Key. |
-| `upload_ts` | `TIMESTAMP` | **Dimension** | Video age (Used for Fresh Supply Ratio). |
-| `window_end_ts` | `TIMESTAMP` | **System** | Last updated timestamp (Watermark). |
-| `impressions_10m` | `LONG` | **Velocity** | Count of views in rolling window. |
-| `likes_10m` | `LONG` | **Velocity** | Count of likes in rolling window. |
-| `shares_10m` | `LONG` | **Velocity** | Count of shares in rolling window. |
-| `velocity_score` | `DOUBLE` | **Derived** | `(likes*5 + shares*10) / impressions`. The core "Pulse" metric. |
-| `acceleration_score` | `DOUBLE` | **Derived** | `velocity_current - velocity_5m_ago`. |
-| `total_views` | `LONG` | **Cumulative** | Lifetime views (Size of bubble in Scatter Plot). |
-| `is_bot_flagged` | `BOOLEAN` | **Risk** | Flagged by upstream fraud detection logic. |
+| `video_id` | `STRING` | **Dimension** | Partition Key. |
+| `window_start` | `TIMESTAMP` | **Dimension** | The start time of the 1-min tumbling window. **Critical for Trino Predicate Pushdown.** |
+| `upload_ts` | `TIMESTAMP` | **Dimension** | Carried over to calculate "Freshness" downstream. |
+| `impressions` | `LONG` | **Denominator** | Count of `impression` events in this 1m bucket. |
+| `likes` | `LONG` | **Interaction** | Count of `like` events in this 1m bucket. |
+| `shares` | `LONG` | **Interaction** | Count of `share` events in this 1m bucket. |
+| `play_start` | `LONG` | **Volume** | Count of `play_start` events (Raw Views). |
+| `play_finish` | `LONG` | **Quality** | Count of `play_finish` events. Used to calc **Completion Rate**. |
 
+
+*Note on Derived Metrics:*
+Fields like `velocity_score` and `acceleration` are **removed** from the physical schema. They are now calculated at **Read-Time** via Trino Views by aggregating the last  minutes of log data.
 ---
 
 ## 5. Schema Evolution & Compatibility
@@ -131,6 +130,9 @@ This document defines the **Apache Iceberg** table schemas for the Lakehouse. We
 
 ### 5.2 Time-Travel & Snapshots
 
-* **Gold Table:** Configured with `write.metadata.delete-after-commit.enabled = false` and `history.expire.max-snapshot-age-ms = 86400000` (24h) to allow short-term time travel for debugging "Ghost Velocity" incidents.
+* **Gold Table Configuration:**
+* **Log Retention:** Since the Gold table is now an Append-Only log, "history" is preserved physically as data rows.
+* **Optimization:** `write.metadata.delete-after-commit.enabled = true` is enabled to keep metadata lightweight, as we don't need Iceberg-level time travel to see past states (we can simply query `WHERE window_start = ...`).
+* **TTL:** A separate maintenance job runs `DELETE FROM gold WHERE window_start < now() - interval '7' days` to manage storage costs, as Ops only monitors the last 24 hours.
 
 ---

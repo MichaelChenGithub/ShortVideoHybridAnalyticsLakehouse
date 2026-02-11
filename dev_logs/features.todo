@@ -8,16 +8,17 @@
     ✔ Metabase dashboard 設計 @done(26-02-06 15:55)
     ✔ raw_events, virality_states schema 設計 (iceberg table schema) @started(26-02-06 16:40) @done(26-02-06 16:47) @lasted(7m25s)
     ✔ silver data model 設計 (star schema -> fact table and dim table) @done(26-02-06 16:47)
-    ☐ Python generator 事件設計(streaming, dim table init and update)
+    ✔ Python generator 事件設計(streaming, dim table init and update) @done(26-02-07 18:37)
     ☐ airflow 管理 batch 事件 (compaction, batch bronze -> silver)
     ✔ Grafana dashboard 設計 @done(26-02-06 15:55)
 ☐ Python generator
-    ☐ dimension tables (users, videos)
+    ☐ dimension tables (users, videos) @started(26-02-07 18:37)
     ☐ streaming event(user_id and video_id must from dim tables)
     ☐ batch event for updating dimension tables (e.g. user info update, video info update)
 ☐ Streaming pipeline
     ☐ Spark Structured Streaming for real-time processing
-    ☐ Merge on Read (MoR) strategy for gold layer to handle updates and deletes
+        ☐ dim table streaming update with MoR strategy
+        ☐ fact table streaming update with MoR strategy
 ☐ New Airflow Integration
     ☐ hourly compaction task
     ☐ daily dimension table updates

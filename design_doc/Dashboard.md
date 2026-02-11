@@ -14,38 +14,40 @@ This document defines the visualization layer served by **Trino**. I implement a
 
 ## 2. Metabase: Real-time Ops Dashboard ("The Pulse")
 
-* **Primary Source:** `lakehouse.gold.virality_state` (Iceberg MoR)
-* **Secondary Source:** `lakehouse.dims.dim_videos` (Iceberg CoW - Fast Batch Update)
-* **Update Frequency:** 1 minute (Auto-refresh)
+* **Primary Source:** `lakehouse.gold.video_stats_1min` (**Iceberg Append-Only Log**)
+* **Secondary Source:** `lakehouse.dims.dim_videos` (Iceberg MoR)
+* **Update Frequency:** 1 minute (Auto-refresh). *Note: Data latency is ~3 mins.*
 * **Target Audience:** Content Operations, Trust & Safety
 
 ### 2.1 Layout Strategy (Command Center)
 
 Designed for large-screen monitoring. Focuses on "Anomaly Detection" and "Immediate Action".
-
 ```text
 +---------------------------------------------------------------+
-|  [ Alert Banner: "Gaming" Category Cold Start Critical! ]     |
+|  [ Alert: Global Doomscroll Rate Spiking (>45%) - Check RecSys ] |
 +-----------------------+-----------------------+---------------+
-| 1. Viral Velocity     | 2. Fresh Supply Ratio | 3. Cold Start |
+| 1. Viral Velocity     | 2. Doomscroll Rate    | 3. Cold Start |
 | (Scatter Plot)        | (Line Chart)          | (Gauge)       |
-| "Star Finder"         | Supply/Demand Balance | RecSys Health |
+| "Star Finder"         | User Boredom Index    | Quality Check |
 +-----------------------+-----------------------+---------------+
-| 4. Top Trending Videos Table (Enriched with Category/Region)  |
-| Video ID | Category | Region | Velocity | Views  | Action     |
-| v_1023   | Beauty   | US     | 9.8      | 50k    | [Boost]    |
+| 4. Top Trending Videos Table (Aggregated View)                |
+| Video ID | Category | Velocity | Completion % | Action        |
+| v_1023   | Beauty   | 9.8      | 65%          | [Boost]       |
 +---------------------------------------------------------------+
 
 ```
 
 ### 2.2 Metric Specifications & Query Logic
+## 📊 Product Growth Intelligence Metrics
 
 | Metric Section | Visual | Definition & Logic | Business Action |
-| --- | --- | --- | --- |
-| **1. Viral Velocity**<br><br>(Explosion Monitor) | **Scatter Plot**<br><br>• X: Velocity<br><br>• Y: Acceleration<br><br>• Size: Total Views | **Formula:** `(Likes*5 + Shares*10) / Impressions`<br><br>**Acceleration:** `Current_Vel - 5min_Ago_Vel`<br><br><br>*Why Scatter Plot?* Instantly separates "Steady Hits" from "Exploding Supernovas" (High Velocity + High Acceleration). | **Discovery:**<br><br>Identify viral content early to manually inject into the "Hero Pool" or audit for bot activity. |
-| **2. Fresh Supply Ratio**<br><br>(Inventory Health) | **Line Chart**<br><br>• Series A: Today<br><br>• Series B: Yesterday | **Formula:**<br><br>`Count(Videos Approved < 1h) / Count(Active Users 10m) * 1000`<br><br><br>*Logic:* Measures the number of fresh videos available per 1,000 active users. | **Supply Control:**<br><br>• **Low:** Supply shortage. Action: Relax moderation or recycle evergreen content.<br><br>• **High:** Oversupply. Action: Tighten moderation standards. |
-| **3. Cold Start Health**<br><br>(RecSys Diagnostic) | **Gauge Chart**<br><br>• Red: <10%<br><br>• Yellow: 10-30%<br><br>• Green: >30% | **Formula:** `% of new videos (age < 1h) with > 100 views`<br><br><br>*Logic:* Proxy for Recommendation System health. | **System Diagnostic:**<br><br>If Red, the RecSys pipeline is likely blocked. Alert ML Engineers. |
-| **4. Trending Table**<br><br>(Enriched Details) | **Table** | **Query Logic (Broadcast Join):**<br><br>`SELECT f.video_id, d.category, d.region, f.velocity`<br><br>`FROM gold.virality_state f`<br><br>`JOIN dims.dim_videos d ON f.video_id = d.video_id`<br><br>`ORDER BY f.velocity DESC LIMIT 50` | **Ops Execution:**<br><br>Provides the metadata context (Category, Region) needed for Ops to make boosting/banning decisions. |
+|---------------|--------|-------------------|----------------|
+| **1. Viral Velocity (Explosion Monitor)** | Scatter Plot <br>• X: Velocity <br>• Y: Completion % <br>• Size: Total Views | **View Logic (Last 30m):** <br>`SELECT video_id, SUM(likes*5 + shares*10) / SUM(impressions) AS velocity, SUM(play_finish) / SUM(play_start) AS completion_rate FROM gold WHERE window_start >= now() - interval '30' minute GROUP BY video_id` <br><br>**Why?** Correlates *Hype (Velocity)* with *Quality (Completion).* | **Discovery:** <br>• High Vel + High Completion → **Supernova** (Boost immediately) <br>• High Vel + Low Completion → **Clickbait** (Suppress / Review) |
+| **2. Global Doomscroll Rate (System Health)** | Line Chart <br>• X: Time (1m bins) <br>• Y: Skip Rate | **Formula:** `Sum(Skips) / Sum(Impressions)` (Global Aggregation) <br><br>**Logic:** Proxy for *User Boredom.* High skip rate suggests recommendation quality issues. | **Incident Response:** <br>Spike > 40% → Alert SRE. Possible RecSys model degradation or irrelevant content serving. |
+| **3. High-Quality Cold Start (Supply Health)** | Gauge Chart <br>• Target: > 20% | **Formula:** % of new videos (age < 1h) with `Velocity > 0.05` <br><br>**Logic:** Focus on engagement quality rather than raw impressions. Measures whether new creators get traction. | **Supply Control:** <br>If Red (<10%) → Increase exploration traffic allocation to support new creators. |
+| **4. Trending Table (Enriched Details)** | Table | **Query Logic (Read-Time Join):** <br>`WITH metrics AS ( SELECT video_id, SUM(likes) AS likes FROM gold WHERE window_start >= now() - interval '1h' minute GROUP BY video_id ) SELECT m.*, d.category, d.region FROM metrics m LEFT JOIN dims.dim_videos d ON m.video_id = d.video_id ORDER BY m.likes DESC LIMIT 50;` | **Ops Execution:** <br>Provides metadata context (Category, Region) for boosting decisions and operational insight. |
+
+
 
 
 ### 2.3 Architectural Note: Read-Time Joins
@@ -80,9 +82,9 @@ Instead of denormalizing dimension data (e.g., `category`, `author_region`) into
 
 | Metric | Visualization | Query / Source | Operational Significance |
 | --- | --- | --- | --- |
-| **E2E Data Latency** | **Stat Panel** (Big Number) | `SELECT now() - max(event_ts) FROM gold` | **SLA Check:** Must be < 60s. High latency renders the Ops dashboard useless. |
-| **Kafka Consumer Lag** | **Time Series** | `kafka_consumergroup_lag > 0` (Prometheus) | **Backpressure:** Rising lag indicates Spark Executors cannot keep up with input rate. Scale out required. |
-| **Iceberg Commit Duration** | **Time Series** | `commit_duration_ms` (Spark Metrics) | **Metadata Bloat:** Spikes > 5s indicate S3 throttling or too many metadata files. |
+| **E2E Data Latency** | **Stat Panel** (Big Number) | `SELECT now() - max(window_start) FROM gold` | **SLA Check:** Target < 3 mins. Reflects the physical limitation of Micro-batch (1m) + Watermark (10s) + Commit Time. |
+| **Kafka Consumer Lag** | **Time Series** | `kafka_consumergroup_lag > 0` (Prometheus) | **Backpressure:** Rising lag indicates Spark Executors cannot keep up with the 1-minute trigger cycle. |
+| **Iceberg Commit Duration** | **Time Series** | `commit_duration_ms` (Spark Metrics) | **Metadata Bloat:** Spikes > 10s indicate that the Append-Only pattern is generating too many small files, requiring more frequent bin-packing. |
 
 ### 4.2 Storage Health (Compaction Monitoring)
 
@@ -95,10 +97,3 @@ Instead of denormalizing dimension data (e.g., `category`, `author_region`) into
 | **Active Data Files** | **Time Series** | `SELECT count(*) FROM "gold$files"` | **Trend:** Should show a "Sawtooth" pattern (rising during streaming, dropping after compaction). Linear growth indicates failure to expire snapshots. |
 
 ---
-
-
-
-
-
-
-
