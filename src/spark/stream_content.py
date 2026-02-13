@@ -41,6 +41,32 @@ def init_tables(spark):
     PARTITIONED BY (days(window_start), bucket(16, video_id))
     """)
 
+def process_bronze_batch(df, batch_id):
+    count = df.count()
+    if df.count() == 0:
+        return
+    print(f"--- Processing Bronze Batch ID: {batch_id} - {count} records---")
+
+    # Sort by partition key to ensure efficient writing
+    df.sort("event_timestamp") \
+        .write \
+        .format("iceberg") \
+        .mode("append") \
+        .save("lakehouse.bronze.raw_events")
+
+def process_gold_batch(df, batch_id):
+    count = df.count()
+    if count == 0:
+        return
+    print(f"--- Processing Gold Batch ID: {batch_id} - {count} records---")
+
+    # Sort by partition keys
+    df.sort("window_start", "video_id") \
+        .write \
+        .format("iceberg") \
+        .mode("append") \
+        .save("lakehouse.gold.video_stats_1min")
+
 def main():
     spark = create_spark_session()
     spark.sparkContext.setLogLevel("WARN")
@@ -87,10 +113,8 @@ def main():
             current_timestamp().alias("ingested_at")
         ) \
         .writeStream \
-        .format("iceberg") \
-        .outputMode("append") \
+        .foreachBatch(process_bronze_batch) \
         .option("checkpointLocation", "s3a://checkpoints/content_bronze_v1") \
-        .option("path", "lakehouse.bronze.raw_events") \
         .trigger(processingTime="10 seconds") \
         .start()
 
@@ -119,10 +143,9 @@ def main():
             col("play_finish")
         ) \
         .writeStream \
-        .format("iceberg") \
         .outputMode("append") \
+        .foreachBatch(process_gold_batch) \
         .option("checkpointLocation", "s3a://checkpoints/content_gold_v1") \
-        .option("path", "lakehouse.gold.video_stats_1min") \
         .trigger(processingTime="1 minute") \
         .start()
 

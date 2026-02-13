@@ -96,7 +96,6 @@ services:
       - iceberg-rest  # Spark 現在依賴 Catalog
     volumes:
       - ./src:/home/iceberg/local/src
-      # 移除 ./warehouse 掛載，因為現在透過 S3 協議走，不需要本地模擬
       - ./spark-events:/home/iceberg/spark-events
       - ./spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
       - ./ivy_cache:/root/.ivy2

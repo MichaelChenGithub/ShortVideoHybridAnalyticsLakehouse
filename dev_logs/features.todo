@@ -18,9 +18,9 @@
     ✔ Spark Structured Streaming for real-time processing @done(26-02-11 01:09)
         ✔ dim table streaming update with MoR strategy @done(26-02-11 01:09)
         ✔ fact table streaming update @done(26-02-11 01:10)
-☐ Validate and test for python generator and streaming pipeline
-    ☐ Event generator can access dim tables to get valid user_id and video_id @started(26-02-11 15:24)
-    ☐ End-to-end testing of the entire pipeline (from data generation to iceberg tables)
+✔ Validate and test for python generator and streaming pipeline @done(26-02-13 18:35)
+    ✔ Event generator can access dim tables to get valid user_id and video_id @started(26-02-11 15:24) @done(26-02-13 18:35) @lasted(2d3h11m33s)
+    ✔ End-to-end testing of the entire pipeline (from data generation to iceberg tables) @done(26-02-13 18:35)
 ☐ New Airflow Integration
     ☐ hourly compaction task
         ☐ dimension table
