@@ -7,7 +7,7 @@
 
 ### 1.1 Objective
 
-Build a high-throughput, low-latency **Kappa Architecture** Lakehouse. The pipeline ingests raw user interaction events, processes them in real-time for operational monitoring (The "Pulse"), and simultaneously archives raw history for strategic analysis (The "Diagnosis"), serving both needs from a unified **Apache Iceberg** storage layer.
+Build a high-throughput, low-latency **Hybrid (Lambda) Architecture** Lakehouse. The pipeline ingests raw user interaction events, processes them in real-time for operational monitoring (The "Pulse"), and simultaneously archives raw history for strategic analysis (The "Diagnosis"), serving both needs from a unified **Apache Iceberg** storage layer.
 
 **1.2 Core Design Principles**
 * **SLA-Driven Engineering:**
@@ -16,7 +16,8 @@ Build a high-throughput, low-latency **Kappa Architecture** Lakehouse. The pipel
 
 
 * **Hybrid Lakehouse Strategy (Polyglot Persistence):**
-* **High-Frequency Facts (Gold):** Use **Append-Only** pattern with Tumbling Windows to maximize throughput and eliminate write amplification.
+* **Real-time Mart (Gold RT):** Use **Append-Only** pattern with Tumbling Windows for low-latency operational metrics ("The Pulse").
+* **Strategic Mart (Gold Batch):** Re-computed daily from Silver facts for high-precision, fully enriched metrics ("The Diagnosis").
 * **Mutable Metadata (Dims):** Use **Merge-on-Read (MoR)** pattern to guarantee strict consistency for slowly changing dimensions (SCD).
 
 
@@ -29,99 +30,106 @@ Build a high-throughput, low-latency **Kappa Architecture** Lakehouse. The pipel
 
 ```mermaid
 graph LR
-    %% ==================== Styles ====================
-    classDef source   fill:#e1f5fe, stroke:#01579b, stroke-width:2px, color:#000000
-    classDef stream   fill:#fff3e0, stroke:#ff6f00, stroke-width:2px, color:#000000
-    classDef batch    fill:#f3e5f5, stroke:#7b1fa2, stroke-width:2px, stroke-dasharray:5 5, color:#000000
-    classDef storage  fill:#fff9c4, stroke:#fbc02d, stroke-width:2px, color:#000000
-    classDef serving  fill:#e8f5e9, stroke:#2e7d32, stroke-width:2px, color:#000000
+  %% ==================== Styles ====================
+  classDef source   fill:#e1f5fe, stroke:#01579b, stroke-width:2px, color:#000000
+  classDef stream   fill:#fff3e0, stroke:#ff6f00, stroke-width:2px, color:#000000
+  classDef batch    fill:#f3e5f5, stroke:#7b1fa2, stroke-width:2px, stroke-dasharray:5 5, color:#000000
+  classDef storage  fill:#fff9c4, stroke:#fbc02d, stroke-width:2px, color:#000000
+  classDef serving  fill:#e8f5e9, stroke:#2e7d32, stroke-width:2px, color:#000000
+  classDef ops      fill:#eceff1, stroke:#455a64, stroke-width:2px, stroke-dasharray:3 3, color:#000000
 
-    %% ==================== 1. Sources & Ingestion ====================
-    subgraph Sources["1. Sources & Ingestion"]
-        direction TB
-        EventGen[("Mock Event Gen")]:::source
-        DimGen[("Mock CDC Gen")]:::source
-        KafkaEvents["Kafka: content_events"]:::source
-        KafkaCDC["Kafka: content_cdc"]:::source
-        
-        EventGen --> KafkaEvents
-        DimGen --> KafkaCDC
-    end
+  %% ==================== 1) Sources ====================
+  subgraph S["1) Sources"]
+    direction TB
+    EventGen[("App / Web Events<br/>(Python Generator)")]:::source
+    CDCGen[("DB Changes<br/>(CDC Generator)")]:::source
+  end
 
-    %% ==================== 2. Processing Layer ====================
-    subgraph Compute["2. Processing Layer"]
-        direction TB
-        
-        %% Stream A: Main Event Stream
-        SparkSS["Spark SS: Events<br/>(Trigger: 10s)"]:::stream
-        
-        %% Stream B: Metadata Stream (New CDC Path)
-        SparkDims["Spark SS: Dims CDC<br/>(Trigger: 5m)"]:::stream
-        
-        subgraph AirflowGroup["Airflow Orchestration"]
-            direction TB
-            SilverJob["Spark Batch:<br/>Event Enrichment"]:::batch
-            CompactJob["Spark Batch:<br/>Compaction"]:::batch
-        end
-    end
+  %% ==================== 2) Messaging ====================
+  subgraph M["2) Kafka (Messaging Bus)"]
+    direction TB
+    KafkaEvents["Kafka Topic: events"]:::source
+    KafkaCDC["Kafka Topic: cdc"]:::source
+  end
 
-    KafkaEvents ==> SparkSS
-    KafkaCDC ==> SparkDims
+  %% ==================== 3) Stream Processing (Hot Path) ====================
+  subgraph R["3) Stream Processing (Hot Path)"]
+    direction TB
+    SparkEvents["Spark Structured Streaming<br/>consume events"]:::stream
+    SparkCDC["Spark Structured Streaming<br/>consume cdc"]:::stream
+  end
 
-    %% ==================== 3. Iceberg Lakehouse ====================
-    subgraph Storage["3. Iceberg Lakehouse (MinIO/S3)"]
-        direction TB
-        spacer[" "]:::hidden
-        Bronze["Bronze: raw_events<br/>(append-only)"]:::storage
-        Gold["Gold: video_stats_1min<br/>(Append Log)"]:::storage
-        Dims["Dims: users/videos<br/>(SCD Type 1/2)"]:::storage
-        Silver["Silver: events_enriched<br/>(cleaned/sessionized)"]:::storage
-    end
+  %% ==================== 4) Lakehouse (Storage) ====================
+  subgraph L["4) Iceberg Lakehouse (Tables)"]
+    direction TB
+    Bronze["Bronze: raw append-only"]:::storage
+    Silver["Silver: cleaned + standardized"]:::storage
+    Dims["Dims: SCD Type 2"]:::storage
+    GoldRT["Gold-RT: near real-time metrics"]:::storage
+    GoldBatch["Gold-Batch: batch mart"]:::storage
+  end
 
-    %% ==================== 4. Data Flow ====================
-    %% Stream Writes (Hot Path)
-    SparkSS -->|Append Body| Bronze
-    SparkSS -->|Append (Windowed)| Gold
-    SparkDims -->|MERGE Upsert| Dims
-    
-    %% Batch Writes (Cold Path)
-    SilverJob -->|write| Silver
-    SilverJob -->|read| Bronze
-    
-    %% Maintenance
-    CompactJob -.->|optimize| Bronze
-    CompactJob -.->|optimize| Gold
-    CompactJob -.->|optimize| Dims
+  %% ==================== 5) Batch / Maintenance (Cold + Ops) ====================
+  subgraph B["5) Batch & Maintenance (Cold Path / Ops)"]
+    direction TB
+    EnrichJob["Batch: enrich Bronze → Silver"]:::batch
+    AggJob["Batch: aggregate Silver ⨝ Dims → Gold-Batch"]:::batch
+    CompactJob["Ops: Iceberg OPTIMIZE / compaction"]:::ops
+  end
 
-    %% ==================== 5. Serving Layer ====================
-    subgraph Serving["4. Serving Layer"]
-        direction TB
-        Trino["Trino Query Engine"]:::serving
-        Metabase["Metabase<br/>(Product Growth Intelligence Dashboard)"]:::serving
-        Grafana["Grafana<br/>(System Metrics)"]:::serving
-    end
+  %% ==================== 6) Serving ====================
+  subgraph V["6) Serving"]
+    direction TB
+    Trino["Trino / PrestoSQL<br/>(Compute Engine)"]:::serving
+    Views["Semantic Views<br/>(Read-Time Joins)"]:::serving
+    Metabase["Metabase<br/>(BI / Self-Serve)"]:::serving
+    Grafana["Grafana<br/>(System / Query Metrics)"]:::serving
+  end
 
-    Gold --> Trino
-    Silver --> Trino
-    Dims --> Trino
-    
-    Trino -->|"JDBC"| Metabase
-    Trino -->|"JDBC"| Grafana
+  %% ==================== Flows ====================
 
+  %% Sources -> Kafka
+  EventGen --> KafkaEvents
+  CDCGen --> KafkaCDC
 
-    %% ==================== Hot vs Cold Path Styling ====================
-    %% HOT PATH (Real-time & Fast Batch) - Orange Lines
-    %% Note: Link indices depend on definition order.
-    %% 0:Event->Kafka, 1:Dim->Kafka, 2:Kafka->SparkSS, 3:Kafka->SparkDims
-    %% 4:SparkSS->Bronze, 5:SparkSS->Gold, 6:SparkDims->Dims
-    linkStyle 0,1,2,3,4,5,6 stroke:#ff5722,stroke-width:3px
+  %% Kafka -> Streaming
+  KafkaEvents ==> SparkEvents
+  KafkaCDC ==> SparkCDC
 
-    %% COLD PATH (Batch / Offline) - Purple Dashed
-    %% 7:Silver->Silver, 8:Silver->Bronze, 9,10,11:Compact->Storage
-    linkStyle 7,8,9,10,11 stroke:#7b1fa2,stroke-width:2px,stroke-dasharray:5 5
+  %% Hot Path writes
+  SparkEvents -->|append| Bronze
+  SparkEvents -->|window agg| GoldRT
+  SparkCDC -->|merge/upsert| Dims
 
-    classDef hidden height:1px,fill:none,stroke:none,color:none;
+  %% Cold Path (batch) reads/writes
+  Bronze -.->|read| EnrichJob
+  EnrichJob -.->|write| Silver
+  Silver -.->|read| AggJob
+  Dims -.->|join| AggJob
+  AggJob  -.->|write| GoldBatch
 
+  %% Maintenance (Ops)
+  CompactJob -.->|OPTIMIZE| Bronze
+  CompactJob -.->|OPTIMIZE| Dims
+  CompactJob -.->|OPTIMIZE| GoldRT
+
+  %% Serving
+  GoldRT --> Trino
+  GoldBatch --> Trino
+  Dims --> Trino
+  
+  Trino --> Views
+  Views --> Metabase
+  Trino --> Grafana
+
+  %% ==================== Link Styling ====================
+  %% Hot Path (orange): 0-7 (sources->kafka, kafka->spark, spark->tables)
+  linkStyle 0,1,2,3,4,5,6 stroke:#ff5722,stroke-width:3px
+
+  %% Cold Path (purple dashed): 7-12 (bronze->enrich->silver->agg->goldbatch + join)
+  linkStyle 7,8,9,10,11 stroke:#7b1fa2,stroke-width:2px,stroke-dasharray:5 5
+
+  %% Ops (gray dashed): optimize edges (after cold path)
 ```
 
 ---
@@ -149,7 +157,7 @@ graph LR
 * **Watermark:** **10 Seconds** (to handle late data while maintaining low latency).
 * **Trigger Interval:** **1 Minute** (Processing Time).
 * **Logic:** Aggregates metrics (`likes`, `impressions`, `completions`) per video per minute.
-* **Storage Target:** `lakehouse.gold.video_stats_1min`.
+* **Storage Target:** `lakehouse.gold.rt_video_stats_1min`.
 * **Advantage:** Eliminates the "Small File Problem" and "Read Amplification" associated with high-frequency Upserts.
 
 
@@ -159,7 +167,7 @@ graph LR
 * **Workflow:**
 1. **Source (CDC Stream):**
 * A Python Generator simulates database changes (Create/Update/Delete) and pushes them to a separate Kafka Topic: `content_cdc`.
-* *Payload:* `{ "op": "u", "ts_ms": 170000..., "before": null, "after": { "video_id": "v_1023", "category": "Beauty", "status": "active" } }`
+* *Payload:* `{ "op": "u", "ts_ms": 170000..., "before": null, "after": { "video_id": "v_1023", "category": "Beauty", "status": "active" } }` (Topic: `cdc.content.videos`)
 
 
 2. **Ingestion (Spark Structured Streaming):**
@@ -176,8 +184,8 @@ graph LR
 
 * **Engine:** Trino (PrestoSQL).
 * **View Strategy (Read-Side Sliding Window):**
-* Since Gold data is stored as 1-minute buckets, Trino Views are used to calculate the final "Viral Velocity".
-* *Logic:* `SELECT sum(likes) FROM gold.video_stats_1min WHERE window_start >= now() - interval '10' minute`.
+* Since Real-time Gold data is stored as 1-minute buckets, Trino Views are used to calculate the final "Viral Velocity".
+* *Logic:* `SELECT sum(likes) FROM gold.rt_video_stats_1min WHERE window_start >= now() - interval '10' minute`.
 
 
 * **Clients:**
@@ -189,13 +197,16 @@ graph LR
 * **Objective:** Solve the "Small File Problem" inherent to streaming ingestion (where 10s triggers create tiny files) and optimize read performance for Trino by reducing metadata overhead.
 * **Schedule:** Triggered **Hourly (every 60 minutes)** via Airflow.
 * **Strategy by Table Type:**
-1. **Bronze (Append-Only):**
+1. **Bronze & Gold RT (Append-Only):**
 * **Action:** **Bin-packing**.
 * **Logic:** The Spark job identifies small Parquet files created in the last hour and rewrites them into larger, optimal-sized files (Target: ~128MB) using ZSTD compression.
 
-2. **Gold & Dims (Merge-on-Read):**
+2. **Dims (Merge-on-Read / Upsert):**
 * **Action:** **Major Compaction (Rewrite Data Files)**.
 * **Logic:** Streaming `MERGE` operations create "Delete Files" (tombstones) rather than rewriting data immediately. Over time, this increases read latency (Read Amplification). This job forces a rewrite of data files to physically apply deletes and updates, resetting the read performance.
+
+* **Exclusions:**
+* **Silver & Gold Batch:** Explicit compaction is **excluded**. The Daily Spark Batch jobs are configured to write optimized file sizes directly (e.g., using `write.distribution-mode=hash`), making post-processing redundant.
 
 * **Snapshot Management:**
 * **Expire Snapshots:** The job also runs `expire_snapshots` to remove historical versions older than 7 days, preventing metadata bloat and freeing up physical storage on MinIO.
@@ -204,13 +215,13 @@ graph LR
 
 ## 4. Engineering Trade-offs & Decisions
 
-### 4.1 Kappa vs. Lambda Architecture
+### 4.1 Architecture Pattern: Hybrid (Lambda)
 
-* **Decision:** **Kappa Architecture**.
+* **Decision:** **Hybrid Architecture (Lambda)**.
 * **Trade-off:**
-* *Pros:* Single codebase (Spark SS) ensures metric consistency between Real-time and Replay.
-* *Cons:* Historical replay can be slower than dedicated batch engines.
-* *Mitigation:* Heavy historical analysis (Retention) is offloaded to the **Silver Layer** (Batch) which is optimized via daily compaction.
+* *Pros:* Combines the low latency of **Kappa** (for Ops) with the data completeness and complex join capabilities of **Batch** (for Strategy).
+* *Cons:* Requires maintaining two processing paths (Streaming & Batch).
+* *Justification:* While Streaming provides the "Pulse", the "Diagnosis" (Strategic Dashboard) requires complex **Fact-Dimension Joins** and sessionization that are more cost-effective and accurate in Batch (Silver -> Gold).
 
 
 
@@ -234,7 +245,7 @@ graph LR
 
 ### 4.4 Hybrid Write Patterns (Append vs. Upsert)**
 * **Decision:** We apply different write patterns based on data characteristics.
-* **Gold Layer (Facts):** Uses **Append-Only**. High-frequency metric updates (e.g., 10k likes/sec) would choke an Upsert pipeline with small files and delete vectors. Appending pre-aggregated buckets creates clean, large Parquet files.
+* **Gold Layer (Real-time):** Uses **Append-Only**. High-frequency metric updates (e.g., 10k likes/sec) would choke an Upsert pipeline with small files and delete vectors. Appending pre-aggregated buckets creates clean, large Parquet files.
 * **Dimension Layer (Metadata):** Uses **Merge-on-Read (Upsert)**. User/Video profile changes are low volume but require strict consistency. The cost of MoR is justified here for data accuracy.
 ---
 

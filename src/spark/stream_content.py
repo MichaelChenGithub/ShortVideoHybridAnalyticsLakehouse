@@ -29,7 +29,7 @@ def init_tables(spark):
     # 2. Gold: Video Metrics Log (Append-Only Tumbling Window)
     # Aggregates metrics per video per minute.
     spark.sql("""
-    CREATE TABLE IF NOT EXISTS lakehouse.gold.video_stats_1min (
+    CREATE TABLE IF NOT EXISTS lakehouse.gold.rt_video_stats_1min (
         video_id STRING,
         window_start TIMESTAMP,
         impressions LONG,
@@ -65,7 +65,7 @@ def process_gold_batch(df, batch_id):
         .write \
         .format("iceberg") \
         .mode("append") \
-        .save("lakehouse.gold.video_stats_1min")
+        .save("lakehouse.gold.rt_video_stats_1min")
 
 def main():
     spark = create_spark_session()

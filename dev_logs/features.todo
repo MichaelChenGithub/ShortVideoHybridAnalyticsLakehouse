@@ -9,7 +9,7 @@
     ✔ raw_events, virality_states schema 設計 (iceberg table schema) @started(26-02-06 16:40) @done(26-02-06 16:47) @lasted(7m25s)
     ✔ silver data model 設計 (star schema -> fact table and dim table) @done(26-02-06 16:47)
     ✔ Python generator 事件設計(streaming, dim table init and update) @done(26-02-07 18:37)
-    ☐ airflow 管理 batch 事件 (compaction, batch bronze -> silver)
+    ☐ airflow 管理 batch 事件 (compaction, batch bronze -> silver) @started(26-02-13 18:44)
     ✔ Grafana dashboard 設計 @done(26-02-06 15:55)
 ✔ Python generator @done(26-02-11 01:09)
     ✔ dimension tables (users, videos) @started(26-02-07 18:37) @done(26-02-11 01:09) @lasted(3d6h32m25s)

@@ -8,7 +8,8 @@
 This document defines the **Apache Iceberg** table schemas for the Lakehouse. We follow the **Medallion Architecture** with a **Hybrid Write Strategy**:
 * **Bronze:** Raw ingestion (Append-only).
 * **Silver:** Cleaned, enriched, and sessionized (Batch T+1).
-* **Gold:** Pre-aggregated Metrics Log (**Real-time Append-Only**).
+* **Gold (RT):** Pre-aggregated Metrics Log (**Real-time Append-Only**).
+* **Gold (Batch):** Strategic Metric Mart (**Daily Overwrite/Upsert**).
 * **Dims:** Reference metadata (CDC Streaming / **Real-time Upsert**).
 ---
 
@@ -96,9 +97,9 @@ This document defines the **Apache Iceberg** table schemas for the Lakehouse. We
 
 ## 4. Gold Layer: The "Pulse" (Real-time)
 
-### 4.1 Fact Table: Video Metrics Log
+### 4.1 Real-time Mart: Video Metrics Log
 
-**Table:** `lakehouse.gold.video_stats_1min`
+**Table:** `lakehouse.gold.rt_video_stats_1min`
 * **Pattern:** **Time-Series Log (Append-Only)**.
 * **Format:** Parquet (Iceberg Copy-on-Write).
 * **Update Frequency:** Streaming (Micro-batch 1 min Trigger).
@@ -121,7 +122,29 @@ This document defines the **Apache Iceberg** table schemas for the Lakehouse. We
 Fields like `velocity_score` and `acceleration` are **removed** from the physical schema. They are now calculated at **Read-Time** via Trino Views by aggregating the last  minutes of log data.
 ---
 
-## 5. Schema Evolution & Compatibility
+## 5. Gold Layer: The "Diagnosis" (Batch)
+
+### 5.1 Strategic Mart: Daily Content Performance
+
+**Table:** `lakehouse.gold.batch_video_daily`
+* **Pattern:** **Aggregated State (Overwrite/Upsert)**.
+* **Source:** `Silver Fact` + `Dims`.
+* **Update Frequency:** Daily (09:00 AM).
+* **Purpose:** High-precision analysis with correct dimension attribution (SCD Type 2 resolved).
+
+| Column Name | Type | Logic / Definition |
+| --- | --- | --- |
+| `date` | `DATE` | Partition Key. |
+| `video_id` | `STRING` | Entity Key. |
+| `category_at_date` | `STRING` | **Frozen Dimension:** The category of the video *on that specific day*. |
+| `total_watch_time_hrs` | `DOUBLE` | Sum of `watch_time_ms` / 3.6e6. |
+| `completion_rate` | `FLOAT` | Accurate completion rate based on sessionized data. |
+| `unique_viewers` | `LONG` | Count Distinct User ID (HyperLogLog). |
+| `retention_d1` | `FLOAT` | % of viewers who returned the next day. |
+
+---
+
+## 6. Schema Evolution & Compatibility
 
 ### 5.1 JSON Handling (Bronze to Silver)
 
