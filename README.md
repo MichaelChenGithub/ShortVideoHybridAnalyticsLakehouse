@@ -53,7 +53,7 @@ Detailed architectural decisions and trade-offs are documented below:
 Streaming ingestion often degrades read performance by creating thousands of tiny files. I implemented an **Hourly Bin-packing Strategy** that rewrites these into optimal-sized Parquet files without blocking reads.
 
 ### 2. Hybrid Write Strategy
-*   **Gold Layer (Facts):** Uses **Append-Only** to handle high-throughput (10k/sec) without the overhead of Upserts.
+*   **Gold Layer (Facts):** Uses **Append-Only** to handle high-throughput scenarios (designed for 10k+ events/sec) without the overhead of Upserts.
 *   **Dimension Layer:** Uses **Merge-on-Read** to ensure strict consistency for mutable user profiles.
 
 ### 3. Semantic Layer Decoupling
@@ -84,7 +84,7 @@ Business logic is decoupled from physical storage using **Trino Views**. This al
     ```
 3.  **Start Data Generator (Simulate Traffic):**
     ```bash
-    # Simulate 1000 events/sec with viral spikes
+    # Simulate traffic (Default: 1000 events/sec, adjustable for local hardware)
     python src/generator/mock_transaction_kafka_producer.py
     ```
 4.  **Access Dashboards:**
