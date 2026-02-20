@@ -1,4 +1,4 @@
-# Real-time Transactional Data Lakehouse 🚀
+# Short Video Hybrid Analytics Lakehouse 🚀
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
 ![Spark](https://img.shields.io/badge/Apache%20Spark-Structured%20Streaming-orange)
@@ -30,7 +30,7 @@ Traditional ETL pipelines often struggle to serve both **Real-time Ops** (e.g., 
 
 The platform uses **Apache Iceberg** as the unified storage layer, supporting a "Polyglot Persistence" strategy:
 *   **Hot Path (Streaming):** Ingests events into **Append-Only** tables for low-latency monitoring.
-*   **Cold Path (Batch):** Processes history into **Upsert (Merge-on-Read)** tables for high-precision analysis.
+*   **Cold Path (Batch):** Processes history via **Medallion Architecture** (Bronze → Silver → Gold) for deep strategic analysis.
 
 ---
 
