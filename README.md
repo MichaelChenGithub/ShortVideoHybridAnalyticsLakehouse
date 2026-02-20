@@ -6,7 +6,7 @@
 ![Kafka](https://img.shields.io/badge/Kafka-Event%20Streaming-black)
 ![Trino](https://img.shields.io/badge/Trino-Serving%20Layer-blueviolet)
 
-> **A production-grade data platform simulating TikTok-scale viral analytics (10k+ events/sec).**  
+> **A production-grade data platform simulating large-scale viral analytics.**  
 > Engineered to balance sub-minute operational monitoring ("The Pulse") with high-precision strategic analysis ("The Diagnosis").
 
 ---
