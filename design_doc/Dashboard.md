@@ -10,6 +10,9 @@ This document defines the visualization layer served by **Trino**. I implement a
 1. **Metabase:** Business-facing dashboards for Operations (Real-time) and Strategy (Batch).
 2. **Grafana:** Technical dashboard for Data Engineering to monitor pipeline health.
 
+Realtime metric and decision-contract details are maintained in:
+`design_doc/RealtimeMetrics_Contract.md`
+
 ---
 
 ## 2. Metabase: Real-time Ops Dashboard ("The Pulse")
