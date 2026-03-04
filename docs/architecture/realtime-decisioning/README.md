@@ -2,6 +2,18 @@
 
 This module defines the realtime decision system for short-video operations.
 
+Upstream business spec:
+
+1. `docs/product/business-decision-prd-kpi-tree.md`
+
+Upstream model spec:
+
+1. `docs/architecture/data-model/m1-data-model-v1.md`
+
+Upstream streaming execution spec:
+
+1. `docs/architecture/streaming/spark-realtime-jobs-contract-m1.md`
+
 ## Business Decisions in Scope
 
 1. `BOOST`: high momentum and quality-passing videos.
@@ -27,4 +39,3 @@ This module defines the realtime decision system for short-video operations.
 2. `action-queue-contract.md`
 3. `reconciliation-and-slo.md`
 4. `acceptance-criteria.md`
-

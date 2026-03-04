@@ -60,4 +60,3 @@ Cooldown:
 2. `decision_type` only in `BOOST`, `REVIEW`, `RESCUE`.
 3. `expires_at > decided_at`.
 4. same input state must produce deterministic output rows.
-
