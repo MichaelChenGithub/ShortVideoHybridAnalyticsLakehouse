@@ -31,3 +31,7 @@ Artifacts per run:
 Scope guard:
 
 1. MIC-34 does not write `lakehouse.qa.*` tables.
+
+Acceptance report template:
+
+1. `docs/architecture/generator/m1_acceptance_report_template.md`
