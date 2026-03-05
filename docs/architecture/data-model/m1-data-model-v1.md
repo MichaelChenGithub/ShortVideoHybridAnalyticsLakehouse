@@ -342,6 +342,6 @@ Validation join path:
 3. realtime join path is defined and grain-safe
 4. model supports current M1 decision contracts without additional schema dependencies
 5. invalid-record quarantine paths are split and defined:
-   - `bronze.invalid_events_content`
-   - `bronze.invalid_events_cdc_videos`
+   - `lakehouse.bronze.invalid_events_content`
+   - `lakehouse.bronze.invalid_events_cdc_videos`
 6. QA validation tables are defined and linkable to decision outputs by `run_id` and `video_id + window_start`

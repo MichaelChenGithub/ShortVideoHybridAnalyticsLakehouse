@@ -151,8 +151,8 @@ Compatibility target:
 1. consumers must tolerate unknown fields in `payload_json`
 2. invalid records in M1 are quarantined to data-table workflow, not Kafka DLQ topics
 3. quarantine routing in M1:
-   - `content_events` -> `bronze.invalid_events_content`
-   - `cdc.content.videos` -> `bronze.invalid_events_cdc_videos`
+   - `content_events` -> `lakehouse.bronze.invalid_events_content`
+   - `cdc.content.videos` -> `lakehouse.bronze.invalid_events_cdc_videos`
 
 ---
 
@@ -189,8 +189,8 @@ Consumer expectations:
 1. checkpoint offsets externally via Spark checkpointing
 2. enforce schema validation before downstream write
 3. quarantine invalid records to source-specific tables with error code and reason:
-   - `bronze.invalid_events_content`
-   - `bronze.invalid_events_cdc_videos`
+   - `lakehouse.bronze.invalid_events_content`
+   - `lakehouse.bronze.invalid_events_cdc_videos`
 
 ---
 
@@ -200,8 +200,8 @@ Minimum monitoring:
 
 1. producer error rate
 2. consumer lag by topic
-3. invalid-record count from `bronze.invalid_events_content`
-4. invalid-record count from `bronze.invalid_events_cdc_videos`
+3. invalid-record count from `lakehouse.bronze.invalid_events_content`
+4. invalid-record count from `lakehouse.bronze.invalid_events_cdc_videos`
 
 Alert intent:
 
