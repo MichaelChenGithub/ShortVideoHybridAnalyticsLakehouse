@@ -38,6 +38,11 @@ Out of scope (M2+):
 
 One run is a bounded streaming simulation window with explicit start and end.
 
+`duration_minutes` semantics:
+
+1. `duration_minutes` counts only the `content_events` emission window.
+2. CDC bootstrap and CDC readiness-gate waiting time are excluded from `duration_minutes`.
+
 Recommended M1 default:
 
 1. duration: 30 minutes
@@ -47,7 +52,7 @@ Recommended M1 default:
 
 1. initialize run config and deterministic pools from `seed`
 2. emit CDC bootstrap events to `cdc.content.videos`
-3. wait for CDC readiness gate (1-2 CDC micro-batches)
+3. wait for fixed CDC readiness gate (`5 minutes`)
 4. emit `content_events` stream according to scenario mix
 5. finalize run artifacts and QA table writes
 
@@ -72,6 +77,13 @@ Validation rules:
 2. sum(`scenario_mix`) must equal 1.0 (+/- 1e-6)
 3. `late_event_ratio` must be in `[0, 0.2]` for M1
 4. `duration_minutes >= 10`
+5. `scenario_mix` must contain exactly these keys in M1:
+   - `normal_baseline`
+   - `viral_high_quality`
+   - `viral_low_quality`
+   - `cold_start_under_exposed`
+   - `invalid_payload_burst`
+6. unknown `scenario_mix` keys are not allowed
 
 Example:
 
@@ -100,9 +112,21 @@ Example:
 
 ### 5.1 Identity rules
 
-1. `video_id` and `user_id` are generated deterministically from `seed` and sequence index
-2. `event_id` must be unique and deterministic inside a run
-3. identical `seed + config + duration` must reproduce equivalent scenario-level distributions
+1. M1 implementation language is Python; use a single run-scoped RNG instance: `random.Random(seed)`.
+2. `video_id`, `user_id`, and `event_id` are generated deterministically from stable inputs (`run_id`, entity type, sequence index).
+3. Recommended deterministic ID format:
+   - `video_id = "vid_" + sha256(f"{run_id}|video|{video_seq}").hexdigest()[:16]`
+   - `user_id = "usr_" + sha256(f"{run_id}|user|{user_seq}").hexdigest()[:16]`
+   - `event_id = "evt_" + sha256(f"{run_id}|event|{event_seq}").hexdigest()[:20]`
+4. `event_seq` must be strictly monotonic within a run so every `event_id` is unique in that run.
+5. Do not use non-deterministic ID sources (`uuid4()`), and do not use Python built-in `hash()` for persisted IDs.
+6. Identical `seed + run_config + duration_minutes` must reproduce the same ordered ID sequences and equivalent scenario-level distributions.
+
+### 5.1.1 Determinism validation checks (M1)
+
+1. Re-running the same `run_config` twice must produce identical `video_registry` IDs and identical `event_id` sequence for generated content events.
+2. Changing `seed` with all other fields unchanged must change ID sequences.
+3. Changing `run_id` with all other fields unchanged must change ID sequences.
 
 ### 5.2 Registry policy
 
@@ -131,7 +155,7 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 ### 6.2 Emission sequence
 
 1. emit `cdc.content.videos` create events first
-2. enforce readiness gate
+2. enforce fixed readiness gate (`5 minutes`)
 3. start `content_events` stream
 
 ### 6.3 Partitioning and ordering
@@ -142,8 +166,14 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 
 ### 6.4 Late-event simulation
 
-1. late events are simulated by offsetting `event_timestamp`
-2. M1 keeps watermark static (`10 seconds`) and does not auto-tune
+1. late events are simulated by offsetting `event_timestamp` backwards.
+2. `late_event_ratio` defines the fraction of emitted `content_events` treated as late events.
+3. for late events, lateness offset is sampled deterministically in `[11 seconds, 90 seconds]`.
+4. recommended lateness split in M1:
+   - 80% in `[11s, 30s]`
+   - 20% in `[31s, 90s]`
+5. maximum lateness in M1 is `90 seconds`.
+6. M1 keeps watermark static (`10 seconds`) and does not auto-tune.
 
 ---
 
@@ -154,7 +184,7 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 
 | scenario_id | mix | impressions_30m | like_rate | share_rate | completion_rate | skip_rate | expected_action |
 |---|---:|---:|---:|---:|---:|---:|---|
-| `normal_baseline` | 0.55 | 300-1200 | 0.02-0.06 | 0.003-0.012 | `x-0.10` to `x+0.05` | `y-0.05` to `y+0.10` | `NONE` |
+| `normal_baseline` | 0.55 | 300-1200 | 0.02-0.06 | 0.003-0.012 | `x-0.10` to `x+0.05` | `y-0.05` to `y+0.10` | `NO_ACTION` |
 | `viral_high_quality` | 0.20 | 4000-20000 | 0.10-0.22 | 0.03-0.10 | `x+0.10` to `x+0.25` | `y-0.20` to `y-0.05` | `BOOST` |
 | `viral_low_quality` | 0.10 | 4000-20000 | 0.08-0.18 | 0.02-0.06 | `x-0.35` to `x-0.10` | `y+0.10` to `y+0.35` | `REVIEW` |
 | `cold_start_under_exposed` | 0.10 | 40-180 | 0.08-0.20 | 0.02-0.08 | `x+0.10` to `x+0.25` | `y-0.20` to `y-0.05` | `RESCUE` |
@@ -233,7 +263,10 @@ Storage guidance:
 
 ## 9. Acceptance Criteria (M1)
 
-1. same `seed + run_config` produces stable scenario-level distributions
+1. same `seed + run_config` produces stable scenario-level distributions:
+   - realized mix per scenario has absolute error <= `0.02` against configured `scenario_mix`
+   - rerunning identical config changes realized mix by <= `0.01` per scenario
+   - total emitted `content_events` is within `+/- 5%` of `events_per_sec * duration_minutes * 60`
 2. generator always emits CDC bootstrap before content events
 3. valid scenarios achieve `event -> dim_videos` join coverage >= 99.5%
 4. expected action hit rate >= 90% against decision outputs

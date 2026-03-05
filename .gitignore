@@ -5,11 +5,13 @@ warehouse/
 spark-warehouse/
 metastore_db/
 derby.log
+artifacts/
 
 # --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
+__init__.py
 .venv/
 venv/
 env/
