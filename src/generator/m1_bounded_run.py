@@ -16,6 +16,11 @@ if __package__ in (None, ""):
 from generator.m1.clock import RealClock, SimulatedClock
 from generator.m1.config import ConfigError, load_run_config
 from generator.m1.constants import DEFAULT_SCHEMA_VERSION
+from generator.m1.preflight import (
+    bootstrap_kafka_topics,
+    build_default_topic_expectations,
+    run_kafka_preflight,
+)
 from generator.m1.runner import BoundedRunGenerator
 from generator.m1.sink import InMemoryEventSink, KafkaEventSink
 
@@ -49,6 +54,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--bootstrap-servers",
         default="localhost:9092",
         help="Kafka bootstrap servers when --sink kafka",
+    )
+    parser.add_argument(
+        "--content-events-min-partitions",
+        type=int,
+        default=6,
+        help="Minimum partitions required for content_events topic preflight checks",
+    )
+    parser.add_argument(
+        "--cdc-videos-min-partitions",
+        type=int,
+        default=3,
+        help="Minimum partitions required for cdc.content.videos topic preflight checks",
     )
     parser.add_argument(
         "--artifacts-root",
@@ -88,22 +105,34 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Config error: {exc}", file=sys.stderr)
         return 2
 
-    if args.sink == "kafka":
-        sink = KafkaEventSink(bootstrap_servers=args.bootstrap_servers)
-    else:
-        sink = InMemoryEventSink()
-
-    clock = RealClock() if args.real_time else SimulatedClock(config.started_at)
-
-    runner = BoundedRunGenerator(
-        config=config,
-        sink=sink,
-        artifacts_root=Path(args.artifacts_root),
-        schema_version=args.schema_version,
-        clock=clock,
-    )
-
     try:
+        if args.sink == "kafka":
+            topic_expectations = build_default_topic_expectations(
+                content_events_min_partitions=args.content_events_min_partitions,
+                cdc_videos_min_partitions=args.cdc_videos_min_partitions,
+            )
+            bootstrap_kafka_topics(
+                bootstrap_servers=args.bootstrap_servers,
+                expectations=topic_expectations,
+            )
+            run_kafka_preflight(
+                bootstrap_servers=args.bootstrap_servers,
+                expectations=topic_expectations,
+            )
+            sink = KafkaEventSink(bootstrap_servers=args.bootstrap_servers)
+        else:
+            sink = InMemoryEventSink()
+
+        clock = RealClock() if args.real_time else SimulatedClock(config.started_at)
+
+        runner = BoundedRunGenerator(
+            config=config,
+            sink=sink,
+            artifacts_root=Path(args.artifacts_root),
+            schema_version=args.schema_version,
+            clock=clock,
+        )
+
         result = runner.run()
     except Exception as exc:  # pragma: no cover - CLI guard
         print(f"Run failed: {exc}", file=sys.stderr)
