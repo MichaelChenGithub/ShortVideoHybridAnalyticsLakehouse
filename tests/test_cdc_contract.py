@@ -34,17 +34,46 @@ class CdcContractTests(unittest.TestCase):
         ).run()
         return result, sink
 
+    @staticmethod
+    def _cdc_signature(sink: InMemoryEventSink):
+        signature = []
+        for record in sink.cdc_events:
+            payload = record.value
+            after = payload["after"]
+            signature.append(
+                (
+                    record.key,
+                    payload["op"],
+                    payload["ts_ms"],
+                    after["video_id"],
+                    after["category"],
+                    after["region"],
+                    after["upload_time"],
+                    after["status"],
+                )
+            )
+        return signature
+
     def test_cdc_schema_and_key_contract(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             result, sink = self._run_once(td)
 
             self.assertGreater(result.summary["cdc_bootstrap_events"], 0)
-            self.assertEqual(len(sink.cdc_events), result.summary["cdc_bootstrap_events"])
+            self.assertGreater(result.summary["cdc_update_events"], 0)
+            self.assertEqual(
+                result.summary["cdc_total_events"],
+                result.summary["cdc_bootstrap_events"] + result.summary["cdc_update_events"],
+            )
+            self.assertEqual(len(sink.cdc_events), result.summary["cdc_total_events"])
 
+            c_count = 0
+            u_count = 0
+            ops_seen = set()
+            events_by_video = {}
             for record in sink.cdc_events:
                 payload = record.value
                 self.assertIn("op", payload)
-                self.assertIn(payload["op"], {"c", "u", "d"})
+                self.assertIn(payload["op"], {"c", "u"})
                 self.assertIn("ts_ms", payload)
                 self.assertIsInstance(payload["ts_ms"], int)
                 self.assertIn("schema_version", payload)
@@ -55,6 +84,26 @@ class CdcContractTests(unittest.TestCase):
                     self.assertIn(key, after)
 
                 self.assertEqual(record.key, after["video_id"])
+
+                op = payload["op"]
+                ops_seen.add(op)
+                if op == "c":
+                    c_count += 1
+                elif op == "u":
+                    u_count += 1
+                    self.assertTrue(after["category"].endswith("_u"))
+                events_by_video.setdefault(after["video_id"], []).append(payload)
+
+            self.assertEqual(ops_seen, {"c", "u"})
+            self.assertEqual(c_count, result.summary["cdc_bootstrap_events"])
+            self.assertEqual(u_count, result.summary["cdc_update_events"])
+            self.assertEqual(c_count, u_count)
+
+            for video_id, events in events_by_video.items():
+                self.assertEqual(len(events), 2, msg=f"video_id={video_id} expected exactly c+u events")
+                self.assertEqual(events[0]["op"], "c")
+                self.assertEqual(events[1]["op"], "u")
+                self.assertGreater(events[1]["ts_ms"], events[0]["ts_ms"])
 
     def test_cdc_bootstrap_emits_before_content_stream(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -81,6 +130,13 @@ class CdcContractTests(unittest.TestCase):
                 sample = rows[0]
                 for field in ("video_id", "scenario_id", "category", "region", "upload_time", "status"):
                     self.assertIn(field, sample)
+
+    def test_cdc_emission_is_deterministic_for_same_config_and_seed(self) -> None:
+        with tempfile.TemporaryDirectory() as left_dir, tempfile.TemporaryDirectory() as right_dir:
+            _, left_sink = self._run_once(left_dir)
+            _, right_sink = self._run_once(right_dir)
+
+            self.assertEqual(self._cdc_signature(left_sink), self._cdc_signature(right_sink))
 
 
 if __name__ == "__main__":
