@@ -1,196 +1,163 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import *
-from pyspark.sql.types import *
+"""MIC-37 Spark streaming job for CDC video upserts into dim_videos."""
 
-def create_spark_session():
-    return SparkSession.builder \
-        .appName("IcebergDimsLoader") \
-        .getOrCreate()
+from __future__ import annotations
 
-def init_tables(spark):
-    print("Initializing Dimension Tables...")
+from typing import Iterable
+
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.functions import col, from_json
+from pyspark.sql.types import LongType, StringType, StructField, StructType
+
+try:
+    from spark.rt_video_cdc_contract import JobSettings, load_job_settings
+    from spark.rt_video_cdc_upsert_sql import (
+        create_dim_videos_sql,
+        manual_alter_statements,
+        merge_dim_videos_sql,
+        missing_required_columns,
+    )
+except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
+    from rt_video_cdc_contract import JobSettings, load_job_settings
+    from rt_video_cdc_upsert_sql import (
+        create_dim_videos_sql,
+        manual_alter_statements,
+        merge_dim_videos_sql,
+        missing_required_columns,
+    )
+
+
+def create_spark_session(settings: JobSettings) -> SparkSession:
+    return SparkSession.builder.appName(settings.app_name).getOrCreate()
+
+
+def _table_columns(spark: SparkSession, table_name: str) -> Iterable[str]:
+    return [field.name for field in spark.table(table_name).schema.fields]
+
+
+def init_dim_videos_table(spark: SparkSession, settings: JobSettings) -> None:
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.dims")
+    spark.sql(create_dim_videos_sql(settings.dim_videos_table))
 
-    # 1. Users Dimension
-    spark.sql("""
-    CREATE TABLE IF NOT EXISTS lakehouse.dims.dim_users (
-        user_id STRING,
-        register_country STRING,
-        device_os STRING,
-        is_creator BOOLEAN,
-        ltv_segment STRING,
-        join_at TIMESTAMP,
-        last_updated_ts TIMESTAMP
-    ) USING iceberg
-    PARTITIONED BY (bucket(16, user_id))
-    TBLPROPERTIES (
-        'write.merge.mode'='merge-on-read',
-        'format-version'='2'
-    )
-    """)
-
-    # 2. Videos Dimension
-    spark.sql("""
-    CREATE TABLE IF NOT EXISTS lakehouse.dims.dim_videos (
-        video_id STRING,
-        creator_id STRING,
-        category STRING,
-        hashtags ARRAY<STRING>,
-        duration_ms LONG,
-        status STRING,
-        upload_time TIMESTAMP,
-        last_updated_ts TIMESTAMP
-    ) USING iceberg
-    PARTITIONED BY (bucket(16, video_id))
-    TBLPROPERTIES (
-        'write.merge.mode'='merge-on-read',
-        'format-version'='2'
-    )
-    """)
-
-def process_users_batch(df, batch_id):
-    print(f"--- Processing Users Batch ID: {batch_id} ---")
-    count = df.count()
-    if count == 0:
-        print(f"Batch {batch_id}: No new data.")
+    existing_columns = list(_table_columns(spark, settings.dim_videos_table))
+    missing_columns = missing_required_columns(existing_columns)
+    if not missing_columns:
         return
 
-    print(f"Batch {batch_id}: Found {count} records. Starting Merge...")
-    df.cache()
-    try:
-        df.createOrReplaceTempView("user_updates")
-        
-        # Deduplicate: Keep latest op per user_id in this batch
-        spark = df.sparkSession
-        spark.sql("""
-        MERGE INTO lakehouse.dims.dim_users AS target
-        USING (
-            SELECT * FROM (
-                SELECT 
-                    after.user_id,
-                    after.register_country,
-                    after.device_os,
-                    after.is_creator,
-                    after.ltv_segment,
-                    cast(after.join_at as timestamp) as join_at,
-                    ts_ms,
-                    ROW_NUMBER() OVER (PARTITION BY after.user_id ORDER BY ts_ms DESC) as rn
-                FROM user_updates
-                WHERE op IN ('c', 'u')
-            ) WHERE rn = 1
-        ) AS source
-        ON target.user_id = source.user_id
-        WHEN MATCHED THEN UPDATE SET
-            target.ltv_segment = source.ltv_segment,
-            target.is_creator = source.is_creator,
-            target.last_updated_ts = current_timestamp()
-        WHEN NOT MATCHED THEN INSERT (
-            user_id, register_country, device_os, is_creator, ltv_segment, join_at, last_updated_ts
-        ) VALUES (
-            source.user_id, source.register_country, source.device_os, source.is_creator, source.ltv_segment, source.join_at, current_timestamp()
-        )
-        """)
-        print(f"Batch {batch_id}: Merge completed successfully.")
-    except Exception as e:
-        print(f"Error in Users Batch {batch_id}: {str(e)}")
-        raise e
-    finally:
-        df.unpersist()
+    manual_sql = manual_alter_statements(existing_columns, settings.dim_videos_table)
+    missing_names = ", ".join(name for name, _ in missing_columns)
+    details = "\n".join(f"  - {statement}" for statement in manual_sql)
+    raise RuntimeError(
+        "dim_videos schema is missing required columns: "
+        f"{missing_names}.\n"
+        "Run these manual migration statements, then restart the job:\n"
+        f"{details}"
+    )
 
-def process_videos_batch(df, batch_id):
-    print(f"--- Processing Videos Batch ID: {batch_id} ---")
-    count = df.count()
-    if count == 0:
-        print(f"Batch {batch_id}: No new data.")
+
+def _cdc_schema() -> StructType:
+    return StructType(
+        [
+            StructField("op", StringType(), True),
+            StructField("ts_ms", LongType(), True),
+            StructField("schema_version", StringType(), True),
+            StructField(
+                "after",
+                StructType(
+                    [
+                        StructField("video_id", StringType(), True),
+                        StructField("category", StringType(), True),
+                        StructField("region", StringType(), True),
+                        StructField("upload_time", StringType(), True),
+                        StructField("status", StringType(), True),
+                    ]
+                ),
+                True,
+            ),
+        ]
+    )
+
+
+def read_video_cdc_stream(spark: SparkSession, settings: JobSettings) -> DataFrame:
+    raw_stream = (
+        spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", settings.bootstrap_servers)
+        .option("subscribe", settings.topic)
+        .option("startingOffsets", settings.starting_offsets)
+        .option("kafka.group.id", settings.consumer_group)
+        .load()
+    )
+
+    parsed = (
+        raw_stream.select(
+            col("topic").alias("source_topic"),
+            col("partition").alias("source_partition"),
+            col("offset").alias("source_offset"),
+            col("timestamp").alias("kafka_timestamp"),
+            col("value").cast("string").alias("raw_value"),
+        )
+        .withColumn("cdc", from_json(col("raw_value"), _cdc_schema()))
+        .select(
+            "source_topic",
+            "source_partition",
+            "source_offset",
+            "kafka_timestamp",
+            "raw_value",
+            col("cdc.op").alias("op"),
+            col("cdc.ts_ms").alias("ts_ms"),
+            col("cdc.schema_version").alias("schema_version"),
+            col("cdc.after.video_id").alias("video_id"),
+            col("cdc.after.category").alias("category"),
+            col("cdc.after.region").alias("region"),
+            col("cdc.after.upload_time").alias("upload_time"),
+            col("cdc.after.status").alias("status"),
+        )
+    )
+
+    return parsed
+
+
+def process_videos_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
+    scoped = df.filter(
+        col("op").isin("c", "u") & col("video_id").isNotNull() & col("ts_ms").isNotNull()
+    ).select(
+        "op",
+        "ts_ms",
+        "source_offset",
+        "video_id",
+        "category",
+        "region",
+        "upload_time",
+        "status",
+    )
+
+    if scoped.limit(1).count() == 0:
+        print(f"Batch {batch_id}: no valid c/u records.")
         return
 
-    print(f"Batch {batch_id}: Found {count} records. Starting Merge...")
-    df.cache()
-    try:
-        df.createOrReplaceTempView("video_updates")
-        
-        spark = df.sparkSession
-        spark.sql("""
-        MERGE INTO lakehouse.dims.dim_videos AS target
-        USING (
-            SELECT * FROM (
-                SELECT 
-                    after.video_id,
-                    after.creator_id,
-                    after.category,
-                    after.hashtags,
-                    after.duration_ms,
-                    after.status,
-                    cast(after.upload_time as timestamp) as upload_time,
-                    ts_ms,
-                    ROW_NUMBER() OVER (PARTITION BY after.video_id ORDER BY ts_ms DESC) as rn
-                FROM video_updates
-                WHERE op IN ('c', 'u')
-            ) WHERE rn = 1
-        ) AS source
-        ON target.video_id = source.video_id
-        WHEN MATCHED THEN UPDATE SET
-            target.status = source.status,
-            target.category = source.category,
-            target.last_updated_ts = current_timestamp()
-        WHEN NOT MATCHED THEN INSERT (
-            video_id, creator_id, category, hashtags, duration_ms, status, upload_time, last_updated_ts
-        ) VALUES (
-            source.video_id, source.creator_id, source.category, source.hashtags, source.duration_ms, source.status, source.upload_time, current_timestamp()
-        )
-        """)
-        print(f"Batch {batch_id}: Merge completed successfully.")
-    except Exception as e:
-        print(f"Error in Videos Batch {batch_id}: {str(e)}")
-        raise e
-    finally:
-        df.unpersist()
+    scoped.createOrReplaceTempView("video_updates")
+    df.sparkSession.sql(merge_dim_videos_sql("video_updates", table_name))
+    print(f"Batch {batch_id}: merged CDC updates into dim_videos.")
 
-def main():
-    spark = create_spark_session()
+
+def main() -> None:
+    settings = load_job_settings()
+    spark = create_spark_session(settings)
     spark.sparkContext.setLogLevel("WARN")
-    init_tables(spark)
 
-    # Common CDC Schema
-    cdc_schema = StructType([
-        StructField("op", StringType()),
-        StructField("ts_ms", LongType()),
-        StructField("after", StringType()) # Parse JSON later or use Struct
-    ])
+    init_dim_videos_table(spark, settings)
+    cdc_stream = read_video_cdc_stream(spark, settings)
 
-    # --- Stream 1: Users ---
-    user_stream = spark.readStream \
-        .format("kafka") \
-        .option("kafka.bootstrap.servers", "kafka:29092") \
-        .option("subscribe", "cdc.users.profiles") \
-        .option("startingOffsets", "earliest") \
-        .load() \
-        .select(from_json(col("value").cast("string"), "op STRING, ts_ms LONG, after STRUCT<user_id STRING, register_country STRING, device_os STRING, is_creator BOOLEAN, ltv_segment STRING, join_at STRING>").alias("data")) \
-        .select("data.*")
-
-    query_users = user_stream.writeStream \
-        .foreachBatch(process_users_batch) \
-        .option("checkpointLocation", "s3a://checkpoints/dims_users_v1") \
-        .trigger(processingTime="1 minute") \
+    query = (
+        cdc_stream.writeStream.foreachBatch(
+            lambda df, batch_id: process_videos_batch(df, batch_id, settings.dim_videos_table)
+        )
+        .option("checkpointLocation", settings.checkpoint_dim_videos)
+        .trigger(processingTime=settings.trigger_interval)
         .start()
+    )
 
-    # --- Stream 2: Videos ---
-    video_stream = spark.readStream \
-        .format("kafka") \
-        .option("kafka.bootstrap.servers", "kafka:29092") \
-        .option("subscribe", "cdc.content.videos") \
-        .option("startingOffsets", "earliest") \
-        .load() \
-        .select(from_json(col("value").cast("string"), "op STRING, ts_ms LONG, after STRUCT<video_id STRING, creator_id STRING, category STRING, hashtags ARRAY<STRING>, duration_ms LONG, status STRING, upload_time STRING>").alias("data")) \
-        .select("data.*")
+    query.awaitTermination()
 
-    query_videos = video_stream.writeStream \
-        .foreachBatch(process_videos_batch) \
-        .option("checkpointLocation", "s3a://checkpoints/dims_videos_v1") \
-        .trigger(processingTime="1 minute") \
-        .start()
-
-    spark.streams.awaitAnyTermination()
 
 if __name__ == "__main__":
     main()
