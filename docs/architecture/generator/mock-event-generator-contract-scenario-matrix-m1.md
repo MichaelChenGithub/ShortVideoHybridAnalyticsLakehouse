@@ -19,7 +19,7 @@ In scope:
 
 1. bounded simulation run model (`run_id`, `seed`, fixed duration)
 2. deterministic synthetic ID and registry generation
-3. CDC bootstrap then event streaming sequence
+3. CDC bootstrap (`op=c`) then deterministic CDC update (`op=u`) then event streaming sequence
 4. scenario matrix for decision validation
 5. QA validation tables for run metadata and expected actions
 
@@ -29,6 +29,7 @@ Out of scope (M2+):
 2. Prometheus/Grafana observability for generator
 3. automated adaptive watermark tuning
 4. policy auto-optimization loop
+5. CDC interleaving scenario between create/update phases for batch analysis and SCD Type 2 validation
 
 ---
 
@@ -51,10 +52,11 @@ Recommended M1 default:
 ### 3.2 Run lifecycle
 
 1. initialize run config and deterministic pools from `seed`
-2. emit CDC bootstrap events to `cdc.content.videos`
-3. wait for fixed CDC readiness gate (`5 minutes`)
-4. emit `content_events` stream according to scenario mix
-5. finalize run artifacts and QA table writes
+2. emit CDC bootstrap create events (`op=c`) to `cdc.content.videos`
+3. emit deterministic CDC update events (`op=u`) to `cdc.content.videos`
+4. wait for fixed CDC readiness gate (`5 minutes`)
+5. emit `content_events` stream according to scenario mix
+6. finalize run artifacts and QA table writes
 
 ---
 
@@ -154,9 +156,10 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 
 ### 6.2 Emission sequence
 
-1. emit `cdc.content.videos` create events first
-2. enforce fixed readiness gate (`5 minutes`)
-3. start `content_events` stream
+1. emit `cdc.content.videos` create events (`op=c`) first
+2. emit deterministic `cdc.content.videos` update events (`op=u`) after create events
+3. enforce fixed readiness gate (`5 minutes`)
+4. start `content_events` stream
 
 ### 6.3 Partitioning and ordering
 
@@ -272,6 +275,12 @@ Storage guidance:
 4. expected action hit rate >= 90% against decision outputs
 5. invalid scenario routes malformed records to invalid sinks with success rate >= 99%
 6. every run is traceable through `lakehouse.qa.run_manifest` and `lakehouse.qa.expected_actions`
+
+### 9.1 Future expansion note (post-M1)
+
+1. add CDC interleaving scenario coverage for batch analysis and SCD Type 2 validation.
+2. target pattern includes controlled ordering windows where selected content events are emitted between per-video `op=c` and `op=u` CDC records.
+3. this is intentionally deferred from M1 and tracked as a follow-up scope item.
 
 ---
 

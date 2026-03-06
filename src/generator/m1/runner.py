@@ -126,6 +126,27 @@ class BoundedRunGenerator:
             cdc_count += 1
         return cdc_count
 
+    def _emit_cdc_updates(self, registry_rows: List[Dict[str, Any]]) -> int:
+        cdc_update_count = 0
+        for idx, row in enumerate(registry_rows):
+            update_ts_ms = int((self.config.started_at + timedelta(milliseconds=idx)).timestamp() * 1000) + 60000
+            event = {
+                "op": "u",
+                "ts_ms": update_ts_ms,
+                "schema_version": self.schema_version,
+                "after": {
+                    "video_id": row["video_id"],
+                    "category": f"{row['category']}_u",
+                    "region": row["region"],
+                    "upload_time": row["upload_time"],
+                    "status": row["status"],
+                },
+            }
+            emitted_at = self.clock.now()
+            self.sink.emit_cdc_event(row["video_id"], event, emitted_at)
+            cdc_update_count += 1
+        return cdc_update_count
+
     def _build_late_offsets(self, total_events: int) -> Dict[int, int]:
         late_count = int(round(total_events * self.config.late_event_ratio))
         if late_count <= 0:
@@ -236,6 +257,8 @@ class BoundedRunGenerator:
 
         cdc_count = self._emit_cdc_bootstrap(registry_rows)
         lifecycle["cdc_bootstrap_emitted_at"] = _to_utc_iso(self.clock.now())
+        cdc_update_count = self._emit_cdc_updates(registry_rows)
+        cdc_total_count = cdc_count + cdc_update_count
 
         self.clock.sleep(self.cdc_gate_seconds)
         lifecycle["content_started_at"] = _to_utc_iso(self.clock.now())
@@ -310,6 +333,8 @@ class BoundedRunGenerator:
             "planned_total_events": total_events,
             "emitted_total_events": event_index,
             "cdc_bootstrap_events": cdc_count,
+            "cdc_update_events": cdc_update_count,
+            "cdc_total_events": cdc_total_count,
             "invalid_payload_events": invalid_payload_events,
             "planned_scenario_counts": planned_counts,
             "emitted_scenario_counts": scenario_emitted_counts,
@@ -343,7 +368,9 @@ class BoundedRunGenerator:
 
         self._log(
             "[m1] run complete: "
-            f"content={event_index}, cdc={cdc_count}, invalid={invalid_payload_events}"
+            "content="
+            f"{event_index}, cdc_bootstrap={cdc_count}, cdc_updates={cdc_update_count}, "
+            f"cdc_total={cdc_total_count}, invalid={invalid_payload_events}"
         )
 
         return RunResult(summary=summary)
