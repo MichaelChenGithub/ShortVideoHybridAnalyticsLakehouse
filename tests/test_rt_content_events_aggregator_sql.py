@@ -9,13 +9,17 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from spark.rt_content_events_aggregator_sql import (  # noqa: E402
+    create_invalid_events_content_sql,
     create_raw_events_sql,
     create_rt_video_stats_sql,
+    manual_alter_invalid_events_content_statements,
     manual_alter_raw_events_statements,
     manual_alter_rt_video_stats_statements,
     merge_rt_video_stats_sql,
+    missing_invalid_events_content_columns,
     missing_raw_events_columns,
     missing_rt_video_stats_columns,
+    required_invalid_events_content_columns,
     required_raw_events_columns,
     required_rt_video_stats_columns,
 )
@@ -55,6 +59,20 @@ class RtContentEventsAggregatorSqlTests(unittest.TestCase):
                 ("processed_at", "TIMESTAMP"),
             ),
         )
+        self.assertEqual(
+            required_invalid_events_content_columns(),
+            (
+                ("invalid_event_id", "STRING"),
+                ("raw_value", "STRING"),
+                ("source_topic", "STRING"),
+                ("source_partition", "INT"),
+                ("source_offset", "BIGINT"),
+                ("schema_version", "STRING"),
+                ("error_code", "STRING"),
+                ("error_reason", "STRING"),
+                ("ingested_at", "TIMESTAMP"),
+            ),
+        )
 
     def test_create_sql_contains_required_fields(self) -> None:
         raw_sql = create_raw_events_sql()
@@ -66,6 +84,14 @@ class RtContentEventsAggregatorSqlTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS lakehouse.gold.rt_video_stats_1min", gold_sql)
         for column_name, data_type in required_rt_video_stats_columns():
             self.assertIn(f"{column_name} {data_type}", gold_sql)
+
+        invalid_sql = create_invalid_events_content_sql()
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS lakehouse.bronze.invalid_events_content",
+            invalid_sql,
+        )
+        for column_name, data_type in required_invalid_events_content_columns():
+            self.assertIn(f"{column_name} {data_type}", invalid_sql)
 
     def test_missing_columns_and_manual_alter_sql(self) -> None:
         raw_existing = ["event_id", "event_timestamp", "video_id"]
@@ -86,11 +112,22 @@ class RtContentEventsAggregatorSqlTests(unittest.TestCase):
             gold_statements,
         )
 
+        invalid_existing = ["invalid_event_id", "raw_value"]
+        invalid_missing = missing_invalid_events_content_columns(invalid_existing)
+        self.assertIn(("error_code", "STRING"), invalid_missing)
+        invalid_statements = manual_alter_invalid_events_content_statements(invalid_existing)
+        self.assertIn(
+            "ALTER TABLE lakehouse.bronze.invalid_events_content ADD COLUMNS (error_code STRING);",
+            invalid_statements,
+        )
+
     def test_sql_builders_support_custom_table_name(self) -> None:
         raw_table = "lakehouse.bronze.raw_events_canary"
         gold_table = "lakehouse.gold.rt_video_stats_1min_canary"
+        invalid_table = "lakehouse.bronze.invalid_events_content_canary"
         self.assertIn(raw_table, create_raw_events_sql(raw_table))
         self.assertIn(gold_table, create_rt_video_stats_sql(gold_table))
+        self.assertIn(invalid_table, create_invalid_events_content_sql(invalid_table))
 
     def test_merge_sql_builder_supports_custom_view_and_table(self) -> None:
         merge_sql = merge_rt_video_stats_sql(

@@ -10,6 +10,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from spark.rt_content_events_contract import (  # noqa: E402
     CHECKPOINT_GOLD,
+    CHECKPOINT_INVALID,
     CHECKPOINT_RAW,
     JOB_NAME,
     STARTING_OFFSETS,
@@ -21,7 +22,7 @@ from spark.rt_content_events_contract import (  # noqa: E402
 
 
 class RtContentEventsContractTests(unittest.TestCase):
-    def test_contract_constants_match_mic40(self) -> None:
+    def test_contract_constants_match_mic39(self) -> None:
         self.assertEqual(JOB_NAME, "spark_rt_content_events_aggregator")
         self.assertEqual(TOPIC, "content_events")
         self.assertEqual(STARTING_OFFSETS, "latest")
@@ -35,6 +36,10 @@ class RtContentEventsContractTests(unittest.TestCase):
             CHECKPOINT_GOLD,
             "s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1",
         )
+        self.assertEqual(
+            CHECKPOINT_INVALID,
+            "s3a://checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1",
+        )
 
     def test_checkpoint_builder_uses_job_scoped_path(self) -> None:
         self.assertEqual(
@@ -44,6 +49,10 @@ class RtContentEventsContractTests(unittest.TestCase):
         self.assertEqual(
             checkpoint_for_sink("rt_video_stats_1min", version="v2"),
             "s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v2",
+        )
+        self.assertEqual(
+            checkpoint_for_sink("invalid_events_content"),
+            "s3a://checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1",
         )
 
     def test_checkpoint_builder_rejects_blank_sink(self) -> None:

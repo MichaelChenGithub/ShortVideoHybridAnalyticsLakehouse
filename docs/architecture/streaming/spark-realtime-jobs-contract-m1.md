@@ -133,8 +133,9 @@ Invalid rows must include:
 
 1. raw payload
 2. source metadata (`topic`, `partition`, `offset`)
-3. `error_code` and `error_reason`
-4. `ingested_at`
+3. `schema_version`
+4. `error_code` and `error_reason`
+5. `ingested_at`
 
 ---
 
@@ -192,4 +193,3 @@ Observability note:
 5. invalid records route to split quarantine tables
 6. degraded mode behavior matches contract (`freeze` or `REVIEW-only`)
 7. replay/restart remains deterministic for same inputs and versions
-

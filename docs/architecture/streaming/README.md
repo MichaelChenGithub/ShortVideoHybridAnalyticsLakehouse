@@ -129,7 +129,8 @@ Runtime defaults locked for MIC-40:
 
 Scope note:
 
-1. `invalid_events_content` sink and checkpoint are intentionally deferred for MIC-40.
+1. Historical MIC-40 note: `invalid_events_content` sink/checkpoint were deferred in that ticket and are implemented by MIC-39.
+2. For MIC-39 content contract enforcement and quarantine validation, use the section below.
 
 ### 1. Run one-command MIC-40 acceptance flow
 
@@ -154,4 +155,59 @@ Wait at least 75 seconds after bounded-run emission so the 1-minute Gold trigger
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_aggregator.py --min-raw-rows 1 --min-gold-rows 1 --max-freshness-minutes 10
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 | head -n 40"
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 | head -n 40"
+```
+
+## MIC-39 Contract Enforcement Commands
+
+Scope here is limited to MIC-39: enforce `content_events` schema contract, route invalid records to `lakehouse.bronze.invalid_events_content`, and keep valid `bronze.raw_events` + `gold.rt_video_stats_1min` flow healthy.
+
+Runtime defaults locked for MIC-39:
+
+1. `startingOffsets=latest`
+2. trigger intervals: `raw_events=10 seconds`, `rt_video_stats_1min=1 minute`, `invalid_events_content=10 seconds`
+3. checkpoints:
+   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
+   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
+   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1`
+4. acceptance gates:
+   - `min_invalid_rows=1`
+   - `max_invalid_rate=0.20`
+   - `max_freshness_minutes=10`
+
+Out-of-scope reminder:
+
+1. CDC contract enforcement for `cdc.content.videos` is tracked separately (MIC-43).
+
+### 1. Run one-command MIC-39 acceptance flow
+
+```bash
+bash src/scripts/run_mic39_acceptance.sh
+```
+
+### 2. Equivalent manual verification command
+
+Capture a run boundary timestamp before emission:
+
+```bash
+MIN_INGESTED_AT_MS=$(( $(date +%s) * 1000 ))
+```
+
+Then run verifier:
+
+```bash
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_contract_enforcement.py \
+  --min-raw-rows 1 \
+  --min-gold-rows 1 \
+  --min-invalid-rows 1 \
+  --max-invalid-rate 0.20 \
+  --max-freshness-minutes 10 \
+  --min-ingested-at-ms "$MIN_INGESTED_AT_MS"
+```
+
+### 3. Validate checkpoint evidence for all three sinks
+
+```bash
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 | head -n 40"
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 | head -n 40"
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 | head -n 40"
 ```

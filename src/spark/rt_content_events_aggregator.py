@@ -1,4 +1,4 @@
-"""MIC-40 Spark streaming job for content events aggregation into Bronze and Gold."""
+"""MIC-39 Spark streaming job for content event contract enforcement and aggregation."""
 
 from __future__ import annotations
 
@@ -6,7 +6,10 @@ from typing import Iterable
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import (
+    coalesce,
     col,
+    concat,
+    concat_ws,
     count,
     current_timestamp,
     from_json,
@@ -21,46 +24,60 @@ from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 try:
     from spark.rt_content_events_aggregator_sql import (
+        create_invalid_events_content_sql,
         create_raw_events_sql,
         create_rt_video_stats_sql,
+        manual_alter_invalid_events_content_statements,
         manual_alter_raw_events_statements,
         manual_alter_rt_video_stats_statements,
         merge_rt_video_stats_sql,
+        missing_invalid_events_content_columns,
         missing_raw_events_columns,
         missing_rt_video_stats_columns,
     )
     from spark.rt_content_events_contract import JobSettings, load_job_settings
+    from spark.rt_content_events_validation import (
+        ALLOWED_EVENT_TYPES,
+        INVALID_EVENT_TIMESTAMP,
+        INVALID_EVENT_TYPE,
+        INVALID_PAYLOAD_JSON,
+        MISSING_REQUIRED_FIELD,
+        PARSE_ERROR,
+        UNKNOWN_SCHEMA_VERSION,
+        error_reason_for_code,
+    )
 except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
     from rt_content_events_aggregator_sql import (
+        create_invalid_events_content_sql,
         create_raw_events_sql,
         create_rt_video_stats_sql,
+        manual_alter_invalid_events_content_statements,
         manual_alter_raw_events_statements,
         manual_alter_rt_video_stats_statements,
         merge_rt_video_stats_sql,
+        missing_invalid_events_content_columns,
         missing_raw_events_columns,
         missing_rt_video_stats_columns,
     )
     from rt_content_events_contract import JobSettings, load_job_settings
-
-ALLOWED_EVENT_TYPES = (
-    "impression",
-    "play_start",
-    "play_finish",
-    "like",
-    "share",
-    "skip",
-)
-
+    from rt_content_events_validation import (
+        ALLOWED_EVENT_TYPES,
+        INVALID_EVENT_TIMESTAMP,
+        INVALID_EVENT_TYPE,
+        INVALID_PAYLOAD_JSON,
+        MISSING_REQUIRED_FIELD,
+        PARSE_ERROR,
+        UNKNOWN_SCHEMA_VERSION,
+        error_reason_for_code,
+    )
 
 
 def create_spark_session(settings: JobSettings) -> SparkSession:
     return SparkSession.builder.appName(settings.app_name).getOrCreate()
 
 
-
 def _table_columns(spark: SparkSession, table_name: str) -> Iterable[str]:
     return [field.name for field in spark.table(table_name).schema.fields]
-
 
 
 def _raise_missing_columns_error(
@@ -77,13 +94,13 @@ def _raise_missing_columns_error(
     )
 
 
-
 def init_output_tables(spark: SparkSession, settings: JobSettings) -> None:
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.bronze")
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.gold")
 
     spark.sql(create_raw_events_sql(settings.raw_table))
     spark.sql(create_rt_video_stats_sql(settings.gold_table))
+    spark.sql(create_invalid_events_content_sql(settings.invalid_table))
 
     raw_existing = list(_table_columns(spark, settings.raw_table))
     raw_missing = missing_raw_events_columns(raw_existing)
@@ -103,6 +120,14 @@ def init_output_tables(spark: SparkSession, settings: JobSettings) -> None:
             manual_alter_rt_video_stats_statements(gold_existing, settings.gold_table),
         )
 
+    invalid_existing = list(_table_columns(spark, settings.invalid_table))
+    invalid_missing = missing_invalid_events_content_columns(invalid_existing)
+    if invalid_missing:
+        _raise_missing_columns_error(
+            settings.invalid_table,
+            invalid_missing,
+            manual_alter_invalid_events_content_statements(invalid_existing, settings.invalid_table),
+        )
 
 
 def _content_event_schema() -> StructType:
@@ -131,10 +156,8 @@ def _content_event_schema() -> StructType:
     )
 
 
-
 def _payload_json_schema() -> StructType:
     return StructType([StructField("watch_time_ms", LongType(), True)])
-
 
 
 def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> DataFrame:
@@ -161,6 +184,7 @@ def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> Da
             "source_offset",
             "kafka_timestamp",
             "raw_value",
+            col("event").isNull().alias("is_parse_error"),
             col("event.event_id").alias("event_id"),
             to_timestamp(col("event.event_timestamp")).alias("event_timestamp"),
             col("event.video_id").alias("video_id"),
@@ -174,10 +198,11 @@ def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> Da
             "payload_json",
             when(col("payload_json").isNotNull(), col("payload_json")).otherwise(to_json(col("payload"))),
         )
+        .withColumn("payload_json_parsed", from_json(col("payload_json"), _payload_json_schema()))
         .withColumn(
             "watch_time_ms",
             when(col("payload.watch_time_ms").isNotNull(), col("payload.watch_time_ms")).otherwise(
-                from_json(col("payload_json"), _payload_json_schema()).getField("watch_time_ms")
+                col("payload_json_parsed").getField("watch_time_ms")
             ),
         )
         .withColumn("watch_time_ms", when(col("watch_time_ms").isNull(), lit(0)).otherwise(col("watch_time_ms")))
@@ -186,18 +211,64 @@ def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> Da
     return parsed
 
 
-
-def filter_valid_events(df: DataFrame) -> DataFrame:
-    return df.filter(
-        col("event_id").isNotNull()
-        & col("event_timestamp").isNotNull()
-        & col("video_id").isNotNull()
-        & col("user_id").isNotNull()
-        & col("event_type").isin(*ALLOWED_EVENT_TYPES)
-        & col("schema_version").isNotNull()
-        & col("payload_json").isNotNull()
+def split_valid_and_invalid_events(df: DataFrame) -> tuple[DataFrame, DataFrame]:
+    missing_fields_csv = concat_ws(
+        ",",
+        when(col("event_id").isNull(), lit("event_id")),
+        when(col("video_id").isNull(), lit("video_id")),
+        when(col("user_id").isNull(), lit("user_id")),
+        when(col("schema_version").isNull(), lit("schema_version")),
+        when(col("payload_json").isNull(), lit("payload_json")),
     )
 
+    is_missing_required_field = (
+        col("event_id").isNull()
+        | col("video_id").isNull()
+        | col("user_id").isNull()
+        | col("schema_version").isNull()
+        | col("payload_json").isNull()
+    )
+
+    is_invalid_event_type = col("event_type").isNull() | (~col("event_type").isin(*ALLOWED_EVENT_TYPES))
+    is_invalid_payload_json = col("payload_json_parsed").isNull()
+
+    annotated = (
+        df.withColumn("missing_fields_csv", missing_fields_csv)
+        .withColumn(
+            "error_code",
+            when(col("is_parse_error"), lit(PARSE_ERROR))
+            .when(is_missing_required_field, lit(MISSING_REQUIRED_FIELD))
+            .when(col("event_timestamp").isNull(), lit(INVALID_EVENT_TIMESTAMP))
+            .when(is_invalid_event_type, lit(INVALID_EVENT_TYPE))
+            .when(is_invalid_payload_json, lit(INVALID_PAYLOAD_JSON))
+            .otherwise(lit(None).cast("string")),
+        )
+        .withColumn(
+            "error_reason",
+            when(col("error_code") == lit(PARSE_ERROR), lit(error_reason_for_code(PARSE_ERROR)))
+            .when(
+                col("error_code") == lit(MISSING_REQUIRED_FIELD),
+                concat(lit("missing required field(s): "), col("missing_fields_csv")),
+            )
+            .when(
+                col("error_code") == lit(INVALID_EVENT_TIMESTAMP),
+                lit(error_reason_for_code(INVALID_EVENT_TIMESTAMP)),
+            )
+            .when(
+                col("error_code") == lit(INVALID_EVENT_TYPE),
+                lit(error_reason_for_code(INVALID_EVENT_TYPE)),
+            )
+            .when(
+                col("error_code") == lit(INVALID_PAYLOAD_JSON),
+                lit(error_reason_for_code(INVALID_PAYLOAD_JSON)),
+            )
+            .otherwise(lit(None).cast("string")),
+        )
+    )
+
+    valid_events = annotated.filter(col("error_code").isNull())
+    invalid_events = annotated.filter(col("error_code").isNotNull())
+    return valid_events, invalid_events
 
 
 def process_bronze_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
@@ -215,7 +286,6 @@ def process_bronze_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
     )
 
 
-
 def process_gold_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
     count_rows = df.count()
     if count_rows == 0:
@@ -226,6 +296,20 @@ def process_gold_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
     df.createOrReplaceTempView("gold_updates")
     df.sparkSession.sql(merge_rt_video_stats_sql("gold_updates", table_name))
 
+
+def process_invalid_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
+    count_rows = df.count()
+    if count_rows == 0:
+        print(f"Batch {batch_id}: no invalid rows.")
+        return
+
+    print(f"Batch {batch_id}: writing {count_rows} invalid rows to {table_name}.")
+    (
+        df.sort("source_topic", "source_partition", "source_offset")
+        .write.format("iceberg")
+        .mode("append")
+        .save(table_name)
+    )
 
 
 def build_gold_aggregates(valid_events: DataFrame) -> DataFrame:
@@ -271,20 +355,19 @@ def align_to_table_columns(df: DataFrame, table_columns: Iterable[str]) -> DataF
     return df.select(*projected)
 
 
-
 def main() -> None:
     settings = load_job_settings()
     spark = create_spark_session(settings)
     spark.sparkContext.setLogLevel("WARN")
 
     print(
-        "MIC-40 scope note: invalid_events_content sink/checkpoint are deferred; "
-        "malformed events are dropped in this bring-up ticket."
+        "MIC-39 scope: content contract validation enabled with invalid_events_content quarantine sink; "
+        "CDC enforcement remains out of scope."
     )
 
     init_output_tables(spark, settings)
     parsed_stream = read_content_events_stream(spark, settings)
-    valid_events = filter_valid_events(parsed_stream)
+    valid_events, invalid_events = split_valid_and_invalid_events(parsed_stream)
 
     bronze_rows = valid_events.select(
         "event_id",
@@ -300,11 +383,30 @@ def main() -> None:
         current_timestamp().alias("ingested_at"),
     )
 
+    invalid_rows = invalid_events.select(
+        concat_ws(
+            ":",
+            coalesce(col("source_topic"), lit("unknown")),
+            coalesce(col("source_partition").cast("string"), lit("-1")),
+            coalesce(col("source_offset").cast("string"), lit("-1")),
+        ).alias("invalid_event_id"),
+        "raw_value",
+        "source_topic",
+        "source_partition",
+        "source_offset",
+        coalesce(col("schema_version"), lit(UNKNOWN_SCHEMA_VERSION)).alias("schema_version"),
+        "error_code",
+        "error_reason",
+        current_timestamp().alias("ingested_at"),
+    )
+
     raw_table_columns = list(_table_columns(spark, settings.raw_table))
     gold_table_columns = list(_table_columns(spark, settings.gold_table))
+    invalid_table_columns = list(_table_columns(spark, settings.invalid_table))
 
     bronze_rows = align_to_table_columns(bronze_rows, raw_table_columns)
     gold_rows = align_to_table_columns(build_gold_aggregates(valid_events), gold_table_columns)
+    invalid_rows = align_to_table_columns(invalid_rows, invalid_table_columns)
 
     query_bronze = (
         bronze_rows.writeStream.foreachBatch(
@@ -325,6 +427,17 @@ def main() -> None:
         .start()
     )
 
+    query_invalid = (
+        invalid_rows.writeStream.foreachBatch(
+            lambda df, batch_id: process_invalid_batch(df, batch_id, settings.invalid_table)
+        )
+        .option("checkpointLocation", settings.checkpoint_invalid)
+        .trigger(processingTime=settings.trigger_raw)
+        .start()
+    )
+
+    # Keep query refs alive for debugging logs/readability.
+    del query_bronze, query_gold, query_invalid
     spark.streams.awaitAnyTermination()
 
 
