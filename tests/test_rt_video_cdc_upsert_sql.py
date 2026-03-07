@@ -10,10 +10,14 @@ if str(SRC_ROOT) not in sys.path:
 
 from spark.rt_video_cdc_upsert_sql import (  # noqa: E402
     create_dim_videos_sql,
+    create_invalid_events_cdc_videos_sql,
+    manual_alter_invalid_events_cdc_videos_statements,
     manual_alter_statements,
     merge_dim_videos_sql,
+    missing_invalid_events_cdc_videos_columns,
     missing_required_columns,
     required_dim_videos_columns,
+    required_invalid_events_cdc_videos_columns,
 )
 
 
@@ -34,6 +38,29 @@ class RtVideoCdcUpsertSqlTests(unittest.TestCase):
         sql = create_dim_videos_sql()
         self.assertIn("CREATE TABLE IF NOT EXISTS lakehouse.dims.dim_videos", sql)
         for column_name, data_type in required_dim_videos_columns():
+            self.assertIn(f"{column_name} {data_type}", sql)
+
+    def test_invalid_cdc_required_columns_match_contract(self) -> None:
+        expected = (
+            ("invalid_event_id", "STRING"),
+            ("raw_value", "STRING"),
+            ("source_topic", "STRING"),
+            ("source_partition", "INT"),
+            ("source_offset", "BIGINT"),
+            ("schema_version", "STRING"),
+            ("error_code", "STRING"),
+            ("error_reason", "STRING"),
+            ("ingested_at", "TIMESTAMP"),
+        )
+        self.assertEqual(required_invalid_events_cdc_videos_columns(), expected)
+
+    def test_create_invalid_cdc_sql_contains_required_fields(self) -> None:
+        sql = create_invalid_events_cdc_videos_sql()
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS lakehouse.bronze.invalid_events_cdc_videos",
+            sql,
+        )
+        for column_name, data_type in required_invalid_events_cdc_videos_columns():
             self.assertIn(f"{column_name} {data_type}", sql)
 
     def test_missing_columns_and_manual_alter_sql(self) -> None:
@@ -72,6 +99,33 @@ class RtVideoCdcUpsertSqlTests(unittest.TestCase):
         self.assertIn(table_name, merge_dim_videos_sql("video_updates", table_name))
         statements = manual_alter_statements(["video_id"], table_name)
         self.assertTrue(all(table_name in statement for statement in statements))
+
+    def test_invalid_cdc_missing_columns_and_manual_alter_sql(self) -> None:
+        existing = ["invalid_event_id", "raw_value", "source_topic"]
+        missing = missing_invalid_events_cdc_videos_columns(existing)
+        self.assertEqual(
+            missing,
+            [
+                ("source_partition", "INT"),
+                ("source_offset", "BIGINT"),
+                ("schema_version", "STRING"),
+                ("error_code", "STRING"),
+                ("error_reason", "STRING"),
+                ("ingested_at", "TIMESTAMP"),
+            ],
+        )
+        statements = manual_alter_invalid_events_cdc_videos_statements(existing)
+        self.assertEqual(
+            statements,
+            [
+                "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (source_partition INT);",
+                "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (source_offset BIGINT);",
+                "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (schema_version STRING);",
+                "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (error_code STRING);",
+                "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (error_reason STRING);",
+                "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (ingested_at TIMESTAMP);",
+            ],
+        )
 
 
 if __name__ == "__main__":

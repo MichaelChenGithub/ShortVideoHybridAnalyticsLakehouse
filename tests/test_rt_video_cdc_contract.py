@@ -10,6 +10,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from spark.rt_video_cdc_contract import (  # noqa: E402
     CHECKPOINT_DIM_VIDEOS,
+    CHECKPOINT_INVALID_CDC_VIDEOS,
     JOB_NAME,
     STARTING_OFFSETS,
     TOPIC,
@@ -28,6 +29,10 @@ class RtVideoCdcContractTests(unittest.TestCase):
             CHECKPOINT_DIM_VIDEOS,
             "s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1",
         )
+        self.assertEqual(
+            CHECKPOINT_INVALID_CDC_VIDEOS,
+            "s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1",
+        )
 
     def test_checkpoint_builder_uses_job_scoped_path(self) -> None:
         self.assertEqual(
@@ -37,6 +42,10 @@ class RtVideoCdcContractTests(unittest.TestCase):
         self.assertEqual(
             checkpoint_for_sink("dim_videos", version="v2"),
             "s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v2",
+        )
+        self.assertEqual(
+            checkpoint_for_sink("invalid_events_cdc_videos"),
+            "s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1",
         )
 
     def test_checkpoint_builder_rejects_blank_sink(self) -> None:
