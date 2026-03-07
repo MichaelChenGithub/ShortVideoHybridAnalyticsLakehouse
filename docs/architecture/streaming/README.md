@@ -67,3 +67,44 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_vid
 ```bash
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
 ```
+
+## MIC-40 Bring-up Commands
+
+Scope here is limited to MIC-40: bring up `rt_content_events_aggregator` for `content_events` with writes to `bronze.raw_events` and `gold.rt_video_stats_1min` plus checkpoint validation for both sinks.
+
+Runtime defaults locked for MIC-40:
+
+1. `startingOffsets=latest`
+2. trigger intervals: `raw_events=10 seconds`, `rt_video_stats_1min=1 minute`
+3. checkpoints:
+   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
+   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
+
+Scope note:
+
+1. `invalid_events_content` sink and checkpoint are intentionally deferred for MIC-40.
+
+### 1. Run one-command MIC-40 acceptance flow
+
+```bash
+bash src/scripts/run_mic40_acceptance.sh
+```
+
+### 2. Equivalent manual flow
+
+```bash
+docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic content_events --partitions 6 --replication-factor 1
+docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_content_events_aggregator.py"
+python3 src/generator/m1_bounded_run.py --config docs/architecture/generator/examples/m1_run_config.example.json --sink kafka --bootstrap-servers localhost:9092
+```
+
+Wait at least 75 seconds after bounded-run emission so the 1-minute Gold trigger can commit output.
+
+### 3. Verify Bronze/Gold health and checkpoint evidence
+
+```bash
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_aggregator.py --min-raw-rows 1 --min-gold-rows 1 --max-freshness-minutes 10
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 | head -n 40"
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 | head -n 40"
+```
