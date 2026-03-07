@@ -68,6 +68,53 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_vid
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
 ```
 
+## MIC-43 Contract Enforcement Commands
+
+Scope here is MIC-43: CDC contract validation and quarantine routing for `cdc.content.videos` to `lakehouse.bronze.invalid_events_cdc_videos`, plus lightweight CDC health checks (freshness + invalid-rate).
+
+Scope guard:
+
+1. MIC-37 remains bring-up scope for stable `dim_videos` upsert.
+2. MIC-43 adds contract enforcement/quarantine without changing valid CDC merge semantics.
+
+### 1. Run one-command MIC-43 acceptance flow
+
+```bash
+bash src/scripts/run_mic43_acceptance.sh
+```
+
+Optional threshold gate for invalid-rate:
+
+```bash
+MAX_INVALID_RATE=1.0 bash src/scripts/run_mic43_acceptance.sh
+```
+
+### 2. Equivalent manual flow
+
+```bash
+docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic cdc.content.videos --partitions 3 --replication-factor 1
+docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_video_cdc_upsert.py"
+python3 src/scripts/emit_mic43_cdc_mixed_fixture.py --bootstrap-servers localhost:9092 --video-id mic43_vid_001
+```
+
+Wait at least 75 seconds after fixture emission so the 1-minute trigger can commit both sinks.
+
+### 3. Verify valid CDC path + quarantine path + health checks
+
+```bash
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_upsert.py --video-id mic43_vid_001 --max-freshness-minutes 10 --expect-status copyright_strike
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invalid_cdc_quarantine.py --table lakehouse.bronze.invalid_events_cdc_videos --lookback-minutes 30 --min-row-count 4 --expect-error-codes CDC_PARSE_ERROR,CDC_UNSUPPORTED_OP,CDC_MISSING_SCHEMA_VERSION,CDC_MISSING_AFTER_VIDEO_ID
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/check_rt_video_cdc_health.py --dim-table lakehouse.dims.dim_videos --invalid-table lakehouse.bronze.invalid_events_cdc_videos --max-freshness-minutes 10 --lookback-minutes 30
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1 | head -n 40"
+```
+
+Invalid-rate definition for local checks:
+
+1. `invalid_rate_per_minute = invalid_count_lookback / lookback_minutes`
+2. `--max-invalid-rate` is optional. Without it, script reports rate but does not fail on rate alone.
+
 ## MIC-40 Bring-up Commands
 
 Scope here is limited to MIC-40: bring up `rt_content_events_aggregator` for `content_events` with writes to `bronze.raw_events` and `gold.rt_video_stats_1min` plus checkpoint validation for both sinks.
