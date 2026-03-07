@@ -1,155 +1,332 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import *
-from pyspark.sql.types import *
+"""MIC-40 Spark streaming job for content events aggregation into Bronze and Gold."""
 
-def create_spark_session():
-    return SparkSession.builder \
-        .appName("IcebergContentStream") \
-        .getOrCreate()
+from __future__ import annotations
 
-def init_tables(spark):
-    print("Initializing Content Tables...")
+from typing import Iterable
+
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.functions import (
+    col,
+    count,
+    current_timestamp,
+    from_json,
+    lit,
+    sum as spark_sum,
+    to_json,
+    to_timestamp,
+    when,
+    window,
+)
+from pyspark.sql.types import LongType, StringType, StructField, StructType
+
+try:
+    from spark.rt_content_events_aggregator_sql import (
+        create_raw_events_sql,
+        create_rt_video_stats_sql,
+        manual_alter_raw_events_statements,
+        manual_alter_rt_video_stats_statements,
+        merge_rt_video_stats_sql,
+        missing_raw_events_columns,
+        missing_rt_video_stats_columns,
+    )
+    from spark.rt_content_events_contract import JobSettings, load_job_settings
+except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
+    from rt_content_events_aggregator_sql import (
+        create_raw_events_sql,
+        create_rt_video_stats_sql,
+        manual_alter_raw_events_statements,
+        manual_alter_rt_video_stats_statements,
+        merge_rt_video_stats_sql,
+        missing_raw_events_columns,
+        missing_rt_video_stats_columns,
+    )
+    from rt_content_events_contract import JobSettings, load_job_settings
+
+ALLOWED_EVENT_TYPES = (
+    "impression",
+    "play_start",
+    "play_finish",
+    "like",
+    "share",
+    "skip",
+)
+
+
+
+def create_spark_session(settings: JobSettings) -> SparkSession:
+    return SparkSession.builder.appName(settings.app_name).getOrCreate()
+
+
+
+def _table_columns(spark: SparkSession, table_name: str) -> Iterable[str]:
+    return [field.name for field in spark.table(table_name).schema.fields]
+
+
+
+def _raise_missing_columns_error(
+    table_name: str,
+    missing_columns: list[tuple[str, str]],
+    statements: list[str],
+) -> None:
+    missing_names = ", ".join(name for name, _ in missing_columns)
+    details = "\n".join(f"  - {statement}" for statement in statements)
+    raise RuntimeError(
+        f"{table_name} is missing required columns: {missing_names}.\n"
+        "Run these manual migration statements, then restart the job:\n"
+        f"{details}"
+    )
+
+
+
+def init_output_tables(spark: SparkSession, settings: JobSettings) -> None:
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.bronze")
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.gold")
 
-    # 1. Bronze: Raw Events (Partitioned by Time)
-    spark.sql("""
-    CREATE TABLE IF NOT EXISTS lakehouse.bronze.raw_events (
-        event_id STRING,
-        event_timestamp TIMESTAMP,
-        video_id STRING,
-        user_id STRING,
-        event_type STRING,
-        payload STRING,
-        ingested_at TIMESTAMP
-    ) USING iceberg
-    PARTITIONED BY (hours(event_timestamp))
-    """)
+    spark.sql(create_raw_events_sql(settings.raw_table))
+    spark.sql(create_rt_video_stats_sql(settings.gold_table))
 
-    # 2. Gold: Video Metrics Log (Append-Only Tumbling Window)
-    # Aggregates metrics per video per minute.
-    spark.sql("""
-    CREATE TABLE IF NOT EXISTS lakehouse.gold.rt_video_stats_1min (
-        video_id STRING,
-        window_start TIMESTAMP,
-        impressions LONG,
-        likes LONG,
-        shares LONG,
-        play_start LONG,
-        play_finish LONG
-    ) USING iceberg
-    PARTITIONED BY (days(window_start), bucket(16, video_id))
-    """)
+    raw_existing = list(_table_columns(spark, settings.raw_table))
+    raw_missing = missing_raw_events_columns(raw_existing)
+    if raw_missing:
+        _raise_missing_columns_error(
+            settings.raw_table,
+            raw_missing,
+            manual_alter_raw_events_statements(raw_existing, settings.raw_table),
+        )
 
-def process_bronze_batch(df, batch_id):
-    count = df.count()
-    if df.count() == 0:
-        return
-    print(f"--- Processing Bronze Batch ID: {batch_id} - {count} records---")
+    gold_existing = list(_table_columns(spark, settings.gold_table))
+    gold_missing = missing_rt_video_stats_columns(gold_existing)
+    if gold_missing:
+        _raise_missing_columns_error(
+            settings.gold_table,
+            gold_missing,
+            manual_alter_rt_video_stats_statements(gold_existing, settings.gold_table),
+        )
 
-    # Sort by partition key to ensure efficient writing
-    df.sort("event_timestamp") \
-        .write \
-        .format("iceberg") \
-        .mode("append") \
-        .save("lakehouse.bronze.raw_events")
 
-def process_gold_batch(df, batch_id):
-    count = df.count()
-    if count == 0:
-        return
-    print(f"--- Processing Gold Batch ID: {batch_id} - {count} records---")
 
-    # Sort by partition keys
-    df.sort("window_start", "video_id") \
-        .write \
-        .format("iceberg") \
-        .mode("append") \
-        .save("lakehouse.gold.rt_video_stats_1min")
+def _content_event_schema() -> StructType:
+    return StructType(
+        [
+            StructField("event_id", StringType(), True),
+            StructField("event_timestamp", StringType(), True),
+            StructField("video_id", StringType(), True),
+            StructField("user_id", StringType(), True),
+            StructField("event_type", StringType(), True),
+            StructField("schema_version", StringType(), True),
+            StructField("payload_json", StringType(), True),
+            StructField(
+                "payload",
+                StructType(
+                    [
+                        StructField("watch_time_ms", LongType(), True),
+                        StructField("device_os", StringType(), True),
+                        StructField("app_version", StringType(), True),
+                        StructField("network_type", StringType(), True),
+                    ]
+                ),
+                True,
+            ),
+        ]
+    )
 
-def main():
-    spark = create_spark_session()
-    spark.sparkContext.setLogLevel("WARN")
-    init_tables(spark)
 
-    # Schema for Header + Body pattern
-    # Payload is kept as Struct for easy access, converted to JSON string for Bronze
-    event_schema = StructType([
-        StructField("event_id", StringType()),
-        StructField("event_timestamp", TimestampType()),
-        StructField("video_id", StringType()),
-        StructField("user_id", StringType()),
-        StructField("event_type", StringType()),
-        StructField("payload", StructType([
-            StructField("watch_time_ms", LongType()),
-            StructField("device_os", StringType()),
-            StructField("app_version", StringType()),
-            StructField("network_type", StringType())
-        ]))
-    ])
 
-    print("Starting Content Stream Processing...")
-    
-    raw_stream = spark.readStream \
-        .format("kafka") \
-        .option("kafka.bootstrap.servers", "kafka:29092") \
-        .option("subscribe", "content_events") \
-        .option("startingOffsets", "latest") \
+def _payload_json_schema() -> StructType:
+    return StructType([StructField("watch_time_ms", LongType(), True)])
+
+
+
+def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> DataFrame:
+    raw_stream = (
+        spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", settings.bootstrap_servers)
+        .option("subscribe", settings.topic)
+        .option("startingOffsets", settings.starting_offsets)
         .load()
+    )
 
-    parsed_stream = raw_stream \
-        .select(from_json(col("value").cast("string"), event_schema).alias("data")) \
-        .select("data.*")
-
-    # --- Stream A: Bronze (Raw Append) ---
-    query_bronze = parsed_stream \
+    parsed = (
+        raw_stream.select(
+            col("topic").alias("source_topic"),
+            col("partition").cast("int").alias("source_partition"),
+            col("offset").cast("long").alias("source_offset"),
+            col("timestamp").alias("kafka_timestamp"),
+            col("value").cast("string").alias("raw_value"),
+        )
+        .withColumn("event", from_json(col("raw_value"), _content_event_schema()))
         .select(
-            col("event_id"),
-            col("event_timestamp"),
-            col("video_id"),
-            col("user_id"),
-            col("event_type"),
-            to_json(col("payload")).alias("payload"),
-            current_timestamp().alias("ingested_at")
-        ) \
-        .writeStream \
-        .foreachBatch(process_bronze_batch) \
-        .option("checkpointLocation", "s3a://checkpoints/content_bronze_v1") \
-        .trigger(processingTime="10 seconds") \
-        .start()
+            "source_topic",
+            "source_partition",
+            "source_offset",
+            "kafka_timestamp",
+            "raw_value",
+            col("event.event_id").alias("event_id"),
+            to_timestamp(col("event.event_timestamp")).alias("event_timestamp"),
+            col("event.video_id").alias("video_id"),
+            col("event.user_id").alias("user_id"),
+            col("event.event_type").alias("event_type"),
+            col("event.schema_version").alias("schema_version"),
+            col("event.payload_json").alias("payload_json"),
+            col("event.payload").alias("payload"),
+        )
+        .withColumn(
+            "payload_json",
+            when(col("payload_json").isNotNull(), col("payload_json")).otherwise(to_json(col("payload"))),
+        )
+        .withColumn(
+            "watch_time_ms",
+            when(col("payload.watch_time_ms").isNotNull(), col("payload.watch_time_ms")).otherwise(
+                from_json(col("payload_json"), _payload_json_schema()).getField("watch_time_ms")
+            ),
+        )
+        .withColumn("watch_time_ms", when(col("watch_time_ms").isNull(), lit(0)).otherwise(col("watch_time_ms")))
+    )
 
-    # --- Stream B: Gold (Tumbling Window Aggregation) ---
-    # Window: 1 minute, Watermark: 10 seconds
-    query_gold = parsed_stream \
-        .withWatermark("event_timestamp", "10 seconds") \
-        .groupBy(
-            window(col("event_timestamp"), "1 minute"),
-            col("video_id")
-        ) \
+    return parsed
+
+
+
+def filter_valid_events(df: DataFrame) -> DataFrame:
+    return df.filter(
+        col("event_id").isNotNull()
+        & col("event_timestamp").isNotNull()
+        & col("video_id").isNotNull()
+        & col("user_id").isNotNull()
+        & col("event_type").isin(*ALLOWED_EVENT_TYPES)
+        & col("schema_version").isNotNull()
+        & col("payload_json").isNotNull()
+    )
+
+
+
+def process_bronze_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
+    count_rows = df.count()
+    if count_rows == 0:
+        print(f"Batch {batch_id}: no valid bronze rows.")
+        return
+
+    print(f"Batch {batch_id}: writing {count_rows} rows to {table_name}.")
+    (
+        df.sort("event_timestamp", "video_id")
+        .write.format("iceberg")
+        .mode("append")
+        .save(table_name)
+    )
+
+
+
+def process_gold_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
+    count_rows = df.count()
+    if count_rows == 0:
+        print(f"Batch {batch_id}: no valid gold rows.")
+        return
+
+    print(f"Batch {batch_id}: merging {count_rows} rows into {table_name}.")
+    df.createOrReplaceTempView("gold_updates")
+    df.sparkSession.sql(merge_rt_video_stats_sql("gold_updates", table_name))
+
+
+
+def build_gold_aggregates(valid_events: DataFrame) -> DataFrame:
+    deduped = valid_events.withWatermark("event_timestamp", "10 seconds").dropDuplicates(["event_id"])
+
+    return (
+        deduped.groupBy(window(col("event_timestamp"), "1 minute"), col("video_id"))
         .agg(
             count(when(col("event_type") == "impression", 1)).alias("impressions"),
+            count(when(col("event_type") == "play_start", 1)).alias("play_start"),
+            count(when(col("event_type") == "play_finish", 1)).alias("play_finish"),
             count(when(col("event_type") == "like", 1)).alias("likes"),
             count(when(col("event_type") == "share", 1)).alias("shares"),
-            count(when(col("event_type") == "play_start", 1)).alias("play_start"),
-            count(when(col("event_type") == "play_finish", 1)).alias("play_finish")
-        ) \
+            count(when(col("event_type") == "skip", 1)).alias("skips"),
+            spark_sum(col("watch_time_ms").cast("long")).alias("watch_time_sum_ms"),
+        )
         .select(
             col("video_id"),
             col("window.start").alias("window_start"),
-            col("impressions"),
-            col("likes"),
-            col("shares"),
-            col("play_start"),
-            col("play_finish")
-        ) \
-        .writeStream \
-        .outputMode("append") \
-        .foreachBatch(process_gold_batch) \
-        .option("checkpointLocation", "s3a://checkpoints/content_gold_v1") \
-        .trigger(processingTime="1 minute") \
+            col("window.end").alias("window_end"),
+            col("impressions").cast("long"),
+            col("play_start").cast("long"),
+            col("play_finish").cast("long"),
+            col("likes").cast("long"),
+            col("shares").cast("long"),
+            col("skips").cast("long"),
+            col("watch_time_sum_ms").cast("long"),
+            current_timestamp().alias("processed_at"),
+        )
+    )
+
+
+def align_to_table_columns(df: DataFrame, table_columns: Iterable[str]) -> DataFrame:
+    projected = []
+    input_columns = set(df.columns)
+    for column_name in table_columns:
+        if column_name in input_columns:
+            projected.append(col(column_name))
+        elif column_name == "payload" and "payload_json" in input_columns:
+            projected.append(col("payload_json").alias("payload"))
+        else:
+            projected.append(lit(None).alias(column_name))
+    return df.select(*projected)
+
+
+
+def main() -> None:
+    settings = load_job_settings()
+    spark = create_spark_session(settings)
+    spark.sparkContext.setLogLevel("WARN")
+
+    print(
+        "MIC-40 scope note: invalid_events_content sink/checkpoint are deferred; "
+        "malformed events are dropped in this bring-up ticket."
+    )
+
+    init_output_tables(spark, settings)
+    parsed_stream = read_content_events_stream(spark, settings)
+    valid_events = filter_valid_events(parsed_stream)
+
+    bronze_rows = valid_events.select(
+        "event_id",
+        "event_timestamp",
+        "video_id",
+        "user_id",
+        "event_type",
+        "payload_json",
+        "schema_version",
+        "source_topic",
+        "source_partition",
+        "source_offset",
+        current_timestamp().alias("ingested_at"),
+    )
+
+    raw_table_columns = list(_table_columns(spark, settings.raw_table))
+    gold_table_columns = list(_table_columns(spark, settings.gold_table))
+
+    bronze_rows = align_to_table_columns(bronze_rows, raw_table_columns)
+    gold_rows = align_to_table_columns(build_gold_aggregates(valid_events), gold_table_columns)
+
+    query_bronze = (
+        bronze_rows.writeStream.foreachBatch(
+            lambda df, batch_id: process_bronze_batch(df, batch_id, settings.raw_table)
+        )
+        .option("checkpointLocation", settings.checkpoint_raw)
+        .trigger(processingTime=settings.trigger_raw)
         .start()
+    )
+
+    query_gold = (
+        gold_rows.writeStream.foreachBatch(
+            lambda df, batch_id: process_gold_batch(df, batch_id, settings.gold_table)
+        )
+        .outputMode("update")
+        .option("checkpointLocation", settings.checkpoint_gold)
+        .trigger(processingTime=settings.trigger_gold)
+        .start()
+    )
 
     spark.streams.awaitAnyTermination()
+
 
 if __name__ == "__main__":
     main()
