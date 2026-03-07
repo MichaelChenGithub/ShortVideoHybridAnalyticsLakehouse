@@ -56,7 +56,7 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invali
   --table lakehouse.bronze.invalid_events_cdc_videos \
   --lookback-minutes "$LOOKBACK_MINUTES" \
   --min-row-count "$MIN_INVALID_ROWS" \
-  --expect-error-codes CDC_PARSE_ERROR,CDC_UNSUPPORTED_OP,CDC_MISSING_SCHEMA_VERSION,CDC_MISSING_AFTER_VIDEO_ID
+  --expect-error-codes CDC_MISSING_OP,CDC_UNSUPPORTED_OP,CDC_MISSING_SCHEMA_VERSION,CDC_MISSING_AFTER_VIDEO_ID
 
 printf '[MIC-43] Running CDC health check (freshness + invalid-rate)...\n'
 health_cmd=(

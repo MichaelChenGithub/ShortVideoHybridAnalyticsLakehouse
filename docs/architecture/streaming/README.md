@@ -104,7 +104,7 @@ Wait at least 75 seconds after fixture emission so the 1-minute trigger can comm
 
 ```bash
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_upsert.py --video-id mic43_vid_001 --max-freshness-minutes 10 --expect-status copyright_strike
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invalid_cdc_quarantine.py --table lakehouse.bronze.invalid_events_cdc_videos --lookback-minutes 30 --min-row-count 4 --expect-error-codes CDC_PARSE_ERROR,CDC_UNSUPPORTED_OP,CDC_MISSING_SCHEMA_VERSION,CDC_MISSING_AFTER_VIDEO_ID
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invalid_cdc_quarantine.py --table lakehouse.bronze.invalid_events_cdc_videos --lookback-minutes 30 --min-row-count 4 --expect-error-codes CDC_MISSING_OP,CDC_UNSUPPORTED_OP,CDC_MISSING_SCHEMA_VERSION,CDC_MISSING_AFTER_VIDEO_ID
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/check_rt_video_cdc_health.py --dim-table lakehouse.dims.dim_videos --invalid-table lakehouse.bronze.invalid_events_cdc_videos --max-freshness-minutes 10 --lookback-minutes 30
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1 | head -n 40"
