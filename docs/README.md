@@ -2,7 +2,7 @@
 
 This `docs/` tree is the new documentation layout for production-style specs.
 
-Legacy docs remain in `design_doc/` and are intentionally untouched during this phase.
+Legacy docs remain in `legacy_docs/` and are intentionally untouched during this phase.
 
 ## Goals
 

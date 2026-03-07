@@ -1,3 +1,10 @@
+> [!WARNING]
+> LEGACY / NON-AUTHORITATIVE
+> 
+> This document is retained for historical context only.
+> The authoritative project rules are under `docs/`.
+> If this file conflicts with `docs/`, follow `docs/`.
+
 
 ---
 

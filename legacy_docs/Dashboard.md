@@ -1,3 +1,10 @@
+> [!WARNING]
+> LEGACY / NON-AUTHORITATIVE
+> 
+> This document is retained for historical context only.
+> The authoritative project rules are under `docs/`.
+> If this file conflicts with `docs/`, follow `docs/`.
+
 
 ---
 
@@ -11,7 +18,7 @@ This document defines the visualization layer served by **Trino**. I implement a
 2. **Grafana:** Technical dashboard for Data Engineering to monitor pipeline health.
 
 Realtime metric and decision-contract details are maintained in:
-`design_doc/RealtimeMetrics_Contract.md`
+`legacy_docs/RealtimeMetrics_Contract.md`
 
 ---
 

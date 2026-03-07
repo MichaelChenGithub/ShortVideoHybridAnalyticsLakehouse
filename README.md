@@ -62,7 +62,7 @@ Guardrails:
 
 ## High-Level Architecture
 
-![Data Flow](design_doc/dataflow_diagram.png)
+![Data Flow](docs/dataflow_diagram.png)
 
 ```text
 content_events + cdc.content.videos
