@@ -1,25 +1,20 @@
-# Contract: Realtime Action Queue (M1)
+# Contract: Realtime Action Queue (Current-State, M1)
 
 ## 1. Purpose
 
-`lakehouse.gold.rt_action_queue` is the execution interface for realtime decisions.
+`lakehouse.gold.rt_action_queue` is the operational queue for realtime business actions.
 
-It is consumed by:
+This table is designed as a current-state queue:
 
-1. Ops workflow and execution UI
-2. decision audit and replay analysis
+1. up-to-date and directly consumable by ops/automation
+2. optimized for low-latency action handling
 
-It is not the only source for KPI trend panels; trend metrics should still use realtime fact tables/views.
+## 2. Data Model Policy
 
-## 2. Write Policy
-
-1. Append-only
-2. Actionable decisions only (`BOOST`, `REVIEW`, `RESCUE`)
+1. current-state table (upsert/update in place)
+2. actionable decisions only (`BOOST`, `REVIEW`, `RESCUE`)
 3. `NO_ACTION` is not persisted
-
-Cooldown:
-
-1. at most one emitted action per `video_id` within 60 minutes
+4. one row represents the latest state of one action item
 
 ## 3. Required Schema
 
@@ -27,36 +22,49 @@ Cooldown:
 2. `video_id` (STRING)
 3. `decision_type` (STRING: `BOOST`/`REVIEW`/`RESCUE`)
 4. `priority` (INT)
-5. `decided_at` (TIMESTAMP)
-6. `window_start` (TIMESTAMP)
-7. `window_end` (TIMESTAMP)
-8. `expires_at` (TIMESTAMP)
-9. `rule_version` (STRING)
-10. `velocity_30m` (DOUBLE)
-11. `completion_rate_30m` (DOUBLE)
-12. `skip_rate_30m` (DOUBLE)
-13. `impressions_30m` (BIGINT)
-14. `reason_codes` (ARRAY<'STRING'>)
-15. `created_at` (TIMESTAMP)
+5. `state` (STRING: `PENDING`/`ACKED`/`DONE`/`EXPIRED`/`HOLD`)
+6. `decided_at` (TIMESTAMP)
+7. `window_start` (TIMESTAMP)
+8. `window_end` (TIMESTAMP)
+9. `expires_at` (TIMESTAMP)
+10. `rule_version` (STRING)
+11. `velocity_30m` (DOUBLE)
+12. `completion_rate_30m` (DOUBLE)
+13. `skip_rate_30m` (DOUBLE)
+14. `impressions_30m` (BIGINT)
+15. `reason_codes` (ARRAY<'STRING'>)
+16. `created_at` (TIMESTAMP)
+17. `updated_at` (TIMESTAMP)
+18. `state_updated_at` (TIMESTAMP)
 
-## 4. Expiration Policy
+## 4. Cooldown and Dedupe Policy
+
+Cooldown:
+
+1. producer-side: at most one emitted action per `video_id` within 60 minutes
+2. queue-side guard: active queue also enforces at most one active action per `video_id` within 60 minutes
+
+Dedupe key:
+
+1. `video_id + window_start`
+
+Conflict handling:
+
+1. execution urgency precedence: `RESCUE > REVIEW > BOOST`
+2. tie-breaker: latest `created_at`
+
+## 5. Expiration Policy
 
 1. `BOOST`: `decided_at + 15m`
 2. `REVIEW`: `decided_at + 30m`
 3. `RESCUE`: `decided_at + 30m`
 
-## 5. Standard Reason Codes
-
-1. `HIGH_VELOCITY_P90`
-2. `GATE_PASS`
-3. `LOW_COMPLETION`
-4. `HIGH_SKIP`
-5. `NEW_UPLOAD_LT_60M`
-6. `UNDER_EXPOSED_P40`
-
 ## 6. Validations
 
-1. `action_id`, `video_id`, `decision_type`, `decided_at`, `expires_at`, `rule_version` are non-null.
+1. `action_id`, `video_id`, `decision_type`, `state`, `decided_at`, `expires_at`, `rule_version` are non-null.
 2. `decision_type` only in `BOOST`, `REVIEW`, `RESCUE`.
-3. `expires_at > decided_at`.
-4. same input state must produce deterministic output rows.
+3. `state` only in `PENDING`, `ACKED`, `DONE`, `EXPIRED`, `HOLD`.
+4. `expires_at > decided_at`.
+5. active rows must satisfy `state in ('PENDING', 'ACKED') and expires_at > now`.
+6. active queue guard enforces one active action per `video_id` in 60-minute horizon.
+7. state updates must be deterministic and race-safe (compare-and-set on expected prior state).

@@ -23,9 +23,10 @@ Recovery:
 
 ## 3. Late Data Policy
 
-1. action queue is immutable append-only
-2. late events do not rewrite emitted actions
-3. late-event impact is captured via reconciliation and audit logs
+1. action queue is a current-state table with upsert/update semantics
+2. late events may update open actions when recalculation changes decision relevance
+3. terminal actions (`DONE`, `EXPIRED`, `HOLD`) are not auto-reopened by late data
+4. late-event impact is captured via reconciliation metrics and operational counters
 
 ## 4. RT vs T+1 Reconciliation Scope
 
@@ -73,4 +74,3 @@ p95(abs(rt_rate_1m - batch_rate_1m))
 
 1. `WARN` freezes new `rule_version` rollout.
 2. `CRIT` freezes rollout and enters conservative policy mode.
-
