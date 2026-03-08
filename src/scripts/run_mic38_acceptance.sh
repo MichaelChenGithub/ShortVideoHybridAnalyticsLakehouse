@@ -97,7 +97,10 @@ stop_spark_job_if_running() {
 start_spark_job() {
   local script_path="$1"
   local log_file="$2"
-  docker exec lakehouse-spark bash -lc "MIC38_RUN_ID='${MIC38_RUN_ID}' nohup /opt/spark/bin/spark-submit '${script_path}' > '${log_file}' 2>&1 &"
+  local script_name
+  script_name="$(basename "${script_path}" .py)"
+  local ivy_cache="/tmp/ivy/${MIC38_RUN_ID}/${script_name}"
+  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && MIC38_RUN_ID='${MIC38_RUN_ID}' nohup /opt/spark/bin/spark-submit --conf spark.jars.ivy='${ivy_cache}' '${script_path}' > '${log_file}' 2>&1 &"
 }
 
 wait_for_spark_job() {
