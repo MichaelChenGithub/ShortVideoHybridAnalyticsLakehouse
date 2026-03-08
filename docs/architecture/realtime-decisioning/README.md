@@ -32,6 +32,7 @@ Upstream streaming execution spec:
 1. `rule_version = rt_rules_v1`
 2. Rolling window = 30 minutes
 3. Core grain = `video_id + window_start` (1-minute event-time bucket)
+4. Action queue model = current-state table (upsert/update), not append-only history
 
 ## Spec Files
 
@@ -39,3 +40,4 @@ Upstream streaming execution spec:
 2. `action-queue-contract.md`
 3. `reconciliation-and-slo.md`
 4. `acceptance-criteria.md`
+5. `realtime-action-queue-decision-behavior-spec.md`
