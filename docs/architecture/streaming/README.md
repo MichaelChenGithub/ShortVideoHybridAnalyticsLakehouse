@@ -6,6 +6,66 @@ This folder contains Spark Structured Streaming execution contracts.
 
 1. `spark-realtime-jobs-contract-m1.md`
 
+## MIC-38 Sprint 1 Sign-off Commands
+
+Scope here is MIC-38 Sprint 1 sign-off only (MIC-33 Sprint 1 scope), using `/docs` contracts as source of truth.
+
+One-command acceptance:
+
+```bash
+bash src/scripts/run_mic38_acceptance.sh
+```
+
+Hard-fail behavior:
+
+1. Any failed gate exits non-zero.
+2. Unified verifier output is machine-decidable PASS/FAIL.
+
+SLA-aligned defaults (from `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`):
+
+1. freshness breach threshold: `> 3m`
+2. latency target: `P95 < 3m` (MIC-38 uses proxy p95 gate in unified verifier)
+
+Key threshold overrides:
+
+```bash
+MAX_FRESHNESS_MINUTES=3 \
+LATENCY_THRESHOLD_MINUTES=3 \
+MAX_CONTENT_INVALID_RATE=0.20 \
+MAX_CDC_INVALID_RATE=0.20 \
+bash src/scripts/run_mic38_acceptance.sh
+```
+
+### MIC-38 Artifacts
+
+Default output path:
+
+1. `artifacts/mic38_signoff/<MIC38_RUN_ID>/`
+
+Expected files:
+
+1. `content_metrics.log`
+2. `content_contract.log`
+3. `cdc_upsert.log`
+4. `cdc_invalid.log`
+5. `cdc_health.log`
+6. `runtime_start.json`
+7. `runtime_end.json`
+8. `checkpoint_start.json`
+9. `checkpoint_end.json`
+10. `signoff_report.json`
+11. `signoff_summary.md`
+
+### MIC-38 Result Interpretation
+
+`signoff_report.json` contains:
+
+1. per-gate PASS/FAIL
+2. key metrics (freshness ages, invalid rates, checkpoint growth, latency proxy p95)
+3. `failure_reasons`, `blockers`, and `carry_over_items`
+
+`signoff_summary.md` provides reviewer-friendly table and final status.
+
 ## MIC-37 Bring-up Commands
 
 Scope here is limited to MIC-37: stable `rt_video_cdc_upsert` for `cdc.content.videos`, checkpoint path validation, and `dim_videos` insert/update health checks.
