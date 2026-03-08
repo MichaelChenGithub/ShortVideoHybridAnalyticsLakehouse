@@ -1,273 +1,48 @@
 # Streaming Contracts
 
-This folder contains Spark Structured Streaming execution contracts.
+This folder contains Spark Structured Streaming execution contracts and acceptance runbook entrypoints.
 
 ## Current Specs
 
 1. `spark-realtime-jobs-contract-m1.md`
 
-## MIC-38 Sprint 1 Sign-off Commands
+## Acceptance Runbook Index (Sprint 1)
 
-Scope here is MIC-38 Sprint 1 sign-off only (MIC-33 Sprint 1 scope), using `/docs` contracts as source of truth.
+Use these as the canonical entrypoints. Detailed command ownership is split into per-MIC references under `reference/`.
 
-One-command acceptance:
+| MIC | Purpose | One-command entrypoint | Details |
+| --- | --- | --- | --- |
+| MIC-38 | Sprint 1 sign-off (MIC-33 scope) | `bash src/scripts/run_mic38_acceptance.sh` | [`reference/mic-38-signoff-acceptance.md`](reference/mic-38-signoff-acceptance.md) |
+| MIC-38 (Observe) | Sprint 1 integrated dataflow for manual observation/Trino queries (no verifier gates) | `bash src/scripts/run_mic38_observe.sh` | [`reference/mic-38-signoff-acceptance.md`](reference/mic-38-signoff-acceptance.md) |
+| MIC-40 | Content aggregator bring-up | `bash src/scripts/run_mic40_acceptance.sh` | [`reference/mic-40-content-aggregator-acceptance.md`](reference/mic-40-content-aggregator-acceptance.md) |
+| MIC-39 | Content contract enforcement | `bash src/scripts/run_mic39_acceptance.sh` | [`reference/mic-39-content-contract-acceptance.md`](reference/mic-39-content-contract-acceptance.md) |
+| MIC-43 | CDC contract enforcement + quarantine | `bash src/scripts/run_mic43_acceptance.sh` | [`reference/mic-43-cdc-contract-acceptance.md`](reference/mic-43-cdc-contract-acceptance.md) |
+| MIC-37 | CDC upsert bring-up and deterministic verification | `bash src/scripts/run_mic37_acceptance.sh` | [`reference/mic-37-cdc-upsert-acceptance.md`](reference/mic-37-cdc-upsert-acceptance.md) |
 
-```bash
-bash src/scripts/run_mic38_acceptance.sh
-```
+## Shared SLA and Scope Anchors
 
-Hard-fail behavior:
+1. Keep MIC-38 and MIC-33 Sprint 1 scope framing unchanged.
+2. SLA thresholds are anchored by `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`.
+3. Contract semantics remain in streaming contract specs; run scripts are operational source of truth.
 
-1. Any failed gate exits non-zero.
-2. Unified verifier output is machine-decidable PASS/FAIL.
+## Manual Observation Mode (MIC-38 Scope)
 
-SLA-aligned defaults (from `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`):
-
-1. freshness breach threshold: `> 3m`
-2. latency target: `P95 < 3m` (MIC-38 uses proxy p95 gate in unified verifier)
-
-Key threshold overrides:
-
-```bash
-MAX_FRESHNESS_MINUTES=3 \
-LATENCY_THRESHOLD_MINUTES=3 \
-MAX_CONTENT_INVALID_RATE=0.20 \
-MAX_CDC_INVALID_RATE=0.20 \
-bash src/scripts/run_mic38_acceptance.sh
-```
-
-### MIC-38 Artifacts
-
-Default output path:
-
-1. `artifacts/mic38_signoff/<MIC38_RUN_ID>/`
-
-Expected files:
-
-1. `content_metrics.log`
-2. `content_contract.log`
-3. `cdc_upsert.log`
-4. `cdc_invalid.log`
-5. `cdc_health.log`
-6. `runtime_start.json`
-7. `runtime_end.json`
-8. `checkpoint_start.json`
-9. `checkpoint_end.json`
-10. `signoff_report.json`
-11. `signoff_summary.md`
-
-### MIC-38 Result Interpretation
-
-`signoff_report.json` contains:
-
-1. per-gate PASS/FAIL
-2. key metrics (freshness ages, invalid rates, checkpoint growth, latency proxy p95)
-3. `failure_reasons`, `blockers`, and `carry_over_items`
-
-`signoff_summary.md` provides reviewer-friendly table and final status.
-
-## MIC-37 Bring-up Commands
-
-Scope here is limited to MIC-37: stable `rt_video_cdc_upsert` for `cdc.content.videos`, checkpoint path validation, and `dim_videos` insert/update health checks.
-
-Runtime defaults locked for MIC-37:
-
-1. `startingOffsets=latest`
-2. trigger interval `1 minute`
-3. checkpoint `s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1`
-
-### 1. Start local services
+Use this when you want integrated Sprint 1 data flow running for manual observation or Trino queries without PASS/FAIL verifier gates:
 
 ```bash
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+bash src/scripts/run_mic38_observe.sh
 ```
 
-### 2. Ensure CDC topic exists
+Optional (clear checkpoints before job restart):
 
 ```bash
-docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic cdc.content.videos --partitions 3 --replication-factor 1
+bash src/scripts/run_mic38_observe.sh --reset-checkpoints
 ```
 
-### 3. Start MIC-37 Spark CDC upsert job
+## Maintenance Rules
 
-```bash
-docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_video_cdc_upsert.py"
-```
-
-Wait about 30 seconds after startup before producing validation fixtures.
-
-Fail-fast schema note:
-
-1. If `dim_videos` is missing required columns, startup fails and prints exact manual `ALTER TABLE` commands to run before restart.
-
-### 4. Emit bounded-run traffic and deterministic CDC fixture
-
-```bash
-python3 src/generator/m1_bounded_run.py --config docs/architecture/generator/examples/m1_run_config.example.json --sink kafka --bootstrap-servers localhost:9092
-BASE_TS_MS=$(( $(date +%s) * 1000 ))
-EXPECTED_SOURCE_TS_MS=$((BASE_TS_MS + 2000))
-python3 src/scripts/emit_cdc_videos_fixture.py --bootstrap-servers localhost:9092 --video-id mic37_vid_001 --scenario full --base-ts-ms "$BASE_TS_MS"
-```
-
-Because trigger cadence is `1 minute`, wait at least 75 seconds after fixture emission before running verifier.
-
-### 5. Verify upsert health and deterministic final state
-
-`full` scenario expected final state:
-
-1. `status=copyright_strike`
-2. `source_ts_ms=$EXPECTED_SOURCE_TS_MS`
-
-```bash
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_upsert.py --video-id mic37_vid_001 --max-freshness-minutes 10 --expect-status copyright_strike --expect-source-ts-ms "$EXPECTED_SOURCE_TS_MS"
-```
-
-### 6. Validate checkpoint path
-
-```bash
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
-```
-
-## MIC-43 Contract Enforcement Commands
-
-Scope here is MIC-43: CDC contract validation and quarantine routing for `cdc.content.videos` to `lakehouse.bronze.invalid_events_cdc_videos`, plus lightweight CDC health checks (freshness + invalid-rate).
-
-Scope guard:
-
-1. MIC-37 remains bring-up scope for stable `dim_videos` upsert.
-2. MIC-43 adds contract enforcement/quarantine without changing valid CDC merge semantics.
-
-### 1. Run one-command MIC-43 acceptance flow
-
-```bash
-bash src/scripts/run_mic43_acceptance.sh
-```
-
-Optional threshold gate for invalid-rate:
-
-```bash
-MAX_INVALID_RATE=1.0 bash src/scripts/run_mic43_acceptance.sh
-```
-
-### 2. Equivalent manual flow
-
-```bash
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
-docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic cdc.content.videos --partitions 3 --replication-factor 1
-docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_video_cdc_upsert.py"
-python3 src/scripts/emit_mic43_cdc_mixed_fixture.py --bootstrap-servers localhost:9092 --video-id mic43_vid_001
-```
-
-Wait at least 75 seconds after fixture emission so the 1-minute trigger can commit both sinks.
-
-### 3. Verify valid CDC path + quarantine path + health checks
-
-```bash
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_upsert.py --video-id mic43_vid_001 --max-freshness-minutes 10 --expect-status copyright_strike
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invalid_cdc_quarantine.py --table lakehouse.bronze.invalid_events_cdc_videos --lookback-minutes 30 --min-row-count 4 --expect-error-codes CDC_MISSING_OP,CDC_UNSUPPORTED_OP,CDC_MISSING_SCHEMA_VERSION,CDC_MISSING_AFTER_VIDEO_ID
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/check_rt_video_cdc_health.py --dim-table lakehouse.dims.dim_videos --invalid-table lakehouse.bronze.invalid_events_cdc_videos --max-freshness-minutes 10 --lookback-minutes 30
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1 | head -n 40"
-```
-
-Invalid-rate definition for local checks:
-
-1. `invalid_rate_per_minute = invalid_count_lookback / lookback_minutes`
-2. `--max-invalid-rate` is optional. Without it, script reports rate but does not fail on rate alone.
-
-## MIC-40 Bring-up Commands
-
-Scope here is limited to MIC-40: bring up `rt_content_events_aggregator` for `content_events` with writes to `bronze.raw_events` and `gold.rt_video_stats_1min` plus checkpoint validation for both sinks.
-
-Runtime defaults locked for MIC-40:
-
-1. `startingOffsets=latest`
-2. trigger intervals: `raw_events=10 seconds`, `rt_video_stats_1min=1 minute`
-3. checkpoints:
-   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
-   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
-
-Scope note:
-
-1. Historical MIC-40 note: `invalid_events_content` sink/checkpoint were deferred in that ticket and are implemented by MIC-39.
-2. For MIC-39 content contract enforcement and quarantine validation, use the section below.
-
-### 1. Run one-command MIC-40 acceptance flow
-
-```bash
-bash src/scripts/run_mic40_acceptance.sh
-```
-
-### 2. Equivalent manual flow
-
-```bash
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
-docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic content_events --partitions 6 --replication-factor 1
-docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_content_events_aggregator.py"
-python3 src/generator/m1_bounded_run.py --config docs/architecture/generator/examples/m1_run_config.example.json --sink kafka --bootstrap-servers localhost:9092
-```
-
-Wait at least 75 seconds after bounded-run emission so the 1-minute Gold trigger can commit output.
-
-### 3. Verify Bronze/Gold health and checkpoint evidence
-
-```bash
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_aggregator.py --min-raw-rows 1 --min-gold-rows 1 --max-freshness-minutes 10
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 | head -n 40"
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 | head -n 40"
-```
-
-## MIC-39 Contract Enforcement Commands
-
-Scope here is limited to MIC-39: enforce `content_events` schema contract, route invalid records to `lakehouse.bronze.invalid_events_content`, and keep valid `bronze.raw_events` + `gold.rt_video_stats_1min` flow healthy.
-
-Runtime defaults locked for MIC-39:
-
-1. `startingOffsets=latest`
-2. trigger intervals: `raw_events=10 seconds`, `rt_video_stats_1min=1 minute`, `invalid_events_content=10 seconds`
-3. checkpoints:
-   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
-   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
-   - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1`
-4. acceptance gates:
-   - `min_invalid_rows=1`
-   - `max_invalid_rate=0.20`
-   - `max_freshness_minutes=10`
-
-Out-of-scope reminder:
-
-1. CDC contract enforcement for `cdc.content.videos` is tracked separately (MIC-43).
-
-### 1. Run one-command MIC-39 acceptance flow
-
-```bash
-bash src/scripts/run_mic39_acceptance.sh
-```
-
-### 2. Equivalent manual verification command
-
-Capture a run boundary timestamp before emission:
-
-```bash
-MIN_INGESTED_AT_MS=$(( $(date +%s) * 1000 ))
-```
-
-Then run verifier:
-
-```bash
-docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_contract_enforcement.py \
-  --min-raw-rows 1 \
-  --min-gold-rows 1 \
-  --min-invalid-rows 1 \
-  --max-invalid-rate 0.20 \
-  --max-freshness-minutes 10 \
-  --min-ingested-at-ms "$MIN_INGESTED_AT_MS"
-```
-
-### 3. Validate checkpoint evidence for all three sinks
-
-```bash
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 | head -n 40"
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 | head -n 40"
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 | head -n 40"
-```
+1. Add or update acceptance commands in script files under `src/scripts/` first.
+2. In `reference/`, document command usage, env vars/defaults, and output interpretation per MIC.
+3. Keep this `README.md` index-style only (entrypoints, links, and scope anchors); do not add large multi-step shell blocks.
+4. If a MIC has no wrapper script, keep only minimal manual-run guidance in its reference doc and avoid duplicating script internals.
+5. When verifier gates change, update the corresponding MIC reference doc in the same PR.
