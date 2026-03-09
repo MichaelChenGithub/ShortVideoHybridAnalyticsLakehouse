@@ -26,9 +26,11 @@ Milestone 1 foundational docs for product, model, messaging, and realtime execut
    - Kafka topic, schema, and retention contracts.
 5. `architecture/streaming/`
    - Spark Structured Streaming job contracts.
-6. `architecture/generator/`
+6. `architecture/serving/`
+   - Trino semantic layer and BI serving contracts.
+7. `architecture/generator/`
    - Mock event generator run contract and scenario matrix.
-7. `product/`
+8. `product/`
    - Business-layer PRD and KPI definitions that drive technical contracts.
 
 ## Ownership
@@ -48,5 +50,7 @@ Milestone 1 foundational docs for product, model, messaging, and realtime execut
    - `docs/architecture/messaging/kafka-topic-schema-retention-contract-m1.md`
 5. Spark realtime execution contract:
    - `docs/architecture/streaming/spark-realtime-jobs-contract-m1.md`
-6. Mock event generator contract and scenario matrix:
+6. Trino semantic layer and serving contract (M1 Sprint 2 prerequisite):
+   - `docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md`
+7. Mock event generator contract and scenario matrix:
    - `docs/architecture/generator/mock-event-generator-contract-scenario-matrix-m1.md`
