@@ -65,4 +65,15 @@ Under-exposed:
 1. Quantile baselines are refreshed daily after T+1 completion.
 2. No intraday threshold drift in M1.
 3. Baseline set is tied to `rule_version`.
-
+4. Baselines are published to `lakehouse.dims.rt_rule_quantile_baselines`.
+5. `p90` for candidate evaluation uses global `velocity_30m` distribution.
+6. `p40` for under-exposure uses `category + region` cohort on `impressions_30m`.
+7. Cohort fallback rule:
+   - use cohort `p40` when `sample_size >= 200`
+   - fallback to global `p40` when `sample_size < 200`
+8. Global baseline publish guard:
+   - publish only when global `sample_size >= 1000`
+9. Baseline rows are immutable after publish for a given `rule_version` and `effective_from`.
+10. Any threshold logic change requires a new `rule_version`.
+11. Baseline registry physical schema is defined in:
+   - `docs/architecture/data-model/m1-data-model-v1.md` (`5.9 lakehouse.dims.rt_rule_quantile_baselines`)

@@ -1,7 +1,6 @@
 # Design Doc: Realtime Metrics-to-Action Decisioning and Current-State Queue
 
 Date: `2026-03-08`  
-Issue lineage: `MIC-21`
 
 ## 1. Purpose
 
@@ -29,10 +28,10 @@ Future scope (not required now):
 
 ## 3. Source Contracts
 
-1. [`metric-contract.md`](/Users/michael/Projects/Real-timeTransactionalDataLakehouse/docs/architecture/realtime-decisioning/metric-contract.md)
-2. [`action-queue-contract.md`](/Users/michael/Projects/Real-timeTransactionalDataLakehouse/docs/architecture/realtime-decisioning/action-queue-contract.md)
-3. [`reconciliation-and-slo.md`](/Users/michael/Projects/Real-timeTransactionalDataLakehouse/docs/architecture/realtime-decisioning/reconciliation-and-slo.md)
-4. [`acceptance-criteria.md`](/Users/michael/Projects/Real-timeTransactionalDataLakehouse/docs/architecture/realtime-decisioning/acceptance-criteria.md)
+1. [`metric-contract.md`](metric-contract.md)
+2. [`action-queue-contract.md`](action-queue-contract.md)
+3. [`reconciliation-and-slo.md`](reconciliation-and-slo.md)
+4. [`acceptance-criteria.md`](acceptance-criteria.md)
 
 ## 4. Current-State Queue Model
 

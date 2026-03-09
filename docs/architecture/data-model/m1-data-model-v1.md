@@ -20,10 +20,11 @@ In scope tables:
 2. `lakehouse.bronze.invalid_events_content`
 3. `lakehouse.bronze.invalid_events_cdc_videos`
 4. `lakehouse.dims.dim_videos` (current snapshot, Type-1)
-5. `lakehouse.gold.rt_video_stats_1min`
-6. `lakehouse.gold.rt_action_queue`
-7. `lakehouse.qa.run_manifest`
-8. `lakehouse.qa.expected_actions`
+5. `lakehouse.dims.rt_rule_quantile_baselines`
+6. `lakehouse.gold.rt_video_stats_1min`
+7. `lakehouse.gold.rt_action_queue`
+8. `lakehouse.qa.run_manifest`
+9. `lakehouse.qa.expected_actions`
 
 Out of scope (M2+):
 
@@ -292,6 +293,41 @@ Data contract notes:
 
 1. validation-only table, not consumer-facing serving table
 2. partition recommendation: `days(window_start)`, `bucket(16, video_id)`
+
+---
+
+### 5.9 `lakehouse.dims.rt_rule_quantile_baselines`
+
+Role:
+
+1. published threshold registry for decision quantile baselines
+2. traceable binding between quantile thresholds and `rule_version`
+
+Grain:
+
+1. `rule_version + effective_from + metric_name + percentile + cohort_category + cohort_region`
+
+Required fields (minimum):
+
+1. `rule_version` STRING
+2. `effective_from` DATE
+3. `effective_to` DATE
+4. `metric_name` STRING (`velocity_30m` or `impressions_30m`)
+5. `percentile` INT (`90` or `40`)
+6. `cohort_category` STRING (nullable for global baseline)
+7. `cohort_region` STRING (nullable for global baseline)
+8. `threshold_value` DOUBLE
+9. `sample_size` BIGINT
+10. `is_fallback` BOOLEAN
+11. `computed_at` TIMESTAMP
+
+Data contract notes:
+
+1. refresh cadence: once daily after T+1 completion
+2. no intraday drift for published thresholds in M1
+3. rows are immutable after publish for a given `rule_version + effective_from`
+4. any threshold logic change must publish a new `rule_version`
+5. cohort fallback behavior and publish guards are governed by `docs/architecture/realtime-decisioning/metric-contract.md`
 
 ---
 

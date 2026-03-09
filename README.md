@@ -75,7 +75,7 @@ content_events + cdc.content.videos
 
 ## Decision Contract and Governance
 
-1. Action queue is append-only and stores actionable outcomes only (`BOOST`, `REVIEW`, `RESCUE`).
+1. Action queue is a current-state table (upsert/update) and stores actionable outcomes only (`BOOST`, `REVIEW`, `RESCUE`).
 2. Priority order is fixed: `BOOST > REVIEW > RESCUE > NO_ACTION`.
 3. Cooldown is enforced: max 1 action per `video_id` per 60 minutes.
 4. Expiration is explicit:
@@ -91,7 +91,7 @@ content_events + cdc.content.videos
    - freshness `P95 > 3m` for 5 minutes: keep `REVIEW` only
    - freshness `> 10m` or ingestion outage: pause all actions
 3. Recovery requires 15 consecutive healthy minutes.
-4. Late data does not rewrite historical actions; impact is handled via reconciliation and audit logs.
+4. Late data may update open actions (`PENDING`, `ACKED`), but terminal actions are not auto-reopened.
 5. Rule rollout is gated by reconciliation health (`WARN`/`CRIT` freeze behavior).
 
 ## Scope Boundaries (M1)
@@ -117,7 +117,7 @@ M1 is considered successful when:
 2. Decision logic matches metric and policy contracts.
 3. Data contract constraints hold (key uniqueness, non-null required fields, valid decision types, cooldown, valid reason codes).
 4. SLA and degraded-mode behavior meet contract.
-5. Actions are deterministic and immutable, with auditable `rule_version`.
+5. Actions are deterministic and auditable, with explicit `rule_version` and controlled state transitions.
 
 ## Documentation Map (Source of Truth)
 
@@ -131,7 +131,8 @@ M1 is considered successful when:
 8. [Streaming Execution Contract](docs/architecture/streaming/spark-realtime-jobs-contract-m1.md)
 9. [Kafka Contract](docs/architecture/messaging/kafka-topic-schema-retention-contract-m1.md)
 10. [Data Model Contract](docs/architecture/data-model/m1-data-model-v1.md)
-11. [Generator Contract and Scenario Matrix](docs/architecture/generator/mock-event-generator-contract-scenario-matrix-m1.md)
+11. [Trino Semantic Layer and Serving Contract (M1 Sprint 2 Prerequisite)](docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md)
+12. [Generator Contract and Scenario Matrix](docs/architecture/generator/mock-event-generator-contract-scenario-matrix-m1.md)
 
 Note:
 
