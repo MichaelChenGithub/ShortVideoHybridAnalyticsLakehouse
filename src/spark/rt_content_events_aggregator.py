@@ -312,8 +312,8 @@ def process_invalid_batch(df: DataFrame, batch_id: int, table_name: str) -> None
     )
 
 
-def build_gold_aggregates(valid_events: DataFrame) -> DataFrame:
-    deduped = valid_events.withWatermark("event_timestamp", "10 seconds").dropDuplicates(["event_id"])
+def build_gold_aggregates(valid_events: DataFrame, watermark_delay: str) -> DataFrame:
+    deduped = valid_events.withWatermark("event_timestamp", watermark_delay).dropDuplicates(["event_id"])
 
     return (
         deduped.groupBy(window(col("event_timestamp"), "1 minute"), col("video_id"))
@@ -405,7 +405,10 @@ def main() -> None:
     invalid_table_columns = list(_table_columns(spark, settings.invalid_table))
 
     bronze_rows = align_to_table_columns(bronze_rows, raw_table_columns)
-    gold_rows = align_to_table_columns(build_gold_aggregates(valid_events), gold_table_columns)
+    gold_rows = align_to_table_columns(
+        build_gold_aggregates(valid_events, settings.watermark_gold),
+        gold_table_columns,
+    )
     invalid_rows = align_to_table_columns(invalid_rows, invalid_table_columns)
 
     query_bronze = (

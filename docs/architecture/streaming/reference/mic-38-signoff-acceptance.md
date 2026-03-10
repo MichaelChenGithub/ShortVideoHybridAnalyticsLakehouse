@@ -17,6 +17,12 @@ Out of scope:
 bash src/scripts/run_mic38_acceptance.sh
 ```
 
+Dual-scenario entrypoint (runs baseline then lag-prone):
+
+```bash
+bash src/scripts/run_mic38_acceptance_dual.sh
+```
+
 Manual observation entrypoint (same integrated MIC-38 scope, no verifier gates):
 
 ```bash
@@ -36,7 +42,12 @@ Defaults are SLA-aligned with `docs/architecture/realtime-decisioning/reconcilia
 2. `LATENCY_THRESHOLD_MINUTES=3`
 3. `MAX_CONTENT_INVALID_RATE=0.20`
 4. `MAX_CDC_INVALID_RATE=0.20`
-5. expected content aggregation watermark policy: baseline `2 minutes`, lag-prone runs `5 minutes`
+5. `MIC38_WATERMARK_SCENARIO=baseline` for single-run flow
+6. `BASELINE_MIN_WATERMARK_DROP_RATIO=0.005`
+7. `LAG_PRONE_MAX_WATERMARK_DROP_RATIO=0.005`
+8. content watermark by scenario:
+   - `baseline` -> `RT_CONTENT_EVENTS_WATERMARK=2 minutes`
+   - `lag_prone` -> `RT_CONTENT_EVENTS_WATERMARK=5 minutes`
 
 Manual observation script defaults (`run_mic38_observe.sh`):
 1. `MIC38_RUN_ID=mic38_observe_<utc timestamp>`
@@ -55,7 +66,15 @@ MAX_FRESHNESS_MINUTES=3 \
 LATENCY_THRESHOLD_MINUTES=3 \
 MAX_CONTENT_INVALID_RATE=0.20 \
 MAX_CDC_INVALID_RATE=0.20 \
+MIC38_WATERMARK_SCENARIO=baseline \
 bash src/scripts/run_mic38_acceptance.sh
+```
+
+Dual-run example:
+
+```bash
+MIC38_RUN_ID=mic38_signoff_20260310 \
+bash src/scripts/run_mic38_acceptance_dual.sh
 ```
 
 ## Artifacts and Output Interpretation
@@ -80,6 +99,8 @@ Interpretation:
 1. `signoff_report.json` is machine-decidable and contains per-gate `PASS`/`FAIL`, metrics, blockers, and carry-over items.
 2. `signoff_summary.md` is reviewer-focused summary output.
 3. Script exits non-zero on any failed gate.
+4. Single-run flow appends scenario suffix to `MIC38_RUN_ID` (`_baseline` or `_lag_prone`).
+5. Dual-run flow emits two report folders under the same base run id.
 
 Manual observation mode interpretation:
 1. `run_mic38_observe.sh` sets up services, topics, both Spark jobs, bounded generator traffic, and mixed CDC fixture.

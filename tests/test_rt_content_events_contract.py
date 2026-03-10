@@ -17,6 +17,7 @@ from spark.rt_content_events_contract import (  # noqa: E402
     TOPIC,
     TRIGGER_GOLD,
     TRIGGER_RAW,
+    WATERMARK_GOLD,
     checkpoint_for_sink,
 )
 
@@ -28,6 +29,7 @@ class RtContentEventsContractTests(unittest.TestCase):
         self.assertEqual(STARTING_OFFSETS, "latest")
         self.assertEqual(TRIGGER_RAW, "10 seconds")
         self.assertEqual(TRIGGER_GOLD, "1 minute")
+        self.assertEqual(WATERMARK_GOLD, "2 minutes")
         self.assertEqual(
             CHECKPOINT_RAW,
             "s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1",

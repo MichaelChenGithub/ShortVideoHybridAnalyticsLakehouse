@@ -22,6 +22,9 @@ class VerifyRtContentEventsAggregatorTests(unittest.TestCase):
             "duplicate_key_rows": 0,
             "null_required_rows": 0,
             "negative_metric_rows": 0,
+            "raw_unique_event_count": 100,
+            "gold_event_total_count": 99,
+            "watermark_drop_ratio": 0.01,
             "max_processed_at_ms": now_ms - 30_000,
         }
 
@@ -41,6 +44,9 @@ class VerifyRtContentEventsAggregatorTests(unittest.TestCase):
             "duplicate_key_rows": 0,
             "null_required_rows": 0,
             "negative_metric_rows": 0,
+            "raw_unique_event_count": 0,
+            "gold_event_total_count": 0,
+            "watermark_drop_ratio": 0.0,
             "max_processed_at_ms": None,
         }
 
@@ -65,6 +71,9 @@ class VerifyRtContentEventsAggregatorTests(unittest.TestCase):
             "duplicate_key_rows": 2,
             "null_required_rows": 1,
             "negative_metric_rows": 3,
+            "raw_unique_event_count": 10,
+            "gold_event_total_count": 10,
+            "watermark_drop_ratio": 0.0,
             "max_processed_at_ms": now_ms - 900_000,
         }
 
@@ -90,6 +99,9 @@ class VerifyRtContentEventsAggregatorTests(unittest.TestCase):
             "duplicate_key_rows": 0,
             "null_required_rows": 0,
             "negative_metric_rows": 0,
+            "raw_unique_event_count": 10,
+            "gold_event_total_count": 10,
+            "watermark_drop_ratio": 0.0,
             "max_processed_at_ms": 3_950_000,
         }
 
@@ -104,6 +116,56 @@ class VerifyRtContentEventsAggregatorTests(unittest.TestCase):
 
         joined = "\n".join(errors)
         self.assertIn("predates this acceptance run", joined)
+
+    def test_validation_fails_when_watermark_drop_ratio_below_min(self) -> None:
+        snapshot = {
+            "raw_count": 100,
+            "gold_count": 10,
+            "duplicate_key_rows": 0,
+            "null_required_rows": 0,
+            "negative_metric_rows": 0,
+            "raw_unique_event_count": 100,
+            "gold_event_total_count": 100,
+            "watermark_drop_ratio": 0.0,
+            "max_processed_at_ms": 5_000_000,
+        }
+
+        errors = validate_aggregator_snapshot(
+            snapshot,
+            now_ms=5_001_000,
+            min_raw_rows=1,
+            min_gold_rows=1,
+            max_freshness_minutes=10,
+            min_watermark_drop_ratio=0.005,
+        )
+
+        joined = "\n".join(errors)
+        self.assertIn("watermark_drop_ratio below threshold", joined)
+
+    def test_validation_fails_when_watermark_drop_ratio_above_max(self) -> None:
+        snapshot = {
+            "raw_count": 100,
+            "gold_count": 10,
+            "duplicate_key_rows": 0,
+            "null_required_rows": 0,
+            "negative_metric_rows": 0,
+            "raw_unique_event_count": 100,
+            "gold_event_total_count": 80,
+            "watermark_drop_ratio": 0.2,
+            "max_processed_at_ms": 6_000_000,
+        }
+
+        errors = validate_aggregator_snapshot(
+            snapshot,
+            now_ms=6_001_000,
+            min_raw_rows=1,
+            min_gold_rows=1,
+            max_freshness_minutes=10,
+            max_watermark_drop_ratio=0.005,
+        )
+
+        joined = "\n".join(errors)
+        self.assertIn("watermark_drop_ratio above threshold", joined)
 
 
 if __name__ == "__main__":
