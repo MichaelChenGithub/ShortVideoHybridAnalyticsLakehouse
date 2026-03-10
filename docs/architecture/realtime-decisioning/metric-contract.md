@@ -50,8 +50,8 @@ Candidate:
 
 Under-exposed:
 
-1. within `category + region`, `impressions_30m <= p40`
-2. fallback to global p40 when cohort sample is insufficient
+1. M1 uses global threshold: `impressions_30m <= global_p40_impressions_threshold`
+2. future plan: switch to cohort `category + region` `p40` with global fallback when cohort sample is insufficient
 
 ## 4. Decision Mapping
 
@@ -67,8 +67,9 @@ Under-exposed:
 3. Baseline set is tied to `rule_version`.
 4. Baselines are published to `lakehouse.dims.rt_rule_quantile_baselines`.
 5. `p90` for candidate evaluation uses global `velocity_30m` distribution.
-6. `p40` for under-exposure uses `category + region` cohort on `impressions_30m`.
-7. Cohort fallback rule:
+6. M1 `p40` for under-exposure uses global `impressions_30m` distribution.
+7. Future plan (deferred after M1):
+   - use cohort `p40` on `impressions_30m` by `category + region`
    - use cohort `p40` when `sample_size >= 200`
    - fallback to global `p40` when `sample_size < 200`
 8. Global baseline publish guard:

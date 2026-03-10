@@ -33,6 +33,11 @@ Upstream streaming execution spec:
 2. Rolling window = 30 minutes
 3. Core grain = `video_id + window_start` (1-minute event-time bucket)
 4. Action queue model = current-state table (upsert/update), not append-only history
+5. Baseline registry table = `lakehouse.dims.rt_rule_quantile_baselines`
+6. M1 published validity window = `effective_from = 2026-01-01`, `effective_to = 2099-12-31`
+7. Baseline publish semantics = insert-only (immutable by `rule_version + effective_from`)
+8. M1 threshold scope = global `p90` (`velocity_30m`) + global `p40` (`impressions_30m`)
+9. Cohort (`category + region`) baseline and fallback semantics are deferred to future plan
 
 ## Spec Files
 

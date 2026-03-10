@@ -219,18 +219,18 @@ Quantile baseline standard (`p90` / `p40`):
 
 1. baseline source: `lakehouse.dims.rt_rule_quantile_baselines`
 2. candidate threshold: global `p90` on `velocity_30m`
-3. under-exposure threshold: cohort `p40` on `impressions_30m` by `category + region`
-4. cohort fallback: when cohort `sample_size < 200`, use global `p40`
+3. M1 under-exposure threshold: global `p40` on `impressions_30m`
+4. future plan (deferred after M1): cohort `p40` by `category + region` with global fallback when cohort `sample_size < 200`
 5. baseline refresh cadence: daily after T+1 completion
 
 `rule_version` propagation strategy:
 
 1. M1 lock: use fixed `rule_version = rt_rules_v1` for semantic views and baseline joins
 2. baseline rows for the locked version are immutable after publish
-3. `v_rt_video_decision_context_30m_1m` must join baselines by locked `rule_version` and cohort keys
+3. `v_rt_video_decision_context_30m_1m` must join baselines by locked `rule_version`; M1 uses global baseline rows only
 4. `v_rt_action_queue_current` consumes producer-written `rule_version` as final execution evidence
 5. BI panels comparing metrics and actions must filter or group by `rule_version` to avoid cross-version mixing
-6. future extension (post-batch/backfill): switch to effective-date version selection using `metric_minute` against baseline validity range
+6. future extension (post-batch/backfill): switch to effective-date version selection using `metric_minute` against baseline validity range and add cohort-aware baseline selection
 
 ## 7. Serving Contracts
 
@@ -251,7 +251,7 @@ Quantile baseline standard (`p90` / `p40`):
 4. missing-dimension fallback: null dimension context must not produce unsafe boost interpretation
 5. `rule_version` is mandatory and must identify the baseline used for threshold interpretation
 6. threshold fields (`p90_velocity_threshold`, `p40_impressions_threshold`) must come from the same `rule_version`
-7. fallback usage must be explicit via derived marker (`under_exposed_flag` computed with cohort/global fallback rule)
+7. M1 `under_exposed_flag` must be computed using global `p40`; cohort/global fallback marker is deferred to future plan
 8. `decision_type_preview` must follow `metric-contract.md` decision mapping and must not introduce independent rules
 
 ### 7.3 Contract: `v_rt_action_queue_current`
@@ -343,7 +343,7 @@ M2 planned expansion:
 ## 12. Locked Decisions (M1 Sprint 2)
 
 1. Gold tables remain source of truth; serving layer is a read-only semantic interface.
-2. `p90/p40` thresholds are governed by published quantile baselines with explicit fallback rules.
+2. `p90/p40` thresholds are governed by published quantile baselines; M1 uses global-only thresholds and cohort fallback is deferred.
 3. `rule_version` is mandatory on decision-context and action-serving paths for traceability.
 4. M1 locks `rule_version` to `rt_rules_v1`; effective-date multi-version selection is deferred until batch/backfill is introduced.
 5. split-view strategy is retained:
