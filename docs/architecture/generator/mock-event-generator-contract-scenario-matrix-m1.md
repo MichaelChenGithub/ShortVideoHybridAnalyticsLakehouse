@@ -179,6 +179,23 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 6. generator does not control runtime watermark and does not auto-tune it in M1.
 7. streaming runtime watermark policy follows `spark-realtime-jobs-contract-m1.md` (baseline `2 minutes`, lag-prone target `5 minutes`).
 
+### 6.5 Delivery profile for strict late-drop validation
+
+1. `event_timestamp` backshift alone validates out-of-order behavior, but does not guarantee watermark drop behavior.
+2. strict late-drop validation requires arrival-timing control across phases, not only payload timestamp offsets.
+3. add `delivery_profile` with values:
+   - `out_of_order` (default): current behavior; mixed arrival, no phase guarantees.
+   - `watermark_pushback`: two-phase emission for deterministic watermark-drop checks.
+4. `watermark_pushback` phase contract:
+   - phase A emits on-time events to advance query watermark.
+   - phase B emits delayed events (`121s..210s`) after phase gap to force late arrival evaluation.
+5. required timing controls for `watermark_pushback`:
+   - `phase_gap_seconds` must be >= gold trigger interval plus safety buffer.
+   - baseline recommended default: `phase_gap_seconds >= 75`.
+   - lag-prone recommended default: `phase_gap_seconds >= 75` with higher delayed-event volume.
+6. MIC-38/MIC-60 late-drop gates should use `watermark_pushback` when validating non-zero drop expectations.
+7. without `watermark_pushback`, `watermark_drop_ratio` may legitimately be `0.0` even when late offsets exist.
+
 ---
 
 ## 7. Scenario Matrix (M1)

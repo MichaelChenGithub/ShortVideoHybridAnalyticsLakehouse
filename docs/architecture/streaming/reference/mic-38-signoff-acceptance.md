@@ -49,6 +49,11 @@ Defaults are SLA-aligned with `docs/architecture/realtime-decisioning/reconcilia
    - `baseline` -> `RT_CONTENT_EVENTS_WATERMARK=2 minutes`
    - `lag_prone` -> `RT_CONTENT_EVENTS_WATERMARK=5 minutes`
 
+Late-drop validation note:
+1. timestamp backshift-only traffic validates out-of-order behavior, not guaranteed watermark drop behavior.
+2. to assert strict late-drop gates (`watermark_drop_ratio` min/max), use generator `delivery_profile=watermark_pushback` once enabled.
+3. `watermark_pushback` means phase A advances watermark first, then phase B emits delayed events (`121s..210s`) after phase gap.
+
 Manual observation script defaults (`run_mic38_observe.sh`):
 1. `MIC38_RUN_ID=mic38_observe_<utc timestamp>`
 2. `MIC38_VIDEO_ID=${MIC38_RUN_ID}_cdc_vid_001`
