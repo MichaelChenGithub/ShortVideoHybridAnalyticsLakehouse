@@ -68,8 +68,9 @@ Isolation principle:
 
 ### 4.3 Watermark
 
-1. fixed watermark: `10 seconds` in M1
-2. no dynamic watermark adjustment in M1
+1. fixed watermark baseline for `content_events` aggregation: `2 minutes` in M1
+2. lag-prone deployments should use `5 minutes` watermark for `content_events` aggregation
+3. no dynamic watermark adjustment in M1
 
 ### 4.4 Starting offsets (M1)
 
@@ -177,10 +178,12 @@ Minimum runtime checks:
 2. query progress lag / micro-batch latency
 3. consumer lag by topic
 4. invalid record rates in both quarantine tables
+5. dropped-by-watermark rows from query progress metrics (`numRowsDroppedByWatermark` or equivalent)
 
 Observability note:
 
 1. Prometheus/Grafana deep instrumentation is deferred to M2.
+2. M1 lite checks must still expose dropped-by-watermark counters via logs or periodic query progress sampling.
 
 ---
 
@@ -193,3 +196,4 @@ Observability note:
 5. invalid records route to split quarantine tables
 6. degraded mode behavior matches contract (`freeze` or `REVIEW-only`)
 7. replay/restart remains deterministic for same inputs and versions
+8. late-event handling check passes for deterministic late profile (`121s..210s`) and aligns with configured watermark policy

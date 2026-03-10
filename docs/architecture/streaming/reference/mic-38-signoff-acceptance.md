@@ -36,6 +36,7 @@ Defaults are SLA-aligned with `docs/architecture/realtime-decisioning/reconcilia
 2. `LATENCY_THRESHOLD_MINUTES=3`
 3. `MAX_CONTENT_INVALID_RATE=0.20`
 4. `MAX_CDC_INVALID_RATE=0.20`
+5. expected content aggregation watermark policy: baseline `2 minutes`, lag-prone runs `5 minutes`
 
 Manual observation script defaults (`run_mic38_observe.sh`):
 1. `MIC38_RUN_ID=mic38_observe_<utc timestamp>`

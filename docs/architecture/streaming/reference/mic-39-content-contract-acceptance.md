@@ -13,7 +13,8 @@ Out of scope:
 Runtime defaults (MIC-39):
 1. `startingOffsets=latest`
 2. trigger intervals: `raw_events=10 seconds`, `rt_video_stats_1min=1 minute`, `invalid_events_content=10 seconds`
-3. checkpoint roots:
+3. watermark policy for content aggregation: baseline `2 minutes`, lag-prone environments `5 minutes`
+4. checkpoint roots:
    - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
    - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
    - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1`

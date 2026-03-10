@@ -171,12 +171,13 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 
 1. late events are simulated by offsetting `event_timestamp` backwards.
 2. `late_event_ratio` defines the fraction of emitted `content_events` treated as late events.
-3. for late events, lateness offset is sampled deterministically in `[11 seconds, 90 seconds]`.
+3. for late events, lateness offset is sampled deterministically in `[121 seconds, 210 seconds]`.
 4. recommended lateness split in M1:
-   - 80% in `[11s, 30s]`
-   - 20% in `[31s, 90s]`
-5. maximum lateness in M1 is `90 seconds`.
-6. M1 keeps watermark static (`10 seconds`) and does not auto-tune.
+   - 80% in `[121s, 150s]`
+   - 20% in `[151s, 210s]`
+5. maximum lateness in M1 is `210 seconds`.
+6. generator does not control runtime watermark and does not auto-tune it in M1.
+7. streaming runtime watermark policy follows `spark-realtime-jobs-contract-m1.md` (baseline `2 minutes`, lag-prone target `5 minutes`).
 
 ---
 

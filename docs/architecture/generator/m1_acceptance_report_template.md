@@ -89,9 +89,9 @@ Source: `run_config.json` + `run_summary.json`
 
 ### 5.3 Late Event Contract
 
-- `late_offset_min_seconds >= 11`: `PASS / FAIL`
-- `late_offset_max_seconds <= 90`: `PASS / FAIL`
-- Late histogram exists (`11_30`, `31_90`): `PASS / FAIL`
+- `late_offset_min_seconds >= 121`: `PASS / FAIL`
+- `late_offset_max_seconds <= 210`: `PASS / FAIL`
+- Late histogram exists (`121_150`, `151_210`): `PASS / FAIL`
 - Notes:
 
 ## 6. Scope Guard (MIC-34)

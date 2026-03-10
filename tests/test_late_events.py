@@ -42,15 +42,15 @@ class LateEventTests(unittest.TestCase):
             expected_late = round(config.total_content_events * config.late_event_ratio)
             self.assertEqual(summary["late_event_count"], expected_late)
 
-            self.assertGreaterEqual(summary["late_offset_min_seconds"], 11)
-            self.assertLessEqual(summary["late_offset_max_seconds"], 90)
+            self.assertGreaterEqual(summary["late_offset_min_seconds"], 121)
+            self.assertLessEqual(summary["late_offset_max_seconds"], 210)
 
             hist = summary["late_event_histogram"]
-            hist_total = hist["11_30"] + hist["31_90"]
+            hist_total = hist["121_150"] + hist["151_210"]
             self.assertEqual(hist_total, summary["late_event_count"])
 
             if hist_total > 0:
-                near_ratio = hist["11_30"] / hist_total
+                near_ratio = hist["121_150"] / hist_total
                 self.assertGreaterEqual(near_ratio, 0.65)
                 self.assertLessEqual(near_ratio, 0.95)
 
