@@ -27,6 +27,7 @@ from spark.rt_content_events_contract import (  # noqa: E402
     ENV_TOPIC,
     ENV_TRIGGER_GOLD,
     ENV_TRIGGER_RAW,
+    ENV_WATERMARK_GOLD,
     INVALID_EVENTS_CONTENT_TABLE,
     JOB_NAME,
     RAW_EVENTS_TABLE,
@@ -35,6 +36,7 @@ from spark.rt_content_events_contract import (  # noqa: E402
     TOPIC,
     TRIGGER_GOLD,
     TRIGGER_RAW,
+    WATERMARK_GOLD,
     load_job_settings,
 )
 
@@ -48,6 +50,7 @@ class RtContentEventsJobSettingsTests(unittest.TestCase):
         self.assertEqual(settings.starting_offsets, STARTING_OFFSETS)
         self.assertEqual(settings.trigger_raw, TRIGGER_RAW)
         self.assertEqual(settings.trigger_gold, TRIGGER_GOLD)
+        self.assertEqual(settings.watermark_gold, WATERMARK_GOLD)
         self.assertEqual(settings.checkpoint_raw, CHECKPOINT_RAW)
         self.assertEqual(settings.checkpoint_gold, CHECKPOINT_GOLD)
         self.assertEqual(settings.checkpoint_invalid, CHECKPOINT_INVALID)
@@ -65,6 +68,7 @@ class RtContentEventsJobSettingsTests(unittest.TestCase):
                 ENV_STARTING_OFFSETS: "earliest",
                 ENV_TRIGGER_RAW: "30 seconds",
                 ENV_TRIGGER_GOLD: "2 minutes",
+                ENV_WATERMARK_GOLD: "5 minutes",
                 ENV_CHECKPOINT_RAW: "s3a://checkpoints/custom/raw/v1",
                 ENV_CHECKPOINT_GOLD: "s3a://checkpoints/custom/gold/v1",
                 ENV_CHECKPOINT_INVALID: "s3a://checkpoints/custom/invalid/v1",
@@ -80,6 +84,7 @@ class RtContentEventsJobSettingsTests(unittest.TestCase):
         self.assertEqual(settings.starting_offsets, "earliest")
         self.assertEqual(settings.trigger_raw, "30 seconds")
         self.assertEqual(settings.trigger_gold, "2 minutes")
+        self.assertEqual(settings.watermark_gold, "5 minutes")
         self.assertEqual(settings.checkpoint_raw, "s3a://checkpoints/custom/raw/v1")
         self.assertEqual(settings.checkpoint_gold, "s3a://checkpoints/custom/gold/v1")
         self.assertEqual(settings.checkpoint_invalid, "s3a://checkpoints/custom/invalid/v1")

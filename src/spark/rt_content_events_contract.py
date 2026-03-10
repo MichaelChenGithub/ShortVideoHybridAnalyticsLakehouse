@@ -11,6 +11,7 @@ TOPIC = "content_events"
 STARTING_OFFSETS = "latest"
 TRIGGER_RAW = "10 seconds"
 TRIGGER_GOLD = "1 minute"
+WATERMARK_GOLD = "2 minutes"
 
 RAW_EVENTS_TABLE = "lakehouse.bronze.raw_events"
 RT_VIDEO_STATS_1MIN_TABLE = "lakehouse.gold.rt_video_stats_1min"
@@ -28,6 +29,7 @@ ENV_TOPIC = "RT_CONTENT_EVENTS_TOPIC"
 ENV_STARTING_OFFSETS = "RT_CONTENT_EVENTS_STARTING_OFFSETS"
 ENV_TRIGGER_RAW = "RT_CONTENT_EVENTS_TRIGGER_RAW"
 ENV_TRIGGER_GOLD = "RT_CONTENT_EVENTS_TRIGGER_GOLD"
+ENV_WATERMARK_GOLD = "RT_CONTENT_EVENTS_WATERMARK"
 ENV_CHECKPOINT_RAW = "RT_CONTENT_EVENTS_CHECKPOINT_RAW"
 ENV_CHECKPOINT_GOLD = "RT_CONTENT_EVENTS_CHECKPOINT_GOLD"
 ENV_CHECKPOINT_INVALID = "RT_CONTENT_EVENTS_CHECKPOINT_INVALID"
@@ -46,6 +48,7 @@ class JobSettings:
     starting_offsets: str
     trigger_raw: str
     trigger_gold: str
+    watermark_gold: str
     checkpoint_raw: str
     checkpoint_gold: str
     checkpoint_invalid: str
@@ -71,6 +74,7 @@ def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
         starting_offsets=values.get(ENV_STARTING_OFFSETS, STARTING_OFFSETS),
         trigger_raw=values.get(ENV_TRIGGER_RAW, TRIGGER_RAW),
         trigger_gold=values.get(ENV_TRIGGER_GOLD, TRIGGER_GOLD),
+        watermark_gold=values.get(ENV_WATERMARK_GOLD, WATERMARK_GOLD),
         checkpoint_raw=values.get(ENV_CHECKPOINT_RAW, CHECKPOINT_RAW),
         checkpoint_gold=values.get(ENV_CHECKPOINT_GOLD, CHECKPOINT_GOLD),
         checkpoint_invalid=values.get(ENV_CHECKPOINT_INVALID, CHECKPOINT_INVALID),

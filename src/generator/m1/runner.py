@@ -161,9 +161,9 @@ class BoundedRunGenerator:
         offsets: Dict[int, int] = {}
         for event_index in indexes:
             if offset_rng.random() < 0.8:
-                offsets[event_index] = offset_rng.randint(11, 30)
+                offsets[event_index] = offset_rng.randint(121, 150)
             else:
-                offsets[event_index] = offset_rng.randint(31, 90)
+                offsets[event_index] = offset_rng.randint(151, 210)
         return offsets
 
     def _make_invalid_event(self, user_id: str, event_id: str, event_index: int) -> Dict[str, Any]:
@@ -265,7 +265,7 @@ class BoundedRunGenerator:
 
         scenario_emitted_counts = {scenario: 0 for scenario in SCENARIO_KEYS}
         invalid_payload_events = 0
-        late_histogram = {"11_30": 0, "31_90": 0}
+        late_histogram = {"121_150": 0, "151_210": 0}
 
         user_rng = make_rng(self.config.seed, "user-selection")
         total_seconds = self.config.duration_seconds
@@ -282,10 +282,10 @@ class BoundedRunGenerator:
                 )
                 late_offset = late_offsets.get(event_index, 0)
                 if late_offset:
-                    if late_offset <= 30:
-                        late_histogram["11_30"] += 1
+                    if late_offset <= 150:
+                        late_histogram["121_150"] += 1
                     else:
-                        late_histogram["31_90"] += 1
+                        late_histogram["151_210"] += 1
                 event_timestamp = base_timestamp - timedelta(seconds=late_offset)
 
                 event_id = self.id_factory.next_event_id()

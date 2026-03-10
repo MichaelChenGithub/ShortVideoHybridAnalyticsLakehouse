@@ -11,7 +11,9 @@ if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-$DEFAULT_PYTHON_BIN}"
 
-MIC38_RUN_ID="${MIC38_RUN_ID:-mic38_$(date -u +%Y%m%dT%H%M%SZ)}"
+MIC38_WATERMARK_SCENARIO="${MIC38_WATERMARK_SCENARIO:-baseline}"
+BASE_MIC38_RUN_ID="${MIC38_RUN_ID:-mic38_$(date -u +%Y%m%dT%H%M%SZ)}"
+MIC38_RUN_ID="${BASE_MIC38_RUN_ID}_${MIC38_WATERMARK_SCENARIO}"
 MIC38_VIDEO_ID="${MIC38_VIDEO_ID:-${MIC38_RUN_ID}_cdc_vid_001}"
 EXPECTED_CDC_STATUS="${EXPECTED_CDC_STATUS:-copyright_strike}"
 
@@ -32,6 +34,8 @@ MAX_CDC_INVALID_RATE="${MAX_CDC_INVALID_RATE:-0.20}"
 MAX_FRESHNESS_MINUTES="${MAX_FRESHNESS_MINUTES:-3}"
 LATENCY_THRESHOLD_MINUTES="${LATENCY_THRESHOLD_MINUTES:-3}"
 LOOKBACK_MINUTES="${LOOKBACK_MINUTES:-30}"
+BASELINE_MIN_WATERMARK_DROP_RATIO="${BASELINE_MIN_WATERMARK_DROP_RATIO:-0.005}"
+LAG_PRONE_MAX_WATERMARK_DROP_RATIO="${LAG_PRONE_MAX_WATERMARK_DROP_RATIO:-0.005}"
 
 KAFKA_READY_RETRIES="${KAFKA_READY_RETRIES:-30}"
 KAFKA_READY_SLEEP_SECONDS="${KAFKA_READY_SLEEP_SECONDS:-2}"
@@ -54,6 +58,23 @@ CHECKPOINT_START_JSON="${ARTIFACT_DIR}/checkpoint_start.json"
 CHECKPOINT_END_JSON="${ARTIFACT_DIR}/checkpoint_end.json"
 REPORT_JSON="${ARTIFACT_DIR}/signoff_report.json"
 REPORT_MD="${ARTIFACT_DIR}/signoff_summary.md"
+
+case "$MIC38_WATERMARK_SCENARIO" in
+  baseline)
+    RT_CONTENT_EVENTS_WATERMARK="${RT_CONTENT_EVENTS_WATERMARK:-2 minutes}"
+    MIN_WATERMARK_DROP_RATIO="${MIN_WATERMARK_DROP_RATIO:-$BASELINE_MIN_WATERMARK_DROP_RATIO}"
+    MAX_WATERMARK_DROP_RATIO=""
+    ;;
+  lag_prone)
+    RT_CONTENT_EVENTS_WATERMARK="${RT_CONTENT_EVENTS_WATERMARK:-5 minutes}"
+    MIN_WATERMARK_DROP_RATIO=""
+    MAX_WATERMARK_DROP_RATIO="${MAX_WATERMARK_DROP_RATIO:-$LAG_PRONE_MAX_WATERMARK_DROP_RATIO}"
+    ;;
+  *)
+    echo "[MIC-38] ERROR: MIC38_WATERMARK_SCENARIO must be baseline or lag_prone, got '${MIC38_WATERMARK_SCENARIO}'" >&2
+    exit 1
+    ;;
+esac
 
 now_ms() {
   echo $(( $(date +%s) * 1000 ))
@@ -100,7 +121,7 @@ start_spark_job() {
   local script_name
   script_name="$(basename "${script_path}" .py)"
   local ivy_cache="/tmp/ivy/${MIC38_RUN_ID}/${script_name}"
-  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && MIC38_RUN_ID='${MIC38_RUN_ID}' nohup /opt/spark/bin/spark-submit --conf spark.jars.ivy='${ivy_cache}' '${script_path}' > '${log_file}' 2>&1 &"
+  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && MIC38_RUN_ID='${MIC38_RUN_ID}' RT_CONTENT_EVENTS_WATERMARK='${RT_CONTENT_EVENTS_WATERMARK}' nohup /opt/spark/bin/spark-submit --conf spark.jars.ivy='${ivy_cache}' '${script_path}' > '${log_file}' 2>&1 &"
 }
 
 wait_for_spark_job() {
@@ -179,10 +200,18 @@ printf '[MIC-38] Starting Sprint 1 sign-off orchestrator...\n'
 printf '[MIC-38] run_id=%s\n' "$MIC38_RUN_ID"
 printf '[MIC-38] run_context=%s\n' "$RUN_CONTEXT"
 printf '[MIC-38] cdc_video_id=%s\n' "$MIC38_VIDEO_ID"
+printf '[MIC-38] watermark_scenario=%s\n' "$MIC38_WATERMARK_SCENARIO"
+printf '[MIC-38] content_watermark=%s\n' "$RT_CONTENT_EVENTS_WATERMARK"
 printf '[MIC-38] max_freshness_minutes=%s\n' "$MAX_FRESHNESS_MINUTES"
 printf '[MIC-38] latency_threshold_minutes=%s\n' "$LATENCY_THRESHOLD_MINUTES"
 printf '[MIC-38] content_max_invalid_rate=%s\n' "$MAX_CONTENT_INVALID_RATE"
 printf '[MIC-38] cdc_max_invalid_rate=%s\n' "$MAX_CDC_INVALID_RATE"
+if [ -n "$MIN_WATERMARK_DROP_RATIO" ]; then
+  printf '[MIC-38] min_watermark_drop_ratio=%s\n' "$MIN_WATERMARK_DROP_RATIO"
+fi
+if [ -n "$MAX_WATERMARK_DROP_RATIO" ]; then
+  printf '[MIC-38] max_watermark_drop_ratio=%s\n' "$MAX_WATERMARK_DROP_RATIO"
+fi
 
 cd "$REPO_ROOT"
 mkdir -p "$ARTIFACT_DIR"
@@ -247,11 +276,19 @@ fi
 sleep "$WAIT_AFTER_CDC_FIXTURE_SECONDS"
 
 printf '[MIC-38] Verifying content valid path (MIC-40 style gate)...\n'
+declare -a WATERMARK_DROP_ARGS=()
+if [ -n "$MIN_WATERMARK_DROP_RATIO" ]; then
+  WATERMARK_DROP_ARGS+=(--min-watermark-drop-ratio "$MIN_WATERMARK_DROP_RATIO")
+fi
+if [ -n "$MAX_WATERMARK_DROP_RATIO" ]; then
+  WATERMARK_DROP_ARGS+=(--max-watermark-drop-ratio "$MAX_WATERMARK_DROP_RATIO")
+fi
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_aggregator.py \
   --min-raw-rows "$MIN_RAW_ROWS" \
   --min-gold-rows "$MIN_GOLD_ROWS" \
   --max-freshness-minutes "$MAX_FRESHNESS_MINUTES" \
-  --min-processed-at-ms "$MIN_PROCESSED_AT_MS" | tee "$CONTENT_METRICS_LOG"
+  --min-processed-at-ms "$MIN_PROCESSED_AT_MS" \
+  "${WATERMARK_DROP_ARGS[@]}" | tee "$CONTENT_METRICS_LOG"
 
 printf '[MIC-38] Verifying content invalid path (MIC-39 style gate)...\n'
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_content_events_contract_enforcement.py \
