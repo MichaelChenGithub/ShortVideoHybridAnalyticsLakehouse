@@ -10,7 +10,7 @@ They do not apply to general discussion or architecture questions.
 - Do not silently expand scope.
 
 ## Planning
-- Create a task-local plan.md and state.md before implementation for non-trivial tasks.
+- Create plan.md and state.md at the **repo root** before implementation for non-trivial tasks. Never place them in subdirectories.
 - Plan must define objective, scope, out-of-scope, constraints, steps, acceptance criteria.
 - State must track current step, completed work, pending decisions, files changed, next action.
 
