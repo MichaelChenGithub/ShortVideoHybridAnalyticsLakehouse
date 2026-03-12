@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,9 +11,23 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from spark.rt_action_queue_producer import (  # noqa: E402
+    ACTION_QUEUE_INITIAL_STATE,
+    ACTION_QUEUE_REQUIRED_FIELDS,
+    REJECT_EMPTY_REASON_CODES,
+    REJECT_INVALID_DECISION_TYPE,
+    REJECT_INVALID_INITIAL_STATE,
+    REJECT_INVALID_TIME_ORDER,
+    REJECT_MISSING_REQUIRED_FIELD,
+    REJECT_NULL_REQUIRED_FIELD,
     ActionQueueCandidate,
+    ActionQueueWriteRow,
     DecisionContextRow,
+    build_and_prepare_action_queue_write_rows,
     build_action_queue_candidates,
+    build_action_queue_write_rows,
+    prepare_action_queue_write_rows,
+    validate_action_queue_write_row,
+    validate_action_queue_write_rows,
 )
 
 
@@ -146,6 +161,219 @@ class RtActionQueueProducerTests(unittest.TestCase):
         # p40 threshold below impressions → over-exposed → NO_ACTION
         row_no_action = self._row(video_id="v_over_exposed", global_p40_impressions_threshold=79, **rescue_base)
         self.assertEqual(build_action_queue_candidates([row_no_action]), [])
+
+
+class RtActionQueueProducerContractValidationTests(unittest.TestCase):
+    def _candidate(self, **overrides: object) -> ActionQueueCandidate:
+        base = dict(
+            video_id="v_contract",
+            decision_type="BOOST",
+            window_start=datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc),
+            window_end=datetime(2026, 3, 10, 12, 30, tzinfo=timezone.utc),
+            rule_version="rt_rules_v1",
+            velocity_30m=0.81,
+            impressions_30m=180,
+            completion_rate_30m=0.67,
+            skip_rate_30m=0.22,
+            reason_codes=("HIGH_VELOCITY_P90", "GATE_PASS"),
+        )
+        base.update(overrides)
+        return ActionQueueCandidate(**base)
+
+    def _valid_write_row(self) -> ActionQueueWriteRow:
+        decided_at = datetime(2026, 3, 10, 12, 31, tzinfo=timezone.utc)
+        rows = build_action_queue_write_rows(
+            [self._candidate()],
+            decided_at_factory=lambda: decided_at,
+            action_id_factory=lambda _candidate, _decided_at: "act_001",
+        )
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
+    def _context_row(self, **overrides: object) -> DecisionContextRow:
+        base = dict(
+            video_id="v1",
+            window_start=datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc),
+            window_end=datetime(2026, 3, 10, 12, 30, tzinfo=timezone.utc),
+            rule_version="rt_rules_v1",
+            velocity_30m=0.82,
+            impressions_30m=180,
+            completion_rate_30m=0.66,
+            skip_rate_30m=0.21,
+            play_start_30m=70,
+            upload_age_minutes=120,
+            velocity_p90_threshold=0.7,
+            global_p40_impressions_threshold=90,
+        )
+        base.update(overrides)
+        return DecisionContextRow(**base)
+
+    def test_write_row_contains_required_contract_fields(self) -> None:
+        row = self._valid_write_row()
+        for field in ACTION_QUEUE_REQUIRED_FIELDS:
+            self.assertIsNotNone(getattr(row, field))
+        self.assertEqual(row.state, ACTION_QUEUE_INITIAL_STATE)
+
+    def test_validate_row_rejects_missing_required_field(self) -> None:
+        row = asdict(self._valid_write_row())
+        del row["rule_version"]
+        is_valid, rejects = validate_action_queue_write_row(row, row_index=4)
+        self.assertFalse(is_valid)
+        self.assertIn(
+            (REJECT_MISSING_REQUIRED_FIELD, "rule_version", 4),
+            {(r.code, r.field, r.row_index) for r in rejects},
+        )
+
+    def test_validate_row_rejects_null_required_field(self) -> None:
+        row = asdict(self._valid_write_row())
+        row["rule_version"] = None
+        is_valid, rejects = validate_action_queue_write_row(row, row_index=1)
+        self.assertFalse(is_valid)
+        self.assertIn(
+            (REJECT_NULL_REQUIRED_FIELD, "rule_version", 1),
+            {(r.code, r.field, r.row_index) for r in rejects},
+        )
+
+    def test_validate_row_rejects_invalid_decision_domain(self) -> None:
+        row = asdict(self._valid_write_row())
+        row["decision_type"] = "NO_ACTION"
+        is_valid, rejects = validate_action_queue_write_row(row)
+        self.assertFalse(is_valid)
+        self.assertIn(REJECT_INVALID_DECISION_TYPE, {r.code for r in rejects})
+
+    def test_validate_row_rejects_non_pending_initial_state(self) -> None:
+        row = asdict(self._valid_write_row())
+        row["state"] = "ACKED"
+        is_valid, rejects = validate_action_queue_write_row(row)
+        self.assertFalse(is_valid)
+        self.assertIn(REJECT_INVALID_INITIAL_STATE, {r.code for r in rejects})
+
+    def test_validate_row_rejects_invalid_time_order(self) -> None:
+        row = asdict(self._valid_write_row())
+        row["expires_at"] = row["decided_at"]
+        is_valid, rejects = validate_action_queue_write_row(row)
+        self.assertFalse(is_valid)
+        self.assertIn(REJECT_INVALID_TIME_ORDER, {r.code for r in rejects})
+
+    def test_validate_row_rejects_empty_reason_codes(self) -> None:
+        row = asdict(self._valid_write_row())
+        row["reason_codes"] = ()
+        is_valid, rejects = validate_action_queue_write_row(row)
+        self.assertFalse(is_valid)
+        self.assertIn(REJECT_EMPTY_REASON_CODES, {r.code for r in rejects})
+
+    def test_validate_row_accepts_valid_row(self) -> None:
+        is_valid, rejects = validate_action_queue_write_row(self._valid_write_row(), row_index=9)
+        self.assertTrue(is_valid)
+        self.assertEqual(rejects, [])
+
+    def test_write_row_ttl_mapping_matches_contract(self) -> None:
+        decided_at = datetime(2026, 3, 10, 12, 31, tzinfo=timezone.utc)
+        boost_row = build_action_queue_write_rows(
+            [self._candidate(decision_type="BOOST")],
+            decided_at_factory=lambda: decided_at,
+            action_id_factory=lambda _candidate, _decided_at: "act_boost",
+        )[0]
+        review_row = build_action_queue_write_rows(
+            [self._candidate(decision_type="REVIEW")],
+            decided_at_factory=lambda: decided_at,
+            action_id_factory=lambda _candidate, _decided_at: "act_review",
+        )[0]
+        rescue_row = build_action_queue_write_rows(
+            [self._candidate(decision_type="RESCUE")],
+            decided_at_factory=lambda: decided_at,
+            action_id_factory=lambda _candidate, _decided_at: "act_rescue",
+        )[0]
+
+        self.assertEqual(
+            (boost_row.expires_at - boost_row.decided_at).total_seconds(),
+            15 * 60,
+        )
+        self.assertEqual(
+            (review_row.expires_at - review_row.decided_at).total_seconds(),
+            30 * 60,
+        )
+        self.assertEqual(
+            (rescue_row.expires_at - rescue_row.decided_at).total_seconds(),
+            30 * 60,
+        )
+
+    def test_write_row_priority_mapping_matches_urgency_contract(self) -> None:
+        decided_at = datetime(2026, 3, 10, 12, 31, tzinfo=timezone.utc)
+        rows = build_action_queue_write_rows(
+            [
+                self._candidate(decision_type="RESCUE"),
+                self._candidate(decision_type="REVIEW"),
+                self._candidate(decision_type="BOOST"),
+            ],
+            decided_at_factory=lambda: decided_at,
+            action_id_factory=lambda _candidate, _decided_at: f"act_{_candidate.decision_type.lower()}",
+        )
+        priority_by_decision = {row.decision_type: row.priority for row in rows}
+        self.assertEqual(priority_by_decision["RESCUE"], 1)
+        self.assertEqual(priority_by_decision["REVIEW"], 2)
+        self.assertEqual(priority_by_decision["BOOST"], 3)
+
+    def test_batch_validator_splits_valid_and_reject_rows(self) -> None:
+        valid = self._valid_write_row()
+        invalid = ActionQueueWriteRow(
+            **{
+                **asdict(self._valid_write_row()),
+                "action_id": "act_invalid",
+                "decision_type": "NO_ACTION",
+            }
+        )
+        valid_rows, rejects = validate_action_queue_write_rows([valid, invalid], strict=False)
+        self.assertEqual(len(valid_rows), 1)
+        self.assertEqual(valid_rows[0].action_id, "act_001")
+        self.assertEqual(len(rejects), 1)
+        self.assertEqual(rejects[0].row_index, 1)
+        self.assertEqual(rejects[0].code, REJECT_INVALID_DECISION_TYPE)
+
+    def test_batch_validator_strict_mode_raises_on_reject(self) -> None:
+        invalid = ActionQueueWriteRow(
+            **{
+                **asdict(self._valid_write_row()),
+                "decision_type": "NO_ACTION",
+            }
+        )
+        with self.assertRaises(ValueError):
+            validate_action_queue_write_rows([invalid], strict=True)
+
+    def test_prepare_action_queue_write_rows_returns_valid_rows(self) -> None:
+        fixed_ts = datetime(2026, 3, 10, 12, 31, tzinfo=timezone.utc)
+        valid_rows, rejects = prepare_action_queue_write_rows(
+            [self._candidate()],
+            strict=False,
+            decided_at_factory=lambda: fixed_ts,
+            action_id_factory=lambda _candidate, _decided_at: "act_prepared",
+        )
+        self.assertEqual(len(valid_rows), 1)
+        self.assertEqual(len(rejects), 0)
+        self.assertEqual(valid_rows[0].state, ACTION_QUEUE_INITIAL_STATE)
+        self.assertEqual(valid_rows[0].action_id, "act_prepared")
+
+    def test_build_and_prepare_flow_returns_reject_for_null_action_id(self) -> None:
+        row = self._context_row()
+        valid_rows, rejects = build_and_prepare_action_queue_write_rows(
+            [row],
+            strict=False,
+            decided_at_factory=lambda: datetime(2026, 3, 10, 12, 31, tzinfo=timezone.utc),
+            action_id_factory=lambda _candidate, _decided_at: None,  # type: ignore[return-value]
+        )
+        self.assertEqual(len(valid_rows), 0)
+        self.assertEqual(len(rejects), 1)
+        self.assertEqual(rejects[0].code, REJECT_NULL_REQUIRED_FIELD)
+        self.assertEqual(rejects[0].field, "action_id")
+
+    def test_build_and_prepare_flow_strict_mode_raises_on_reject(self) -> None:
+        with self.assertRaises(ValueError):
+            build_and_prepare_action_queue_write_rows(
+                [self._context_row()],
+                strict=True,
+                decided_at_factory=lambda: datetime(2026, 3, 10, 12, 31, tzinfo=timezone.utc),
+                action_id_factory=lambda _candidate, _decided_at: None,  # type: ignore[return-value]
+            )
 
 
 if __name__ == "__main__":
