@@ -339,6 +339,41 @@ def validate_action_queue_write_rows(
     return valid_rows, rejects
 
 
+def prepare_action_queue_write_rows(
+    candidates: Iterable[ActionQueueCandidate],
+    *,
+    strict: bool = False,
+    decided_at_factory: DecisionTimeFactory = _utc_now,
+    action_id_factory: ActionIdFactory = _default_action_id,
+) -> tuple[List[ActionQueueWriteRow], List[ActionQueueRowReject]]:
+    """Prepare and validate write rows, returning `(valid_rows, rejects)`."""
+
+    write_rows = build_action_queue_write_rows(
+        candidates,
+        decided_at_factory=decided_at_factory,
+        action_id_factory=action_id_factory,
+    )
+    return validate_action_queue_write_rows(write_rows, strict=strict)
+
+
+def build_and_prepare_action_queue_write_rows(
+    context_rows: Iterable[DecisionContextRow],
+    *,
+    strict: bool = False,
+    decided_at_factory: DecisionTimeFactory = _utc_now,
+    action_id_factory: ActionIdFactory = _default_action_id,
+) -> tuple[List[ActionQueueWriteRow], List[ActionQueueRowReject]]:
+    """End-to-end producer prep: decision candidates to validated write rows."""
+
+    candidates = build_action_queue_candidates(context_rows)
+    return prepare_action_queue_write_rows(
+        candidates,
+        strict=strict,
+        decided_at_factory=decided_at_factory,
+        action_id_factory=action_id_factory,
+    )
+
+
 def build_action_queue_candidates(rows: Iterable[DecisionContextRow]) -> List[ActionQueueCandidate]:
     """Build queue-write candidates and suppress `NO_ACTION` before write path."""
 
