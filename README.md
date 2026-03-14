@@ -25,7 +25,7 @@ Deliver a realtime decisioning vertical slice that emits actionable `BOOST`, `RE
 
 Delivery path:
 
-`content_events -> Kafka -> Spark RT -> Iceberg RT fact -> Trino views -> rt_action_queue`
+`content_events -> Kafka -> Spark RT -> Iceberg RT fact -> Trino semantic views -> Metabase decision preview`
 
 ## Decision Consumers and Cadence
 
@@ -70,23 +70,24 @@ content_events + cdc.content.videos
         -> Spark Structured Streaming
         -> Iceberg tables (bronze / dims / gold)
         -> Trino semantic serving
-        -> lakehouse.gold.rt_action_queue
+        -> Metabase recommendation preview (M1)
 ```
 
-## Decision Contract and Governance
+## Decision Contract and Governance (M3 Reference)
 
-1. Action queue is a current-state table (upsert/update) and stores actionable outcomes only (`BOOST`, `REVIEW`, `RESCUE`).
-2. Priority order is fixed: `BOOST > REVIEW > RESCUE > NO_ACTION`.
-3. Cooldown is enforced: max 1 action per `video_id` per 60 minutes.
-4. Expiration is explicit:
+1. Operational action queue semantics are deferred to M3.
+2. Action queue is a current-state table (upsert/update) and stores actionable outcomes only (`BOOST`, `REVIEW`, `RESCUE`).
+3. Priority order is fixed: `BOOST > REVIEW > RESCUE > NO_ACTION`.
+4. Cooldown is enforced: max 1 action per `video_id` per 60 minutes.
+5. Expiration is explicit:
    - `BOOST`: `+15m`
    - `REVIEW`: `+30m`
    - `RESCUE`: `+30m`
-5. Every action includes `rule_version` and `reason_codes` for auditability.
+6. Every action includes `rule_version` and `reason_codes` for auditability.
 
 ## Reliability Controls
 
-1. SLA target: event-to-action latency `P95 < 3 minutes`.
+1. SLA target: event-to-preview freshness latency `P95 < 3 minutes`.
 2. Degraded mode:
    - freshness `P95 > 3m` for 5 minutes: keep `REVIEW` only
    - freshness `> 10m` or ingestion outage: pause all actions
@@ -99,7 +100,7 @@ content_events + cdc.content.videos
 In scope:
 
 1. Realtime decisioning for `BOOST`, `REVIEW`, `RESCUE`
-2. Action queue contract and expiration handling
+2. Trino semantic serving views and Metabase recommendation preview
 3. Global RT vs T+1 reconciliation baseline
 4. Rule versioning and degraded mode behavior
 
@@ -108,16 +109,17 @@ Out of scope:
 1. Full batch decision system expansion
 2. Segment-level reconciliation beyond global baseline
 3. Automated policy optimization loop in production
+4. Operational `rt_action_queue` execution and queue-consumer automation (deferred to M3)
 
 ## Milestone Acceptance Definition
 
 M1 is considered successful when:
 
-1. Action queue is generated every minute and operationally usable.
-2. Decision logic matches metric and policy contracts.
-3. Data contract constraints hold (key uniqueness, non-null required fields, valid decision types, cooldown, valid reason codes).
-4. SLA and degraded-mode behavior meet contract.
-5. Actions are deterministic and auditable, with explicit `rule_version` and controlled state transitions.
+1. Semantic serving views and recommendation preview are generated and queryable on 1-minute cadence.
+2. Decision preview logic matches metric and policy contracts.
+3. Serving contract constraints hold (grain uniqueness, required fields, valid decision preview domain, rule-version traceability).
+4. Freshness and degraded-mode behavior meet streaming and serving contracts.
+5. Recommendations are deterministic and auditable with explicit `rule_version` and threshold context.
 
 ## Documentation Map (Source of Truth)
 
@@ -125,7 +127,7 @@ M1 is considered successful when:
 2. [Business Decision PRD & KPI Tree (M1)](docs/product/business-decision-prd-kpi-tree.md)
 3. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
 4. [Metric Contract](docs/architecture/realtime-decisioning/metric-contract.md)
-5. [Action Queue Contract](docs/architecture/realtime-decisioning/action-queue-contract.md)
+5. [Action Queue Contract (M3 Reference)](docs/architecture/realtime-decisioning/action-queue-contract.md)
 6. [Reconciliation and SLO](docs/architecture/realtime-decisioning/reconciliation-and-slo.md)
 7. [Acceptance Criteria (M1)](docs/architecture/realtime-decisioning/acceptance-criteria.md)
 8. [Streaming Execution Contract](docs/architecture/streaming/spark-realtime-jobs-contract-m1.md)

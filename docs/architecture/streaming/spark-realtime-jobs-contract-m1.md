@@ -150,7 +150,8 @@ Trigger:
 
 Behavior:
 
-1. freeze action outputs (no new `BOOST/REVIEW/RESCUE` actions emitted)
+1. mark serving freshness status as degraded for operational consumers
+2. suspend sign-off decisions until freshness returns within threshold
 
 ### 8.2 CDC job degradation
 
@@ -161,8 +162,8 @@ Trigger:
 
 Behavior:
 
-1. enter `REVIEW-only` mode
-2. pause `BOOST` and `RESCUE` until CDC health recovers
+1. mark decision-context preview as metadata-stale
+2. require manual operational review before using recommendation preview output
 
 Recovery:
 
@@ -194,6 +195,6 @@ Observability note:
 3. trigger cadence and watermark match this contract
 4. dedup and CDC conflict rules are implemented as specified
 5. invalid records route to split quarantine tables
-6. degraded mode behavior matches contract (`freeze` or `REVIEW-only`)
+6. degraded-state signaling and operational response guidance match this contract
 7. replay/restart remains deterministic for same inputs and versions
 8. late-event handling check passes for deterministic late profile (`121s..210s`) and aligns with configured watermark policy

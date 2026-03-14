@@ -20,6 +20,10 @@ Upstream streaming execution spec:
 2. `REVIEW`: high momentum but quality-failing videos.
 3. `RESCUE`: high-quality new videos with under-exposure.
 
+M1 serving surface:
+
+1. Trino semantic views and Metabase recommendation preview.
+
 ## Policy Priority
 
 1. `BOOST`
@@ -27,12 +31,12 @@ Upstream streaming execution spec:
 3. `RESCUE`
 4. `NO_ACTION`
 
-## Rule Baseline
+## Rule Baseline (M1 Active + M3 Reference)
 
 1. `rule_version = rt_rules_v1`
 2. Rolling window = 30 minutes
 3. Core grain = `video_id + window_start` (1-minute event-time bucket)
-4. Action queue model = current-state table (upsert/update), not append-only history
+4. M3 reference: action queue model = current-state table (upsert/update), not append-only history
 5. Baseline registry table = `lakehouse.dims.rt_rule_quantile_baselines`
 6. M1 published validity window = `effective_from = 2026-01-01`, `effective_to = 2099-12-31`
 7. Baseline publish semantics = insert-only (immutable by `rule_version + effective_from`)
@@ -42,7 +46,7 @@ Upstream streaming execution spec:
 ## Spec Files
 
 1. `metric-contract.md`
-2. `action-queue-contract.md`
-3. `reconciliation-and-slo.md`
-4. `acceptance-criteria.md`
-5. `realtime-action-queue-decision-behavior-spec.md`
+2. `reconciliation-and-slo.md`
+3. `acceptance-criteria.md`
+4. `action-queue-contract.md` (M3 reference)
+5. `realtime-action-queue-decision-behavior-spec.md` (M3 reference)

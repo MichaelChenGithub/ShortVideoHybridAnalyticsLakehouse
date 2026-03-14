@@ -22,9 +22,8 @@ In scope tables:
 4. `lakehouse.dims.dim_videos` (current snapshot, Type-1)
 5. `lakehouse.dims.rt_rule_quantile_baselines`
 6. `lakehouse.gold.rt_video_stats_1min`
-7. `lakehouse.gold.rt_action_queue`
-8. `lakehouse.qa.run_manifest`
-9. `lakehouse.qa.expected_actions`
+7. `lakehouse.qa.run_manifest`
+8. `lakehouse.qa.expected_actions`
 
 Out of scope (M2+):
 
@@ -33,6 +32,7 @@ Out of scope (M2+):
 3. global SCD Type-2 rollout across dimensions
 4. storage optimization tuning (partition tuning, compression strategy, compaction policy details)
 5. QA dashboarding and automated alert workflow
+6. operational `rt_action_queue` execution and queue-consumer automation
 
 ---
 
@@ -218,22 +218,11 @@ Contract:
 
 ### 5.6 `lakehouse.gold.rt_action_queue`
 
-Role:
+This table is deferred to M3 and is not part of M1 delivery scope.
 
-1. execution-ready decision output for Ops workflows
-2. decision audit trail
+Reference:
 
-Primary grain:
-
-1. `action_id`
-
-Business constraint:
-
-1. max 1 action per `video_id` per 60 minutes (cooldown)
-
-Schema and policy source:
-
-1. See `docs/architecture/realtime-decisioning/action-queue-contract.md`
+1. `docs/architecture/realtime-decisioning/m3-action-queue-reference.md`
 
 ---
 
@@ -348,7 +337,7 @@ Guardrails:
 
 Validation join path:
 
-1. `gold.rt_action_queue` / `gold.rt_video_stats_1min` joined with `qa.expected_actions` by `video_id + window_start` under a specific `run_id`
+1. `serving.v_rt_video_decision_context_30m_1m` / `gold.rt_video_stats_1min` joined with `qa.expected_actions` by `video_id + window_start` under a specific `run_id`
 
 ---
 

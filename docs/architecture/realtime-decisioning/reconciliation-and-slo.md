@@ -2,20 +2,20 @@
 
 ## 1. Runtime SLA
 
-1. Event-to-action latency target: `P95 < 3 minutes`
+1. Event-to-serving freshness latency target: `P95 < 3 minutes`
 2. Freshness breach threshold: `> 3 minutes`
 
-## 2. Degraded Mode
+## 2. Freshness Response Policy (M1)
 
 Trigger A:
 
 1. freshness `P95 > 3m` for 5 consecutive minutes
-2. behavior: pause `BOOST` and `RESCUE`, keep `REVIEW` only
+2. behavior: mark serving status as degraded and require manual review before operational use
 
 Trigger B:
 
 1. freshness `> 10m` or realtime ingestion outage
-2. behavior: pause all actions
+2. behavior: mark serving status as stale and block sign-off until healthy again
 
 Recovery:
 
@@ -23,10 +23,9 @@ Recovery:
 
 ## 3. Late Data Policy
 
-1. action queue is a current-state table with upsert/update semantics
-2. late events may update open actions when recalculation changes decision relevance
-3. terminal actions (`DONE`, `EXPIRED`, `HOLD`) are not auto-reopened by late data
-4. late-event impact is captured via reconciliation metrics and operational counters
+1. late events may update realtime facts and serving preview while within configured watermark policy
+2. events beyond watermark are tracked through drop counters and observability logs
+3. late-event impact is captured via reconciliation metrics and operational counters
 
 ## 4. RT vs T+1 Reconciliation Scope
 
@@ -72,5 +71,7 @@ p95(abs(rt_rate_1m - batch_rate_1m))
 
 ## 7. Rule Rollout Guard
 
-1. `WARN` freezes new `rule_version` rollout.
-2. `CRIT` freezes rollout and enters conservative policy mode.
+1. `WARN` requires manual review before promoting new `rule_version`.
+2. `CRIT` blocks new `rule_version` promotion until reconciliation returns to PASS.
+3. Automated rollout blocking workflows are deferred to M3:
+   - `docs/architecture/realtime-decisioning/m3-action-queue-reference.md`

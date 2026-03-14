@@ -16,8 +16,8 @@ In scope:
 
 Out of scope:
 
-1. `v_rt_action_queue_current` and `v_rt_action_queue_active`
-2. production queue-consumer automation
+1. `v_rt_action_queue_current` and `v_rt_action_queue_active` (M3 reference only)
+2. production queue-consumer automation (deferred to M3)
 3. M2 dbt semantic testing pipeline
 
 ## 2. Canonical SQL Pack
@@ -66,7 +66,7 @@ Serving views used by this pack:
 Primary contract references:
 
 1. `docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md`
-2. `docs/architecture/realtime-decisioning/realtime-action-queue-decision-behavior-spec.md`
+2. `docs/architecture/realtime-decisioning/realtime-action-queue-decision-behavior-spec.md` (M3 reference for future execution semantics)
 
 Clause mapping:
 
