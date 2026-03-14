@@ -1,4 +1,4 @@
-# Realtime Decisioning (M1)
+# Realtime Decisioning (M1 Scope + M3 Queue References)
 
 This module defines the realtime decision system for short-video operations.
 
@@ -22,7 +22,7 @@ Upstream streaming execution spec:
 
 M1 serving surface:
 
-1. Trino semantic views and Metabase recommendation preview.
+1. Trino semantic views and Metabase operations dashboard (health metrics + recommendation preview).
 
 ## Policy Priority
 
@@ -31,22 +31,25 @@ M1 serving surface:
 3. `RESCUE`
 4. `NO_ACTION`
 
-## Rule Baseline (M1 Active + M3 Reference)
+## Rule Baseline (M1 Active)
 
 1. `rule_version = rt_rules_v1`
 2. Rolling window = 30 minutes
 3. Core grain = `video_id + window_start` (1-minute event-time bucket)
-4. M3 reference: action queue model = current-state table (upsert/update), not append-only history
-5. Baseline registry table = `lakehouse.dims.rt_rule_quantile_baselines`
-6. M1 published validity window = `effective_from = 2026-01-01`, `effective_to = 2099-12-31`
-7. Baseline publish semantics = insert-only (immutable by `rule_version + effective_from`)
-8. M1 threshold scope = global `p90` (`velocity_30m`) + global `p40` (`impressions_30m`)
-9. Cohort (`category + region`) baseline and fallback semantics are deferred to future plan
+4. Baseline registry table = `lakehouse.dims.rt_rule_quantile_baselines`
+5. M1 published validity window = `effective_from = 2026-01-01`, `effective_to = 2099-12-31`
+6. Baseline publish semantics = insert-only (immutable by `rule_version + effective_from`)
+7. M1 threshold scope = global `p90` (`velocity_30m`) + global `p40` (`impressions_30m`)
+8. Cohort (`category + region`) baseline and fallback semantics are deferred to future plan
+
+## M3 Queue Reference
+
+1. Queue execution semantics are outside M1 delivery scope and deferred to M3:
+   - `m3-action-queue-reference.md`
 
 ## Spec Files
 
 1. `metric-contract.md`
 2. `reconciliation-and-slo.md`
 3. `acceptance-criteria.md`
-4. `action-queue-contract.md` (M3 reference)
-5. `realtime-action-queue-decision-behavior-spec.md` (M3 reference)
+4. `m3-action-queue-reference.md`

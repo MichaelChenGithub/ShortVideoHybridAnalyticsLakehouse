@@ -12,14 +12,14 @@ Legacy docs remain in `legacy_docs/` and are intentionally untouched during this
 
 ## Current Scope
 
-Milestone 1 foundational docs for product, model, messaging, and realtime execution contracts.
+Milestone 1 foundational docs for product, model, messaging, streaming, and preview-serving contracts, plus deferred M3 action-queue references.
 
 ## Folder Structure
 
 1. `architecture/`
    - Long-lived architecture and domain-level design specs.
 2. `architecture/realtime-decisioning/`
-   - Realtime metric definitions, policy rules, queue contract, reconciliation, and acceptance criteria.
+   - Realtime metric definitions, policy rules, reconciliation, acceptance criteria, and M3 queue references.
 3. `architecture/data-model/`
    - Core model contracts and table-grain definitions.
 4. `architecture/messaging/`
@@ -54,3 +54,5 @@ Milestone 1 foundational docs for product, model, messaging, and realtime execut
    - `docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md`
 7. Mock event generator contract and scenario matrix:
    - `docs/architecture/generator/mock-event-generator-contract-scenario-matrix-m1.md`
+8. Deferred M3 queue scope reference:
+   - `docs/architecture/realtime-decisioning/m3-action-queue-reference.md`

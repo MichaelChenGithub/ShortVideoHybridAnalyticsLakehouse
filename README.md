@@ -25,7 +25,7 @@ Deliver a realtime decisioning vertical slice that emits actionable `BOOST`, `RE
 
 Delivery path:
 
-`content_events -> Kafka -> Spark RT -> Iceberg RT fact -> Trino semantic views -> Metabase decision preview`
+`content_events -> Kafka -> Spark RT -> Iceberg RT fact -> Trino semantic views -> Metabase operations dashboard (health metrics + recommendation preview)`
 
 ## Decision Consumers and Cadence
 
@@ -38,7 +38,7 @@ Delivery path:
 1. Reduce time-to-distribution for high-potential content via faster `BOOST` decisions.
 2. Reduce unsafe amplification by routing risky high-momentum content to `REVIEW` earlier.
 3. Improve creator-side fairness by rescuing high-quality but under-exposed new uploads.
-4. Reduce decision variance across ops teams with one governed realtime action interface.
+4. Reduce decision variance across ops teams with one governed realtime decision-preview interface.
 
 ## Business Impact Model (KPI Tree)
 
@@ -54,7 +54,7 @@ Driver KPIs (M1 targets):
 
 Guardrails:
 
-1. Realtime freshness breaches trigger degraded mode.
+1. Realtime freshness breaches trigger degraded-status handling and manual review.
 2. RT vs T+1 reconciliation error stays within thresholds:
    - count p95 `<= 0.08`
    - rate p95 absolute diff `<= 0.03`
@@ -70,39 +70,36 @@ content_events + cdc.content.videos
         -> Spark Structured Streaming
         -> Iceberg tables (bronze / dims / gold)
         -> Trino semantic serving
-        -> Metabase recommendation preview (M1)
+        -> Metabase operations dashboard (health metrics + recommendation preview)
 ```
 
-## Decision Contract and Governance (M3 Reference)
+## Action Queue Scope (M3 Reference)
 
-1. Operational action queue semantics are deferred to M3.
-2. Action queue is a current-state table (upsert/update) and stores actionable outcomes only (`BOOST`, `REVIEW`, `RESCUE`).
-3. Priority order is fixed: `BOOST > REVIEW > RESCUE > NO_ACTION`.
-4. Cooldown is enforced: max 1 action per `video_id` per 60 minutes.
-5. Expiration is explicit:
-   - `BOOST`: `+15m`
-   - `REVIEW`: `+30m`
-   - `RESCUE`: `+30m`
-6. Every action includes `rule_version` and `reason_codes` for auditability.
+1. Operational action-queue execution is deferred to M3 and is out of M1 scope.
+2. M3 queue scope and lifecycle reference:
+   - `docs/architecture/realtime-decisioning/m3-action-queue-reference.md`
 
 ## Reliability Controls
 
 1. SLA target: event-to-preview freshness latency `P95 < 3 minutes`.
-2. Degraded mode:
-   - freshness `P95 > 3m` for 5 minutes: keep `REVIEW` only
-   - freshness `> 10m` or ingestion outage: pause all actions
+2. Freshness response:
+   - freshness `P95 > 3m` for 5 minutes: mark serving status as degraded and require manual review before operational use
+   - freshness `> 10m` or ingestion outage: mark serving status as stale and block sign-off until healthy again
 3. Recovery requires 15 consecutive healthy minutes.
-4. Late data may update open actions (`PENDING`, `ACKED`), but terminal actions are not auto-reopened.
-5. Rule rollout is gated by reconciliation health (`WARN`/`CRIT` freeze behavior).
+4. Late-event impact is tracked via watermark/drop counters and reconciliation metrics.
+5. Rule rollout guard:
+   - `WARN`: manual review required before promoting new `rule_version`
+   - `CRIT`: block promotion until reconciliation returns to PASS
+   - automated blocking workflow is deferred to M3
 
 ## Scope Boundaries (M1)
 
 In scope:
 
 1. Realtime decisioning for `BOOST`, `REVIEW`, `RESCUE`
-2. Trino semantic serving views and Metabase recommendation preview
+2. Trino semantic serving views and Metabase operations dashboard (health metrics + recommendation preview)
 3. Global RT vs T+1 reconciliation baseline
-4. Rule versioning and degraded mode behavior
+4. Rule version traceability and freshness-response observability
 
 Out of scope:
 
@@ -115,7 +112,7 @@ Out of scope:
 
 M1 is considered successful when:
 
-1. Semantic serving views and recommendation preview are generated and queryable on 1-minute cadence.
+1. Semantic serving views, health metrics, and recommendation preview are generated and queryable on 1-minute cadence.
 2. Decision preview logic matches metric and policy contracts.
 3. Serving contract constraints hold (grain uniqueness, required fields, valid decision preview domain, rule-version traceability).
 4. Freshness and degraded-mode behavior meet streaming and serving contracts.
@@ -127,7 +124,7 @@ M1 is considered successful when:
 2. [Business Decision PRD & KPI Tree (M1)](docs/product/business-decision-prd-kpi-tree.md)
 3. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
 4. [Metric Contract](docs/architecture/realtime-decisioning/metric-contract.md)
-5. [Action Queue Contract (M3 Reference)](docs/architecture/realtime-decisioning/action-queue-contract.md)
+5. [M3 Action Queue Scope and Reference](docs/architecture/realtime-decisioning/m3-action-queue-reference.md)
 6. [Reconciliation and SLO](docs/architecture/realtime-decisioning/reconciliation-and-slo.md)
 7. [Acceptance Criteria (M1)](docs/architecture/realtime-decisioning/acceptance-criteria.md)
 8. [Streaming Execution Contract](docs/architecture/streaming/spark-realtime-jobs-contract-m1.md)
