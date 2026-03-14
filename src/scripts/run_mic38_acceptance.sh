@@ -4,6 +4,46 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
+KEEP_JOBS_RUNNING="${KEEP_JOBS_RUNNING:-0}"
+
+usage() {
+  cat <<'EOF'
+Usage: run_mic38_acceptance.sh [--reset-checkpoints] [--keep-jobs-running]
+
+Options:
+  --reset-checkpoints  Remove streaming checkpoint paths before starting jobs.
+  --keep-jobs-running  Do not stop started Spark jobs on script exit.
+  -h, --help           Show this help.
+
+Equivalent env flags:
+  RESET_CHECKPOINTS=1
+  KEEP_JOBS_RUNNING=1
+EOF
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --reset-checkpoints)
+      RESET_CHECKPOINTS=1
+      shift
+      ;;
+    --keep-jobs-running)
+      KEEP_JOBS_RUNNING=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "[MIC-38] ERROR: unknown argument '$1'" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
 DEFAULT_PYTHON_BIN="python3"
 if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
@@ -45,6 +85,9 @@ SPARK_JOB_READY_SLEEP_SECONDS="${SPARK_JOB_READY_SLEEP_SECONDS:-3}"
 RUN_CONTEXT="mic38:${MIC38_RUN_ID}"
 CONTENT_JOB_LOG="/tmp/${MIC38_RUN_ID}_content_agg.log"
 CDC_JOB_LOG="/tmp/${MIC38_RUN_ID}_cdc_upsert.log"
+CONTENT_JOB_PATTERN="[r]t_content_events_aggregator.py"
+CDC_JOB_PATTERN="[r]t_video_cdc_upsert.py"
+STARTED_SPARK_JOBS=0
 
 ARTIFACT_DIR="${MIC38_ARTIFACT_DIR:-artifacts/mic38_signoff/${MIC38_RUN_ID}}"
 CONTENT_METRICS_LOG="${ARTIFACT_DIR}/content_metrics.log"
@@ -114,6 +157,37 @@ stop_spark_job_if_running() {
   local pattern="$1"
   docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/${pattern}/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
 }
+
+stop_mic38_spark_jobs() {
+  stop_spark_job_if_running "$CONTENT_JOB_PATTERN"
+  stop_spark_job_if_running "$CDC_JOB_PATTERN"
+}
+
+reset_checkpoints() {
+  printf '[MIC-38] Resetting checkpoint directories...\n'
+  docker exec lakehouse-minio sh -lc "rm -rf \
+    /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 \
+    /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 \
+    /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
+}
+
+cleanup_on_exit() {
+  local exit_code="$1"
+  set +e
+  if [ "$KEEP_JOBS_RUNNING" = "1" ]; then
+    printf '[MIC-38] KEEP_JOBS_RUNNING=1, leaving Spark jobs running.\n'
+    return
+  fi
+  if [ "$STARTED_SPARK_JOBS" = "1" ]; then
+    printf '[MIC-38] Stopping Spark jobs started by this run...\n'
+    stop_mic38_spark_jobs || true
+  fi
+  return "$exit_code"
+}
+
+trap 'cleanup_on_exit $?' EXIT
 
 start_spark_job() {
   local script_path="$1"
@@ -202,6 +276,8 @@ printf '[MIC-38] run_context=%s\n' "$RUN_CONTEXT"
 printf '[MIC-38] cdc_video_id=%s\n' "$MIC38_VIDEO_ID"
 printf '[MIC-38] watermark_scenario=%s\n' "$MIC38_WATERMARK_SCENARIO"
 printf '[MIC-38] content_watermark=%s\n' "$RT_CONTENT_EVENTS_WATERMARK"
+printf '[MIC-38] reset_checkpoints=%s\n' "$RESET_CHECKPOINTS"
+printf '[MIC-38] keep_jobs_running=%s\n' "$KEEP_JOBS_RUNNING"
 printf '[MIC-38] max_freshness_minutes=%s\n' "$MAX_FRESHNESS_MINUTES"
 printf '[MIC-38] latency_threshold_minutes=%s\n' "$LATENCY_THRESHOLD_MINUTES"
 printf '[MIC-38] content_max_invalid_rate=%s\n' "$MAX_CONTENT_INVALID_RATE"
@@ -229,8 +305,10 @@ ensure_topic content_events 6
 ensure_topic cdc.content.videos 3
 
 printf '[MIC-38] Starting both Spark jobs for integrated E2E run...\n'
-stop_spark_job_if_running "[r]t_content_events_aggregator.py"
-stop_spark_job_if_running "[r]t_video_cdc_upsert.py"
+stop_mic38_spark_jobs
+if [ "$RESET_CHECKPOINTS" = "1" ]; then
+  reset_checkpoints
+fi
 
 # Start jobs sequentially to avoid Ivy/Maven cache races when resolving Spark packages.
 start_spark_job /home/iceberg/local/src/spark/rt_content_events_aggregator.py "$CONTENT_JOB_LOG"
@@ -240,6 +318,7 @@ wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$
 start_spark_job /home/iceberg/local/src/spark/rt_video_cdc_upsert.py "$CDC_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+STARTED_SPARK_JOBS=1
 
 RUN_START_MS="${RUN_START_MS:-$(now_ms)}"
 MIN_PROCESSED_AT_MS="${MIN_PROCESSED_AT_MS:-$RUN_START_MS}"

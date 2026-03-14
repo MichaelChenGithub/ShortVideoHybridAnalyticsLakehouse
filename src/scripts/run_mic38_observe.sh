@@ -53,6 +53,9 @@ PYTHON_BIN="${PYTHON_BIN:-$DEFAULT_PYTHON_BIN}"
 
 MIC38_RUN_ID="${MIC38_RUN_ID:-mic38_observe_$(date -u +%Y%m%dT%H%M%SZ)}"
 MIC38_VIDEO_ID="${MIC38_VIDEO_ID:-${MIC38_RUN_ID}_cdc_vid_001}"
+CONTENT_JOB_PATTERN="[r]t_content_events_aggregator.py"
+CDC_JOB_PATTERN="[r]t_video_cdc_upsert.py"
+STARTED_SPARK_JOBS=0
 
 WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_BOUNDED_RUN_SECONDS="${WAIT_AFTER_BOUNDED_RUN_SECONDS:-75}"
@@ -103,6 +106,22 @@ stop_spark_job_if_running() {
   docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/${pattern}/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
 }
 
+stop_mic38_spark_jobs() {
+  stop_spark_job_if_running "$CONTENT_JOB_PATTERN"
+  stop_spark_job_if_running "$CDC_JOB_PATTERN"
+}
+
+cleanup_on_error() {
+  local exit_code="$1"
+  set +e
+  if [ "$exit_code" -ne 0 ] && [ "$STARTED_SPARK_JOBS" = "1" ]; then
+    printf '[MIC-38-OBSERVE] Script failed (exit=%s), stopping Spark jobs started by this run...\n' "$exit_code" >&2
+    stop_mic38_spark_jobs || true
+  fi
+}
+
+trap 'cleanup_on_error $?' EXIT
+
 start_spark_job() {
   local script_path="$1"
   local log_file="$2"
@@ -149,8 +168,7 @@ ensure_topic content_events 6
 ensure_topic cdc.content.videos 3
 
 printf '[MIC-38-OBSERVE] Restarting Spark jobs for clean observation window...\n'
-stop_spark_job_if_running "[r]t_content_events_aggregator.py"
-stop_spark_job_if_running "[r]t_video_cdc_upsert.py"
+stop_mic38_spark_jobs
 if [ "$RESET_CHECKPOINTS" = "1" ]; then
   reset_checkpoints
 fi
@@ -162,6 +180,7 @@ wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$
 start_spark_job /home/iceberg/local/src/spark/rt_video_cdc_upsert.py "$CDC_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+STARTED_SPARK_JOBS=1
 
 printf '[MIC-38-OBSERVE] Emitting bounded generator traffic (MIC-38 shared run shape)...\n'
 "$PYTHON_BIN" src/generator/m1_bounded_run.py \
