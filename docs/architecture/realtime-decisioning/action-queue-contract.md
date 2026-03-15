@@ -1,5 +1,4 @@
-# Contract: Realtime Action Queue (Current-State, M1)
-
+# Contract: Realtime Action Queue
 ## 1. Purpose
 
 `lakehouse.gold.rt_action_queue` is the operational queue for realtime business actions.

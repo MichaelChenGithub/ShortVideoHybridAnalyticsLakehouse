@@ -1,4 +1,4 @@
-"""Verify MIC-39 content contract enforcement for valid and quarantine sinks."""
+"""Verify CONTENT-CONTRACT content contract enforcement for valid and quarantine sinks."""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def validate_content_contract_snapshot(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify MIC-39 content contract enforcement")
+    parser = argparse.ArgumentParser(description="Verify CONTENT-CONTRACT content contract enforcement")
     parser.add_argument("--raw-table", default=DEFAULT_RAW_TABLE)
     parser.add_argument("--gold-table", default=DEFAULT_GOLD_TABLE)
     parser.add_argument("--invalid-table", default=DEFAULT_INVALID_TABLE)
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if errors:
-        print("FAIL: MIC-39 verification failed")
+        print("FAIL: CONTENT-CONTRACT verification failed")
         for err in errors:
             print(f" - {err}")
         return 1
@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         "invalid_table": args.invalid_table,
         "min_ingested_at_ms": args.min_ingested_at_ms,
     }
-    print("PASS: MIC-39 verification succeeded")
+    print("PASS: CONTENT-CONTRACT verification succeeded")
     print(json.dumps(printable, default=str, sort_keys=True))
     return 0
 

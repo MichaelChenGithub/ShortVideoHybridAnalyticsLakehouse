@@ -1,0 +1,281 @@
+# Design Doc: Trino Semantic Layer and Serving Contract
+
+Date: `2026-03-08`  
+Status: `Draft`
+
+## 1. Purpose
+
+Define stable consumer-facing semantic interfaces between:
+
+1. source fact table `lakehouse.gold.rt_video_stats_1min`
+2. metadata table `lakehouse.dims.dim_videos`
+3. BI/dashboard SQL consumers
+
+This document standardizes:
+
+1. semantic view inventory and naming conventions
+2. view-to-metric and view-to-decision-preview mappings
+3. serving contracts (grain, keys, required fields, freshness expectations)
+4. read-time join and performance guardrails for demo-safe Trino workloads
+5. explicit boundary with M3 deferred scope
+
+## 2. Scope
+
+In scope (M1 + M2):
+
+1. Trino semantic views for BI/dashboard queries
+2. contract definitions for metric-serving and decision-preview views
+3. traceability requirements for `rule_version`
+4. join compatibility and query safety constraints for realtime dashboards
+
+Out of scope (deferred):
+
+1. queue-serving views (`v_rt_action_queue_current`, `v_rt_action_queue_active`) and execution semantics (Future Plan)
+2. replacing Gold tables as source of truth (not planned in M1/M2)
+3. full production hardening and advanced performance optimization
+4. advanced automation workflows deferred to future plan (`docs/milestone/future-plan.md`)
+
+## 3. Contract Precedence
+
+Authoritative upstream contracts:
+
+1. `docs/architecture/data-model/data-model-contract.md`
+2. `docs/architecture/realtime-decisioning/metric-contract.md`
+3. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
+4. `docs/architecture/realtime-decisioning/action-queue-future-plan.md`
+
+Conflict resolution for this design:
+
+1. metric and reliability contracts are authoritative for serving semantics
+2. semantic views must not redefine metric formulas independently
+3. if documentation text conflicts with upstream contracts, this serving doc follows the contract files listed above
+
+## 4. Semantic Schema and Naming Convention
+
+Serving schema:
+
+1. `lakehouse.serving`
+
+Naming convention:
+
+1. view prefix must be `v_`
+2. realtime domain segment must be `rt`
+3. subject and window must be explicit in name (`video_metrics_30m_1m`, `video_decision_context_30m_1m`)
+4. grain hint should be encoded when not obvious (`_1m` for per-minute grain)
+5. breaking semantic changes require a new versioned view name suffix (`_v2`, `_v3`)
+6. additive columns are allowed without version bump
+
+## 5. Semantic View Inventory
+
+### 5.1 `lakehouse.serving.v_rt_video_metrics_30m_1m`
+
+Purpose:
+
+1. BI-friendly rolling 30-minute metric view derived from 1-minute fact
+2. platform-level health and coverage trend source for Ops dashboards
+
+Primary source:
+
+1. `lakehouse.gold.rt_video_stats_1min`
+
+Grain:
+
+1. `video_id + metric_minute`
+
+Key required fields:
+
+1. `video_id`
+2. `metric_minute`
+3. `impressions_30m`
+4. `play_start_30m`
+5. `play_finish_30m`
+6. `likes_30m`
+7. `shares_30m`
+8. `skips_30m`
+9. `velocity_30m`
+10. `completion_rate_30m`
+11. `skip_rate_30m`
+12. `processed_at_max`
+
+### 5.2 `lakehouse.serving.v_rt_video_decision_context_30m_1m`
+
+Purpose:
+
+1. traceable decision-preview context for table drill-down and root-cause analysis
+2. enrich rolling metrics with metadata and threshold context used by decision mapping
+
+Primary sources:
+
+1. `lakehouse.serving.v_rt_video_metrics_30m_1m`
+2. `lakehouse.dims.dim_videos`
+
+Grain:
+
+1. `video_id + metric_minute`
+
+Key required fields:
+
+1. `video_id`
+2. `metric_minute`
+3. `category`
+4. `region`
+5. `status`
+6. `upload_time`
+7. `upload_age_minutes`
+8. `velocity_30m`
+9. `completion_rate_30m`
+10. `skip_rate_30m`
+11. `rule_version`
+12. `candidate_flag`
+13. `quality_gate_pass`
+14. `under_exposed_flag`
+15. `decision_type_preview`
+16. `p90_velocity_threshold`
+17. `p40_impressions_threshold`
+18. `processed_at_max`
+
+## 6. View-to-Metric and Decision-Preview Mapping
+
+`rt_video_stats_1min` to semantic metrics:
+
+1. `metric_minute = window_start`
+2. `impressions_30m = sum(impressions)` over event-time range `[metric_minute - 29m, metric_minute]`
+3. `play_start_30m = sum(play_start)` over the same 30-minute range
+4. `play_finish_30m = sum(play_finish)` over the same 30-minute range
+5. `likes_30m = sum(likes)` over the same 30-minute range
+6. `shares_30m = sum(shares)` over the same 30-minute range
+7. `skips_30m = sum(skips)` over the same 30-minute range
+8. `velocity_30m = (likes_30m + 5 * shares_30m) / max(impressions_30m, 100)`
+9. `completion_rate_30m = play_finish_30m / max(play_start_30m, 1)`
+10. `skip_rate_30m = skips_30m / max(play_start_30m, 1)`
+
+`decision_type_preview` derivation contract:
+
+1. semantic meaning must follow `docs/architecture/realtime-decisioning/metric-contract.md` section 4 (`Decision Mapping`)
+2. preview output domain: `BOOST`, `REVIEW`, `RESCUE`, `NO_ACTION`
+3. implementation must use the same threshold inputs (`p90`, `p40`) and gate definitions declared in the metric contract
+4. recommendation preview is traceability-oriented and does not imply queue execution semantics
+
+Quantile baseline standard (`p90` / `p40`):
+
+1. baseline source: `lakehouse.dims.rt_rule_quantile_baselines`
+2. candidate threshold: global `p90` on `velocity_30m`
+3. under-exposure threshold: global `p40` on `impressions_30m`
+4. baseline refresh cadence: daily after batch publish completion
+
+`rule_version` propagation strategy:
+
+1. use fixed `rule_version = rt_rules_v1` for semantic views and baseline joins in current scope
+2. baseline rows for the locked version are immutable after publish
+3. `v_rt_video_decision_context_30m_1m` must join baselines by locked `rule_version`; current scope uses global baseline rows only
+4. BI panels must filter or group by `rule_version` to avoid cross-version mixing
+5. future extension (post-batch/backfill): switch to effective-date version selection using `metric_minute` against baseline validity range
+
+## 7. Serving Contracts
+
+### 7.1 Contract: `v_rt_video_metrics_30m_1m`
+
+1. key uniqueness: `video_id + metric_minute` must be unique
+2. required fields from section 5.1 must be non-null except rate fields when denominator is zero by policy
+3. formula compatibility must match `metric-contract.md` exactly
+4. freshness expectation:
+   - healthy target: latest `metric_minute` lag `<= 3 minutes` at p95
+   - severe breach threshold: lag `> 10 minutes`
+
+### 7.2 Contract: `v_rt_video_decision_context_30m_1m`
+
+1. join key: `video_id`
+2. join type: `LEFT JOIN` from metrics view to `dim_videos`
+3. grain safety: output row count per `video_id + metric_minute` must not exceed input metrics row count
+4. missing-dimension fallback: null dimension context must not produce unsafe boost interpretation
+5. `rule_version` is mandatory and must identify the baseline used for threshold interpretation
+6. threshold fields (`p90_velocity_threshold`, `p40_impressions_threshold`) must come from the same `rule_version`
+7. `under_exposed_flag` must be computed using global `p40`
+8. `decision_type_preview` must follow `metric-contract.md` decision mapping and must not introduce independent rules
+
+## 8. Read-Time Join and Query Guardrails (Demo-Safe)
+
+Allowed join path:
+
+1. `v_rt_video_metrics_30m_1m.video_id = dim_videos.video_id`
+
+Guardrails:
+
+1. joins must preserve `video_id + metric_minute` grain
+2. no fact-to-fact read-time joins in dashboard queries
+3. realtime dashboard queries must include bounded time filter on `metric_minute`
+4. ranking queries must use `ORDER BY ... LIMIT ...`
+5. avoid `SELECT *` in BI production queries; explicitly select required fields
+6. dashboard default refresh query window should be `<= 4 hours` unless explicitly marked as backfill/analysis mode
+7. semantic views are logical interfaces; no requirement to materialize data in serving schema
+
+Compatibility checks:
+
+1. run a grain-safety check query before publishing dashboard SQL
+2. run freshness lag checks for `metric_minute` and `processed_at_max`
+3. run null-rate checks on required serving fields
+
+Retention policy note for `rt_video_stats_1min`:
+
+1. 30 minutes is a metric window, not a table retention window
+2. do not purge rows only because `window_start` is older than 30 minutes
+3. retention should follow operational/reconciliation needs (for example 7 to 30 days) plus Iceberg maintenance routines
+
+## 9. BI Consumption Contract
+
+Default BI consumption pattern:
+
+1. global distribution and health/coverage trend panels use `v_rt_video_metrics_30m_1m`
+2. recommendation traceability and actionable-preview panels use `v_rt_video_decision_context_30m_1m`
+
+Expected BI simplification outcome:
+
+1. BI SQL should not reimplement rolling-window formulas
+2. BI SQL should not reimplement decision-preview derivation
+3. BI SQL should consume stable, named semantic fields and contracts
+
+## 10. Boundary with Future Plan (Future Plan)
+
+Current boundary:
+
+1. Trino semantic contract is defined and queryable for metrics and decision preview.
+2. Contract checks may be script-based/manual where needed in current scope.
+3. Gold tables remain canonical sources for serving interfaces.
+
+Deferred boundary:
+
+1. Action-queue execution and queue-serving views are deferred.
+2. Advanced semantic automation workflows are deferred.
+3. Canonical deferred-scope reference:
+   - `docs/milestone/future-plan.md`
+
+## 11. Acceptance Mapping
+
+1. view-to-decision-preview mapping explicit:
+   - covered by sections 5, 6, and 9
+2. serving definitions consistent with realtime contracts:
+   - covered by sections 3 and 7
+3. BI SQL can proceed without semantic ambiguity:
+   - covered by sections 4, 5, 8, and 9
+4. Future-plan boundaries documented:
+   - covered by section 10
+
+## 12. Locked Decisions (Current Scope)
+
+1. Gold tables remain source of truth; serving layer is a read-only semantic interface.
+2. `p90/p40` thresholds are governed by published quantile baselines; current scope uses global-only thresholds.
+3. `rule_version` is mandatory on decision-context serving paths for traceability.
+4. `rule_version` is locked to `rt_rules_v1` in current scope.
+5. split-view strategy is retained:
+   - `v_rt_video_metrics_30m_1m` for global/trend analysis
+   - `v_rt_video_decision_context_30m_1m` for traceable metadata-rich drill-down
+6. queue execution semantics are deferred to future plan (`docs/milestone/future-plan.md`).
+
+## 13. Future Plan
+
+1. add cohort `p40` baselines by `category + region` for under-exposure thresholding
+2. add cohort/global fallback selection in semantic SQL:
+   - use cohort `p40` when `sample_size >= 200`
+   - fallback to global `p40` when cohort `sample_size < 200`
+3. add fallback marker semantics for BI traceability in decision-context serving fields
+4. extend baseline selection to effective-date multi-version mode using `metric_minute` against baseline validity range

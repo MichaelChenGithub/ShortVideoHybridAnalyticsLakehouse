@@ -1,6 +1,6 @@
--- MIC-55: Canonical serving view for rolling 30-minute video metrics.
+-- Realtime metrics serving view for rolling 30-minute video metrics.
 -- Contract refs:
--- - docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md (sections 5.1, 6, 7.1)
+-- - docs/architecture/serving/trino-realtime-semantic-serving-contract.md (sections 5.1, 6, 7.1)
 -- - docs/architecture/realtime-decisioning/metric-contract.md
 
 CREATE SCHEMA IF NOT EXISTS lakehouse.serving;
@@ -39,7 +39,7 @@ SELECT
     processed_at_max
 FROM minute_rollup;
 
--- Minimal executable freshness check query (MIC-55 acceptance #4).
+-- Minimal executable freshness check query (freshness acceptance #4).
 -- Healthy target <= 180s; severe breach > 600s.
 SELECT
     current_timestamp AS checked_at,
@@ -47,9 +47,9 @@ SELECT
     date_diff('second', MAX(metric_minute), current_timestamp) AS lag_seconds
 FROM lakehouse.serving.v_rt_video_metrics_30m_1m;
 
--- MIC-56: Traceable decision-context serving view for recommendation preview.
+-- Decision-context serving view for recommendation preview.
 -- Contract refs:
--- - docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md (sections 5.2, 6, 7.2)
+-- - docs/architecture/serving/trino-realtime-semantic-serving-contract.md (sections 5.2, 6, 7.2)
 -- - docs/architecture/realtime-decisioning/metric-contract.md
 CREATE OR REPLACE VIEW lakehouse.serving.v_rt_video_decision_context_30m_1m AS
 WITH locked_global_baselines AS (
@@ -157,7 +157,7 @@ SELECT
     processed_at_max
 FROM decision_inputs;
 
--- MIC-56 acceptance check: grain safety (`video_id + metric_minute`) must be preserved.
+-- decision-context acceptance check: grain safety (`video_id + metric_minute`) must be preserved.
 WITH metrics_grain AS (
     SELECT
         video_id,

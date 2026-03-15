@@ -1,4 +1,4 @@
-# Business Decision PRD & KPI Tree (M1 + M2 Scope)
+# Business Decision PRD & KPI Tree
 
 ## 1. Document Purpose
 
@@ -15,7 +15,7 @@ Short-video operations and analytics teams need a unified platform that supports
 
 Without a governed realtime + batch platform, operational response is delayed, analytics are inconsistent, and outcomes are hard to audit.
 
-## 3. Business Objective (M1 + M2)
+## 3. Business Objective
 
 Deliver a coherent decision + analytics platform that provides:
 
@@ -34,22 +34,21 @@ Deliver a coherent decision + analytics platform that provides:
 
 ## 5. In Scope and Out of Scope
 
-### 5.1 In Scope (M1 + M2)
-
+### 5.1 In Scope
 1. Realtime decision preview (`BOOST`, `REVIEW`, `RESCUE`) and health metrics.
 2. Batch metric expansion for retention, engagement, and sessionization.
 3. Semantic serving contracts and dbt quality/test coverage.
 4. Cloud baseline deployment and scale benchmark evidence.
 5. Rule version traceability and freshness-response observability.
 
-### 5.2 Out of Scope (Deferred to M3)
+### 5.2 Out of Scope (Deferred)
 
 1. T+1 reconciliation implementation and operationalization.
 2. Operational `rt_action_queue` execution and queue-consumer automation.
 3. Automated degraded-mode switching and automated rollout blocking workflow.
 4. Full autonomous policy optimization loop in production.
 
-## 6. KPI Tree (M1 + M2)
+## 6. KPI Tree
 
 ### 6.1 North Star
 
@@ -76,7 +75,7 @@ Coverage baseline: at minimum, batch outputs are analyzable by `date x category 
 5. `Semantic Quality Coverage`  
 Definition: core semantic data products pass defined quality gates before daily publish for stable cross-team interpretation and reuse.
 Target: daily publish availability for core semantic products `>= 99%`.
-Implementation details: quality gate implementation is defined in `docs/architecture/quality/dbt-semantic-quality-contract-m2.md`.
+Implementation details: quality gate implementation is defined in `docs/architecture/quality/dbt-semantic-quality-contract.md`.
 
 6. `Cloud Scale Evidence`  
 Definition: benchmark artifacts report supported throughput/volume and freshness behavior for business reporting continuity.
@@ -124,7 +123,7 @@ Publish contract:
 1. Batch outcomes are publishable data products (not queue actions).
 2. Outputs must satisfy batch freshness/completeness and semantic/dbt quality gates before release.
 
-## 8. Success Criteria (M1 + M2)
+## 8. Success Criteria
 
 M1 + M2 scope is considered complete when:
 
@@ -155,12 +154,12 @@ Mitigation: keep deferred scope centralized and explicit in future-plan referenc
 
 ## 10. Linked Contracts and Scope Anchors
 
-1. `docs/milestone/m1_scope.md`
-2. `docs/milestone/m2_scope.md`
-3. `docs/milestone/m3_scope.md`
+1. `docs/milestone/delivered-scope.md`
+2. `docs/milestone/current-scope.md`
+3. `docs/milestone/future-plan.md`
 4. `docs/architecture/realtime-decisioning/metric-contract.md`
-5. `docs/architecture/realtime-decisioning/acceptance-criteria.md`
+5. `docs/architecture/realtime-decisioning/acceptance-domain-realtime.md`
 6. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
-7. `docs/architecture/batch-analytics/batch-metrics-contract-m2.md`
-8. `docs/architecture/quality/dbt-semantic-quality-contract-m2.md`
-9. `docs/architecture/cloud/aws-deployment-and-scale-benchmark-m2.md`
+7. `docs/architecture/batch-analytics/batch-metrics-contract.md`
+8. `docs/architecture/quality/dbt-semantic-quality-contract.md`
+9. `docs/architecture/cloud/aws-deployment-and-scale-benchmark.md`

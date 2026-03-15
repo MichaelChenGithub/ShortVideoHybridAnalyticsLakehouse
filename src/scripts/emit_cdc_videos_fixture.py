@@ -1,4 +1,4 @@
-"""Emit deterministic CDC fixtures for MIC-37 insert/update/tie-break checks."""
+"""Emit deterministic CDC fixtures for CDC-UPSERT insert/update/tie-break checks."""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def expected_final_state(events: List[FixtureEvent]) -> FixtureSummary:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Emit deterministic CDC fixtures for MIC-37")
+    parser = argparse.ArgumentParser(description="Emit deterministic CDC fixtures for CDC-UPSERT")
     parser.add_argument("--bootstrap-servers", default="localhost:9092")
     parser.add_argument("--topic", default=DEFAULT_TOPIC)
     parser.add_argument("--video-id", required=True)
@@ -105,7 +105,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _emit_to_kafka(topic: str, bootstrap_servers: str, events: List[FixtureEvent], sleep_ms: int) -> None:
     from confluent_kafka import Producer
 
-    producer = Producer({"bootstrap.servers": bootstrap_servers, "client.id": "mic37-fixture-emitter"})
+    producer = Producer({"bootstrap.servers": bootstrap_servers, "client.id": "cdc-upsert-fixture-emitter"})
 
     for event in events:
         producer.produce(topic, key=event.key, value=json.dumps(event.payload))

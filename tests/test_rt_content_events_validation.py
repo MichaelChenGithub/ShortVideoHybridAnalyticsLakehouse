@@ -33,7 +33,7 @@ class RtContentEventsValidationTests(unittest.TestCase):
             )
         )
 
-    def test_error_precedence_matches_mic39_contract(self) -> None:
+    def test_error_precedence_matches_content_contract_contract(self) -> None:
         self.assertEqual(
             classify_contract_error_code(
                 parse_error=True,

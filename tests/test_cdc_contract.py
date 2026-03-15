@@ -12,10 +12,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from generator.m1.clock import SimulatedClock
-from generator.m1.config import load_run_config
-from generator.m1.runner import BoundedRunGenerator
-from generator.m1.sink import InMemoryEventSink
+from generator.bounded_run.clock import SimulatedClock
+from generator.bounded_run.config import load_run_config
+from generator.bounded_run.runner import BoundedRunGenerator
+from generator.bounded_run.sink import InMemoryEventSink
 
 from common import build_config, write_config
 

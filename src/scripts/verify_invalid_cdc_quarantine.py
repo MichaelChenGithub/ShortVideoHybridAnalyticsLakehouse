@@ -1,4 +1,4 @@
-"""Verify MIC-43 CDC invalid quarantine table contract fields."""
+"""Verify CDC-CONTRACT CDC invalid quarantine table contract fields."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def validate_invalid_quarantine(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify MIC-43 invalid CDC quarantine data")
+    parser = argparse.ArgumentParser(description="Verify CDC-CONTRACT invalid CDC quarantine data")
     parser.add_argument("--table", default=DEFAULT_TABLE)
     parser.add_argument("--lookback-minutes", type=int, default=30)
     parser.add_argument("--min-row-count", type=int, default=1)

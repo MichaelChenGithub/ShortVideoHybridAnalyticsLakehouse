@@ -1,4 +1,4 @@
-# Metric Contract: Realtime Decision Metrics (M1)
+# Metric Contract: Realtime Decision Metrics
 
 ## 1. Data Grain
 
@@ -72,7 +72,7 @@ Under-exposed:
 8. Baseline rows are immutable after publish for a given `rule_version` and `effective_from`.
 9. Any threshold logic change requires a new `rule_version`.
 10. Baseline registry physical schema is defined in:
-   - `docs/architecture/data-model/m1-data-model-v1.md` (`5.9 lakehouse.dims.rt_rule_quantile_baselines`)
+   - `docs/architecture/data-model/data-model-contract.md` (`5.9 lakehouse.dims.rt_rule_quantile_baselines`)
 
 ## 6. Future Plan
 

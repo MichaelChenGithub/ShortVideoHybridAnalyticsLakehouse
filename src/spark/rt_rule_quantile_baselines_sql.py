@@ -1,4 +1,4 @@
-"""SQL builders for MIC-50 quantile baseline registry publish."""
+"""SQL builders for RULE-BASELINE quantile baseline registry publish."""
 
 from __future__ import annotations
 

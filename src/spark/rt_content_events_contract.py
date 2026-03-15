@@ -1,4 +1,4 @@
-"""Contract constants and runtime settings for MIC-39 content event enforcement."""
+"""Contract constants and runtime settings for CONTENT-CONTRACT content event enforcement."""
 
 from __future__ import annotations
 

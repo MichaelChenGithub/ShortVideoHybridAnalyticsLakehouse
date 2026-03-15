@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from generator.m1.config import ConfigError, load_run_config
+from generator.bounded_run.config import ConfigError, load_run_config
 
 from common import build_config, write_config
 

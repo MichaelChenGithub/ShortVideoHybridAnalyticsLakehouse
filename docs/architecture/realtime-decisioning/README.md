@@ -1,11 +1,11 @@
-# Realtime Decisioning (Realtime Scope, M3 Future Plan)
+# Realtime Decisioning
 
 This module defines realtime decisioning contracts for operational preview.
 
 Scope anchors:
 
-1. `docs/milestone/m2_scope.md`
-2. `docs/milestone/m3_scope.md`
+1. `docs/milestone/current-scope.md`
+2. `docs/milestone/future-plan.md`
 
 Scope boundary:
 
@@ -18,11 +18,11 @@ Upstream business spec:
 
 Upstream model spec:
 
-1. `docs/architecture/data-model/m1-data-model-v1.md`
+1. `docs/architecture/data-model/data-model-contract.md`
 
 Upstream streaming execution spec:
 
-1. `docs/architecture/streaming/spark-realtime-jobs-contract-m1.md`
+1. `docs/architecture/streaming/spark-realtime-jobs-contract.md`
 
 ## 1. Business Decisions in Scope
 
@@ -51,17 +51,17 @@ Serving surface:
 6. baseline publish semantics = insert-only (`rule_version + effective_from`)
 7. threshold scope = global `p90` (`velocity_30m`) + global `p40` (`impressions_30m`)
 
-## 4. Future Plan (Deferred to M3)
+## 4. Future Plan (Deferred)
 
-1. Queue execution semantics are outside M1 + M2 delivery scope.
-2. T+1 reconciliation implementation is outside M1 + M2 delivery scope.
-3. Automated degraded-mode switching and automated rollout blocking are outside M1 + M2 delivery scope.
+1. Queue execution semantics are outside current delivery scope.
+2. T+1 reconciliation implementation is outside current delivery scope.
+3. Automated degraded-mode switching and automated rollout blocking are outside current delivery scope.
 4. Canonical deferred-scope reference:
-   - `docs/milestone/m3_scope.md`
+   - `docs/milestone/future-plan.md`
 
 ## 5. Spec Files
 
 1. `metric-contract.md`
 2. `reconciliation-and-slo.md`
-3. `acceptance-criteria.md`
-4. `m3-action-queue-reference.md`
+3. `acceptance-domain-realtime.md`
+4. `action-queue-future-plan.md`

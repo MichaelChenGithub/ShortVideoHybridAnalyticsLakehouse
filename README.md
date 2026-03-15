@@ -21,7 +21,7 @@ At the same time, analytics stakeholders need trustworthy batch metrics to evalu
 
 Without a governed realtime + batch platform, actions are delayed, analytics are fragmented, and decisions are hard to audit end-to-end.
 
-## Project Goal (M1 + M2)
+## Project Goal
 
 Deliver a portfolio-ready analytics platform narrative that includes:
 
@@ -51,7 +51,7 @@ Realtime delivery path baseline:
 5. Improve cross-team analytics consistency with standardized batch metric definitions and semantic fields.
 6. Speed up analysis cycles by providing trusted, testable data products for operational and business reporting.
 
-## Platform Capabilities (M1 + M2)
+## Platform Capabilities
 
 1. Realtime decision preview path:
    - executable and auditable flow from generator/Kafka/Spark to Gold/Trino/BI
@@ -102,12 +102,12 @@ content_events + cdc.content.videos
         -> Metabase operations dashboard (health metrics + recommendation preview)
 ```
 
-## Deferred Scope (M3 Reference)
+## Deferred Scope (Future Plan Reference)
 
 1. Operational action-queue execution is deferred to M3.
 2. T+1 reconciliation implementation is deferred to M3.
 3. Canonical future plan:
-   - `docs/milestone/m3_scope.md`
+   - `docs/milestone/future-plan.md`
 
 ## Reliability Controls
 
@@ -125,7 +125,7 @@ content_events + cdc.content.videos
    - `CRIT`: block promotion until freshness/quality checks return to healthy
    - automated blocking workflow is deferred to M3
 
-## Scope Boundaries (M1 + M2)
+## Scope Boundaries
 
 In scope:
 
@@ -142,9 +142,9 @@ Out of scope:
 3. Automated policy optimization loop in production
 4. Automated degraded-mode switching and automated rollout blocking workflow
 
-## Platform Completion Criteria (M1 + M2)
+## Platform Completion Criteria
 
-M2 scope is considered complete when:
+Current scope is considered complete when:
 
 1. Semantic serving views, health metrics, and recommendation preview are generated and queryable on 1-minute cadence.
 2. Batch metrics for retention/engagement/sessionization are implemented and documented for analytics consumption.
@@ -155,18 +155,18 @@ M2 scope is considered complete when:
 ## Documentation Map (Source of Truth)
 
 1. [Docs Overview](docs/README.md)
-2. [Milestone 2 Scope (platform scope anchor)](docs/milestone/m2_scope.md)
-3. [Milestone 3 Scope (future plan anchor)](docs/milestone/m3_scope.md)
-4. [Milestone 1 Scope (delivered reference)](docs/milestone/m1_scope.md)
+2. [Current Scope (platform scope anchor)](docs/milestone/current-scope.md)
+3. [Future Plan (deferred scope anchor)](docs/milestone/future-plan.md)
+4. [Delivered Scope (reference)](docs/milestone/delivered-scope.md)
 5. [Business Decision PRD & KPI Tree](docs/product/business-decision-prd-kpi-tree.md)
 6. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
 7. [Metric Contract](docs/architecture/realtime-decisioning/metric-contract.md)
-8. [Acceptance Criteria](docs/architecture/realtime-decisioning/acceptance-criteria.md)
-9. [Streaming Execution Contract](docs/architecture/streaming/spark-realtime-jobs-contract-m1.md)
-10. [Kafka Contract](docs/architecture/messaging/kafka-topic-schema-retention-contract-m1.md)
-11. [Data Model Contract](docs/architecture/data-model/m1-data-model-v1.md)
-12. [Trino Semantic Layer and Serving Contract](docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md)
-13. [Generator Contract and Scenario Matrix](docs/architecture/generator/mock-event-generator-contract-scenario-matrix-m1.md)
+8. [Acceptance Criteria](docs/architecture/realtime-decisioning/acceptance-domain-realtime.md)
+9. [Streaming Execution Contract](docs/architecture/streaming/spark-realtime-jobs-contract.md)
+10. [Kafka Contract](docs/architecture/messaging/kafka-topic-schema-retention-contract.md)
+11. [Data Model Contract](docs/architecture/data-model/data-model-contract.md)
+12. [Trino Semantic Layer and Serving Contract](docs/architecture/serving/trino-realtime-semantic-serving-contract.md)
+13. [Generator Contract and Scenario Matrix](docs/architecture/generator/mock-event-generator-contract-and-scenario-matrix.md)
 
 Note:
 

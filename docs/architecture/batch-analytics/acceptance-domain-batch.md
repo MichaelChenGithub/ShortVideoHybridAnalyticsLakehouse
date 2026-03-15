@@ -1,4 +1,4 @@
-# Domain Acceptance Criteria: Batch Analytics (M2)
+# Domain Acceptance Criteria: Batch Analytics
 
 Status: Draft
 
@@ -36,6 +36,6 @@ Status: Draft
 3. Verification includes batch serving output checks for retention/engagement/sessionization domains.
 4. Verification artifacts are traceable by `data_date` and publish manifest record.
 
-## 5. Future Plan (Deferred to M3)
+## 5. Future Plan (Deferred)
 
-1. canonical deferred-scope reference: `docs/milestone/m3_scope.md`
+1. canonical deferred-scope reference: `docs/milestone/future-plan.md`

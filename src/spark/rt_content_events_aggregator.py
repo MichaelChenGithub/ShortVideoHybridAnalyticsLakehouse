@@ -1,4 +1,4 @@
-"""MIC-39 Spark streaming job for content event contract enforcement and aggregation."""
+"""CONTENT-CONTRACT Spark streaming job for content event contract enforcement and aggregation."""
 
 from __future__ import annotations
 
@@ -361,7 +361,7 @@ def main() -> None:
     spark.sparkContext.setLogLevel("WARN")
 
     print(
-        "MIC-39 scope: content contract validation enabled with invalid_events_content quarantine sink; "
+        "CONTENT-CONTRACT scope: content contract validation enabled with invalid_events_content quarantine sink; "
         "CDC enforcement remains out of scope."
     )
 

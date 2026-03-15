@@ -1,4 +1,4 @@
-"""Validation helpers for MIC-39 content contract enforcement."""
+"""Validation helpers for CONTENT-CONTRACT content contract enforcement."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def classify_contract_error_code(
     invalid_event_type: bool,
     invalid_payload_json: bool,
 ) -> str | None:
-    """Return the first matching MIC-39 contract error code by precedence."""
+    """Return the first matching CONTENT-CONTRACT contract error code by precedence."""
     if parse_error:
         return PARSE_ERROR
     if missing_required_field:
@@ -53,7 +53,7 @@ def classify_contract_error_code(
 
 
 def error_reason_for_code(error_code: str, missing_fields: Sequence[str] | None = None) -> str:
-    """Return a stable human-readable reason for a MIC-39 error code."""
+    """Return a stable human-readable reason for a CONTENT-CONTRACT error code."""
     if error_code == PARSE_ERROR:
         return "root payload is not valid JSON"
     if error_code == MISSING_REQUIRED_FIELD:

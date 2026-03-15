@@ -4,5 +4,5 @@ This folder contains message-bus contracts used by streaming producers and consu
 
 ## Current Specs
 
-1. `kafka-topic-schema-retention-contract-m1.md`
+1. `kafka-topic-schema-retention-contract.md`
 

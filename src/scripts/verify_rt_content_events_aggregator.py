@@ -1,4 +1,4 @@
-"""Verify MIC-40 content events aggregator health for Bronze and Gold outputs."""
+"""Verify CONTENT-AGGREGATOR content events aggregator health for Bronze and Gold outputs."""
 
 from __future__ import annotations
 
@@ -130,7 +130,7 @@ def validate_aggregator_snapshot(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify MIC-40 Bronze/Gold aggregator health")
+    parser = argparse.ArgumentParser(description="Verify CONTENT-AGGREGATOR Bronze/Gold aggregator health")
     parser.add_argument("--raw-table", default=DEFAULT_RAW_TABLE)
     parser.add_argument("--gold-table", default=DEFAULT_GOLD_TABLE)
     parser.add_argument("--min-raw-rows", type=int, default=1)
@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if errors:
-        print("FAIL: MIC-40 verification failed")
+        print("FAIL: CONTENT-AGGREGATOR verification failed")
         for err in errors:
             print(f" - {err}")
         return 1
@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         "raw_table": args.raw_table,
         "gold_table": args.gold_table,
     }
-    print("PASS: MIC-40 verification succeeded")
+    print("PASS: CONTENT-AGGREGATOR verification succeeded")
     print(json.dumps(printable, default=str, sort_keys=True))
     return 0
 

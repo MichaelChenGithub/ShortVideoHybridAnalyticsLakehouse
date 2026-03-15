@@ -1,4 +1,4 @@
-"""SQL builders and schema contract helpers for MIC-39 content aggregator."""
+"""SQL builders and schema contract helpers for CONTENT-CONTRACT content aggregator."""
 
 from __future__ import annotations
 

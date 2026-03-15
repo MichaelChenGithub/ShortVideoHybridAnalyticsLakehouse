@@ -31,7 +31,7 @@ Future scope (not required now):
 1. [`metric-contract.md`](metric-contract.md)
 2. [`action-queue-contract.md`](action-queue-contract.md)
 3. [`reconciliation-and-slo.md`](reconciliation-and-slo.md)
-4. [`acceptance-criteria.md`](acceptance-criteria.md)
+4. [`acceptance-domain-realtime.md`](acceptance-domain-realtime.md)
 
 ## 4. Current-State Queue Model
 

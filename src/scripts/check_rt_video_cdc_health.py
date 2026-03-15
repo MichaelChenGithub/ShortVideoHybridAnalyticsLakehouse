@@ -1,4 +1,4 @@
-"""Check MIC-43 CDC health signals: freshness and invalid-rate."""
+"""Check CDC-CONTRACT CDC health signals: freshness and invalid-rate."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def validate_cdc_health(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Check MIC-43 CDC freshness and invalid-rate")
+    parser = argparse.ArgumentParser(description="Check CDC-CONTRACT CDC freshness and invalid-rate")
     parser.add_argument("--dim-table", default=DEFAULT_DIM_TABLE)
     parser.add_argument("--invalid-table", default=DEFAULT_INVALID_TABLE)
     parser.add_argument("--max-freshness-minutes", type=int, default=10)
@@ -116,13 +116,13 @@ def main(argv: list[str] | None = None) -> int:
     metrics["min_ingested_at_ms"] = args.min_ingested_at_ms
 
     if errors:
-        print("FAIL: MIC-43 CDC health check failed")
+        print("FAIL: CDC-CONTRACT CDC health check failed")
         for err in errors:
             print(f" - {err}")
         print(json.dumps(metrics, sort_keys=True))
         return 1
 
-    print("PASS: MIC-43 CDC health check passed")
+    print("PASS: CDC-CONTRACT CDC health check passed")
     print(json.dumps(metrics, sort_keys=True))
     return 0
 

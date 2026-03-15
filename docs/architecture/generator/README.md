@@ -4,19 +4,19 @@ This folder contains synthetic data generator contracts used to validate realtim
 
 ## Current Specs
 
-1. `mock-event-generator-contract-scenario-matrix-m1.md`
+1. `mock-event-generator-contract-and-scenario-matrix.md`
 
-## MIC-34 Implementation Entry
+## Bounded Run Implementation Entry
 
 CLI entrypoint:
 
-1. `python src/generator/m1_bounded_run.py --config docs/architecture/generator/examples/m1_run_config.example.json --sink dry-run`
+1. `python src/generator/bounded_run_cli.py --config docs/architecture/generator/examples/bounded_run_config.example.json --sink dry-run`
 
 Notes:
 
 1. `--sink dry-run` writes local artifacts without Kafka dependency.
 2. `--sink kafka --bootstrap-servers localhost:9092` bootstraps topics before emission:
-   - missing topics are created with M1 local/dev defaults:
+   - missing topics are created with local/dev defaults:
      - `content_events`: 6 partitions, replication factor 1
      - `cdc.content.videos`: 3 partitions, replication factor 1
 3. startup validation runs immediately after bootstrap:
@@ -35,7 +35,7 @@ Notes:
 
 Kafka bootstrap + validation example:
 
-1. `python src/generator/m1_bounded_run.py --config docs/architecture/generator/examples/m1_run_config.example.json --sink kafka --bootstrap-servers localhost:9092 --content-events-min-partitions 6 --cdc-videos-min-partitions 3`
+1. `python src/generator/bounded_run_cli.py --config docs/architecture/generator/examples/bounded_run_config.example.json --sink kafka --bootstrap-servers localhost:9092 --content-events-min-partitions 6 --cdc-videos-min-partitions 3`
 
 Artifacts per run:
 
@@ -46,8 +46,8 @@ Artifacts per run:
 
 Scope guard:
 
-1. MIC-34 does not write `lakehouse.qa.*` tables.
+1. Bounded generator flow does not write `lakehouse.qa.*` tables.
 
 Acceptance report template:
 
-1. `docs/architecture/generator/m1_acceptance_report_template.md`
+1. `docs/architecture/generator/generator-acceptance-report-template.md`

@@ -8,15 +8,15 @@ Legacy docs remain in `legacy_docs/` and are intentionally untouched during this
 
 1. Keep business decisions, metric contracts, and acceptance criteria separate.
 2. Make docs easy to review, version, and audit.
-3. Present one coherent M1+M2 platform story for delivery and communication.
+3. Present one coherent delivered/current platform story for delivery and communication.
 
 ## Current Scope
 
-M1 + M2 platform scope:
+Delivered + current platform scope:
 
-1. M1 delivered scope captured as reference.
-2. M2 scope covers batch metrics expansion, semantic + dbt quality, and cloud deployment + scale benchmark.
-3. Deferred/conflicting items are centralized in M3 future plan.
+1. Delivered scope is captured as reference.
+2. Current scope covers batch metrics expansion, semantic + dbt quality, and cloud deployment + scale benchmark.
+3. Deferred/conflicting items are centralized in future plan.
 
 ## Big Picture
 
@@ -32,7 +32,7 @@ This documentation set covers end-to-end platform capabilities and impact:
 1. `architecture/`
    - Long-lived architecture and domain-level design specs.
 2. `architecture/realtime-decisioning/`
-   - Realtime metric definitions, policy rules, reconciliation, acceptance criteria, and M3 queue references.
+   - Realtime metric definitions, policy rules, reconciliation, acceptance criteria, and queue future-plan references.
 3. `architecture/data-model/`
    - Core model contracts and table-grain definitions.
 4. `architecture/messaging/`
@@ -46,7 +46,7 @@ This documentation set covers end-to-end platform capabilities and impact:
 8. `product/`
    - Business-layer PRD and KPI definitions that drive technical contracts.
 9. `milestone/`
-   - Milestone scope anchors (`m1_scope`, `m2_scope`, `m3_scope`) for delivered/current/future boundaries.
+   - Scope anchors (`delivered-scope`, `current-scope`, `future-plan`) for delivered/current/future boundaries.
 
 ## Ownership
 
@@ -55,25 +55,25 @@ This documentation set covers end-to-end platform capabilities and impact:
 
 ## Entry Points
 
-1. M2 scope anchor:
-   - `docs/milestone/m2_scope.md`
-2. M3 future plan anchor:
-   - `docs/milestone/m3_scope.md`
-3. M1 delivered scope anchor:
-   - `docs/milestone/m1_scope.md`
+1. Current scope anchor:
+   - `docs/milestone/current-scope.md`
+2. Future plan anchor:
+   - `docs/milestone/future-plan.md`
+3. Delivered scope anchor:
+   - `docs/milestone/delivered-scope.md`
 4. Business objective and KPI tree:
    - `docs/product/business-decision-prd-kpi-tree.md`
 5. Realtime technical contracts:
    - `docs/architecture/realtime-decisioning/`
 6. Data model baseline contracts:
-   - `docs/architecture/data-model/m1-data-model-v1.md`
+   - `docs/architecture/data-model/data-model-contract.md`
 7. Messaging contract for streaming interface:
-   - `docs/architecture/messaging/kafka-topic-schema-retention-contract-m1.md`
+   - `docs/architecture/messaging/kafka-topic-schema-retention-contract.md`
 8. Spark realtime execution contract:
-   - `docs/architecture/streaming/spark-realtime-jobs-contract-m1.md`
+   - `docs/architecture/streaming/spark-realtime-jobs-contract.md`
 9. Trino semantic layer and serving contract:
-   - `docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md`
+   - `docs/architecture/serving/trino-realtime-semantic-serving-contract.md`
 10. Mock event generator contract and scenario matrix:
-   - `docs/architecture/generator/mock-event-generator-contract-scenario-matrix-m1.md`
-11. Deferred M3 queue scope reference:
-   - `docs/architecture/realtime-decisioning/m3-action-queue-reference.md`
+   - `docs/architecture/generator/mock-event-generator-contract-and-scenario-matrix.md`
+11. Deferred queue scope reference:
+   - `docs/architecture/realtime-decisioning/action-queue-future-plan.md`

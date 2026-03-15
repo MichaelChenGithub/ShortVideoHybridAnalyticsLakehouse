@@ -11,7 +11,7 @@ if str(SRC_ROOT) not in sys.path:
 import unittest
 from unittest.mock import Mock, patch
 
-from generator.m1.preflight import (
+from generator.bounded_run.preflight import (
     KafkaPreflightError,
     TopicExpectation,
     bootstrap_kafka_topics,
@@ -205,7 +205,7 @@ class KafkaBootstrapPlanningTests(unittest.TestCase):
 class KafkaMetadataLoaderTests(unittest.TestCase):
     def test_loader_returns_partition_and_topic_error_maps(self) -> None:
         with patch(
-            "generator.m1.preflight._resolve_admin_client_class",
+            "generator.bounded_run.preflight._resolve_admin_client_class",
             return_value=_FakeAdminClientWithTopicError,
         ):
             partitions, replication_factors, errors = load_topic_metadata(
@@ -218,7 +218,7 @@ class KafkaMetadataLoaderTests(unittest.TestCase):
 
     def test_loader_raises_when_broker_metadata_fetch_fails(self) -> None:
         with patch(
-            "generator.m1.preflight._resolve_admin_client_class",
+            "generator.bounded_run.preflight._resolve_admin_client_class",
             return_value=_FakeAdminClientFail,
         ):
             with self.assertRaisesRegex(
@@ -236,7 +236,7 @@ class KafkaTopicCreateTests(unittest.TestCase):
         }
         expectations = build_default_topic_expectations()
         with patch(
-            "generator.m1.preflight._resolve_admin_types",
+            "generator.bounded_run.preflight._resolve_admin_types",
             return_value=(_FakeAdminClientCreate, _FakeNewTopic),
         ):
             created = create_missing_topics(
@@ -253,7 +253,7 @@ class KafkaTopicCreateTests(unittest.TestCase):
         }
         expectations = build_default_topic_expectations()
         with patch(
-            "generator.m1.preflight._resolve_admin_types",
+            "generator.bounded_run.preflight._resolve_admin_types",
             return_value=(_FakeAdminClientCreate, _FakeNewTopic),
         ):
             created = create_missing_topics(
@@ -269,7 +269,7 @@ class KafkaTopicCreateTests(unittest.TestCase):
         }
         expectations = (TopicExpectation(topic="content_events", min_partitions=6),)
         with patch(
-            "generator.m1.preflight._resolve_admin_types",
+            "generator.bounded_run.preflight._resolve_admin_types",
             return_value=(_FakeAdminClientCreate, _FakeNewTopic),
         ):
             with self.assertRaisesRegex(

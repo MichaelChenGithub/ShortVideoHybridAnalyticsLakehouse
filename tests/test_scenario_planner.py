@@ -10,8 +10,8 @@ if str(SRC_ROOT) not in sys.path:
 
 import unittest
 
-from generator.m1.constants import SCENARIO_KEYS
-from generator.m1.scenario import build_scenario_sequence, plan_event_counts, realized_mix
+from generator.bounded_run.constants import SCENARIO_KEYS
+from generator.bounded_run.scenario import build_scenario_sequence, plan_event_counts, realized_mix
 
 
 class ScenarioPlannerTests(unittest.TestCase):

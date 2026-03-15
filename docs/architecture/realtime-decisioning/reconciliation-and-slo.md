@@ -1,4 +1,4 @@
-# Reliability and SLO (M1 + M2)
+# Reliability and SLO
 
 ## 1. Runtime SLO
 
@@ -40,14 +40,14 @@ Recovery:
 6. publish manifest check: `lakehouse.gold.batch_publish_manifest` must contain a successful publish record for the same `data_date`.
 7. publish failures require manual operator review and rerun workflow before downstream use.
 
-## 4. M1 Reference Baseline (Non-M2 Scope)
+## 4. Realtime Baseline Reference (Historical)
 
 1. Watermark handling exists in M1 streaming logic, but explicit late-data monitoring and watermark-drop observability instrumentation are not part of M1+M2 delivery.
 2. Manual release-guard behavior (`WARN/CRIT` style operator review) is inherited as historical baseline, not an M2 delivery item.
 3. Reference scope anchor:
-   - `docs/milestone/m1_scope.md`
+   - `docs/milestone/delivered-scope.md`
 
-## 5. Future Plan (Deferred to M3)
+## 5. Future Plan (Deferred)
 
 1. T+1 reconciliation implementation and operationalization.
 2. Reconciliation formulas, thresholds, and automated policy gating.
@@ -56,4 +56,4 @@ Recovery:
 5. Automated release-guard workflows and rollout blocking.
 6. Explicit late-data monitoring and watermark-drop observability implementation.
 7. Canonical deferred-scope reference:
-   - `docs/milestone/m3_scope.md`
+   - `docs/milestone/future-plan.md`

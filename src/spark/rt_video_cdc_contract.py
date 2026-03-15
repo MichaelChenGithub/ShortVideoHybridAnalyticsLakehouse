@@ -1,4 +1,4 @@
-"""Contract constants and runtime settings for MIC-37 video CDC upsert."""
+"""Contract constants and runtime settings for CDC-UPSERT video CDC upsert."""
 
 from __future__ import annotations
 

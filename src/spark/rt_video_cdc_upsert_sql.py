@@ -1,4 +1,4 @@
-"""SQL builders for MIC-37 video CDC upsert job."""
+"""SQL builders for CDC-UPSERT video CDC upsert job."""
 
 from __future__ import annotations
 

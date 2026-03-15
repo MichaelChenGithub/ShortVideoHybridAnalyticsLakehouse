@@ -102,7 +102,7 @@ def main() -> None:
     args = _parse_args()
     spark = SparkSession.builder.appName("rt_rule_quantile_baselines_publish").getOrCreate()
     publish_global_m1_baselines(spark, args.table)
-    print(f"[MIC-50] Publish completed for table: {args.table}")
+    print(f"[RULE-BASELINE] Publish completed for table: {args.table}")
 
 
 if __name__ == "__main__":

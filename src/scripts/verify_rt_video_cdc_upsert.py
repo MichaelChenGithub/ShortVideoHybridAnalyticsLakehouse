@@ -1,4 +1,4 @@
-"""Verify MIC-37 CDC upsert health for dim_videos."""
+"""Verify CDC-UPSERT CDC upsert health for dim_videos."""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def validate_video_snapshot(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify MIC-37 dim_videos upsert health")
+    parser = argparse.ArgumentParser(description="Verify CDC-UPSERT dim_videos upsert health")
     parser.add_argument("--video-id", required=True)
     parser.add_argument("--table", default=DEFAULT_TABLE)
     parser.add_argument("--max-freshness-minutes", type=int, default=10)
@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if errors:
-        print("FAIL: MIC-37 verification failed")
+        print("FAIL: CDC-UPSERT verification failed")
         for err in errors:
             print(f" - {err}")
         return 1
@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         "source_ts_ms": row.get("source_ts_ms"),
         "checked_at": datetime.utcnow().isoformat() + "Z",
     }
-    print("PASS: MIC-37 verification succeeded")
+    print("PASS: CDC-UPSERT verification succeeded")
     print(json.dumps(printable, default=str, sort_keys=True))
     return 0
 

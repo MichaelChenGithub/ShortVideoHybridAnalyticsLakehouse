@@ -1,4 +1,4 @@
-# Domain Acceptance Criteria: Realtime Decisioning (M1 + M2)
+# Domain Acceptance Criteria: Realtime Decisioning
 
 Status: Draft
 
@@ -28,9 +28,9 @@ Status: Draft
 2. Recommendation distribution snapshots are captured for sign-off context.
 3. Deterministic replay checks confirm stable recommendation outcomes for fixed inputs.
 
-## 5. Future Plan (Deferred to M3)
+## 5. Future Plan (Deferred)
 
 1. `rt_action_queue` execution and queue-consumer validation.
 2. Automated degraded-mode switching and automated `WARN/CRIT` rollout blocking.
 3. Canonical deferred-scope reference:
-   - `docs/milestone/m3_scope.md`
+   - `docs/milestone/future-plan.md`
