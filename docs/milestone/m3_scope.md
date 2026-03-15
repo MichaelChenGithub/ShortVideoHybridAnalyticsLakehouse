@@ -14,6 +14,9 @@ When other docs mention deferred or conflicting scope, they should point here.
    - queue-serving views and consumer automation
 3. Automated degraded-mode action switching.
 4. Automated rollout blocking tied to reconciliation states (`WARN` / `CRIT`).
+5. Automated notification mechanisms for freshness, batch readiness, and quality breaches.
+6. Policy-driven release-guard automation replacing manual review workflows.
+7. Explicit late-data monitoring and watermark-drop observability instrumentation.
 
 ## 3. Future Expansion Candidates
 
@@ -28,4 +31,3 @@ When other docs mention deferred or conflicting scope, they should point here.
 3. `docs/architecture/realtime-decisioning/realtime-action-queue-decision-behavior-spec.md`
 4. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
 5. `docs/milestone/m2_scope.md`
-

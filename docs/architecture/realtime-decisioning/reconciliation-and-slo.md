@@ -1,11 +1,12 @@
-# Reconciliation and SLO (M1)
+# Reliability and SLO (M1 + M2)
 
-## 1. Runtime SLA
+## 1. Runtime SLO
 
-1. Event-to-serving freshness latency target: `P95 < 3 minutes`
-2. Freshness breach threshold: `> 3 minutes`
+1. Event-to-serving freshness latency target: `P95 < 3 minutes`.
+2. Freshness breach threshold: `> 3 minutes`.
+3. Batch publish readiness target: daily by `08:00` (`America/New_York`) for `D-1` outputs.
 
-## 2. Freshness Response Policy (M1)
+## 2. Freshness Response Policy
 
 Trigger A:
 
@@ -19,59 +20,31 @@ Trigger B:
 
 Recovery:
 
-1. require 15 consecutive healthy minutes before returning to normal mode
+1. require sustained healthy windows before returning to normal release posture
 
-## 3. Late Data Policy
+## 3. Batch Reliability Policy
 
-1. late events may update realtime facts and serving preview while within configured watermark policy
-2. events beyond watermark are tracked through drop counters and observability logs
-3. late-event impact is captured via reconciliation metrics and operational counters
+1. scheduled batch runs must complete for `D-1` publish windows.
+2. `retention`, `engagement`, and `sessionization` outputs must be ready by daily `08:00` (`America/New_York`).
+3. batch freshness check: publishable outputs must represent `data_date = current_date - 1`.
+4. batch completeness check: required output domains must exist and be non-empty for publish date.
+5. semantic/dbt quality checks must pass before publishing batch-derived outputs.
+6. publish failures require manual operator review and rerun workflow before downstream use.
 
-## 4. RT vs T+1 Reconciliation Scope
+## 4. M1 Reference Baseline (Non-M2 Scope)
 
-M1 scope:
+1. Watermark handling exists in M1 streaming logic, but explicit late-data monitoring and watermark-drop observability instrumentation are not part of M1+M2 delivery.
+2. Manual release-guard behavior (`WARN/CRIT` style operator review) is inherited as historical baseline, not an M2 delivery item.
+3. Reference scope anchor:
+   - `docs/milestone/m1_scope.md`
 
-1. global only (no segment-level reconciliation yet)
-2. run once daily after T+1 batch completion
+## 5. Future Plan (Deferred to M3)
 
-Metrics:
-
-1. counts: `impressions`, `play_start`, `play_finish`, `likes`, `shares`, `skips`
-2. rates: `completion_rate`, `skip_rate`
-
-## 5. Error Formulas
-
-Count global relative error:
-
-```text
-abs(sum_rt - sum_batch) / max(sum_batch, 1)
-```
-
-Count minute-level p95:
-
-```text
-p95(abs(rt_1m - batch_1m) / max(batch_1m, 100))
-```
-
-Rate minute-level p95 absolute error:
-
-```text
-p95(abs(rt_rate_1m - batch_rate_1m))
-```
-
-## 6. Alert Thresholds
-
-1. PASS target:
-   - count p95 <= 0.08
-   - rate p95 absolute diff <= 0.03
-2. WARN:
-   - threshold near breach or one-metric soft breach
-3. CRIT:
-   - any hard breach above target threshold
-
-## 7. Rule Rollout Guard
-
-1. `WARN` requires manual review before promoting new `rule_version`.
-2. `CRIT` blocks new `rule_version` promotion until reconciliation returns to PASS.
-3. Automated rollout blocking workflows are deferred to M3:
-   - `docs/architecture/realtime-decisioning/m3-action-queue-reference.md`
+1. T+1 reconciliation implementation and operationalization.
+2. Reconciliation formulas, thresholds, and automated policy gating.
+3. Automated degraded-mode switching tied to reconciliation states.
+4. Automated notification mechanisms for freshness/batch/quality breaches.
+5. Automated release-guard workflows and rollout blocking.
+6. Explicit late-data monitoring and watermark-drop observability implementation.
+7. Canonical deferred-scope reference:
+   - `docs/milestone/m3_scope.md`

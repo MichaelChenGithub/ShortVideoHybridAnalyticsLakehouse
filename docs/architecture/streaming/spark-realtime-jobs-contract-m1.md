@@ -179,12 +179,12 @@ Minimum runtime checks:
 2. query progress lag / micro-batch latency
 3. consumer lag by topic
 4. invalid record rates in both quarantine tables
-5. dropped-by-watermark rows from query progress metrics (`numRowsDroppedByWatermark` or equivalent)
+5. late-event handling evidence from acceptance artifacts (for example watermark-impact proxy metrics)
 
 Observability note:
 
-1. Prometheus/Grafana deep instrumentation is deferred to M2.
-2. M1 lite checks must still expose dropped-by-watermark counters via logs or periodic query progress sampling.
+1. Prometheus/Grafana deep instrumentation is deferred to future scope.
+2. Explicit dropped-by-watermark observability instrumentation is deferred to M3 (`docs/milestone/m3_scope.md`).
 
 ---
 

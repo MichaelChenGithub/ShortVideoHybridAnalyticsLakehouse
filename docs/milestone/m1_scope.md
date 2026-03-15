@@ -20,6 +20,7 @@ Current active scope through M2 is defined in `docs/milestone/m2_scope.md`.
 2. Serving and dashboard visibility for recommendation preview and platform health metrics.
 3. Contract-driven realtime modeling across messaging, streaming, data model, and serving layers.
 4. Deterministic acceptance flows with reproducible artifact capture.
+5. Watermark-based late-event handling in realtime processing.
 
 ## 4. M1 Out-of-Scope Themes (Reference)
 
@@ -37,4 +38,3 @@ Current active scope through M2 is defined in `docs/milestone/m2_scope.md`.
 5. `docs/architecture/streaming/spark-realtime-jobs-contract-m1.md`
 6. `docs/architecture/serving/trino-semantic-layer-serving-contract-m1-s2.md`
 7. `docs/architecture/streaming/reference/mic-38-signoff-acceptance.md`
-
