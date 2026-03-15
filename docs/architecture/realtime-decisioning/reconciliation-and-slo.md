@@ -2,11 +2,16 @@
 
 ## 1. Runtime SLO
 
+### 1.1 Realtime SLO
+
 1. Event-to-serving freshness latency target: `P95 < 3 minutes`.
 2. Freshness breach threshold: `> 3 minutes`.
-3. Batch publish readiness target: daily by `08:00` (`America/New_York`) for `D-1` outputs.
 
-## 2. Freshness Response Policy
+### 1.2 Batch SLO
+
+1. Batch publish readiness target: daily by `08:00` (`America/New_York`) for `D-1` outputs.
+
+## 2. Realtime Freshness Response Policy
 
 Trigger A:
 
@@ -22,14 +27,18 @@ Recovery:
 
 1. require sustained healthy windows before returning to normal release posture
 
-## 3. Batch Reliability Policy
+## 3. Batch Publish Reliability Policy
 
 1. scheduled batch runs must complete for `D-1` publish windows.
 2. `retention`, `engagement`, and `sessionization` outputs must be ready by daily `08:00` (`America/New_York`).
 3. batch freshness check: publishable outputs must represent `data_date = current_date - 1`.
-4. batch completeness check: required output domains must exist and be non-empty for publish date.
+4. batch completeness check: required output tables must exist and be non-empty for publish date:
+   - `lakehouse.gold.batch_retention_daily`
+   - `lakehouse.gold.batch_engagement_daily`
+   - `lakehouse.gold.batch_sessionization_daily`
 5. semantic/dbt quality checks must pass before publishing batch-derived outputs.
-6. publish failures require manual operator review and rerun workflow before downstream use.
+6. publish manifest check: `lakehouse.gold.batch_publish_manifest` must contain a successful publish record for the same `data_date`.
+7. publish failures require manual operator review and rerun workflow before downstream use.
 
 ## 4. M1 Reference Baseline (Non-M2 Scope)
 
