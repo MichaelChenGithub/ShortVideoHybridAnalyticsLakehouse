@@ -161,6 +161,6 @@ Mitigation: keep deferred scope centralized and explicit in future-plan referenc
 4. `docs/architecture/realtime-decisioning/metric-contract.md`
 5. `docs/architecture/realtime-decisioning/acceptance-criteria.md`
 6. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
-7. `docs/architecture/batch/batch-metrics-contract-m2.md`
+7. `docs/architecture/batch-analytics/batch-metrics-contract-m2.md`
 8. `docs/architecture/quality/dbt-semantic-quality-contract-m2.md`
 9. `docs/architecture/cloud/aws-deployment-and-scale-benchmark-m2.md`

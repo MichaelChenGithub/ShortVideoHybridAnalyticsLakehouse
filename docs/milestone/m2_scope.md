@@ -48,7 +48,7 @@ This is the authoritative current-scope document for planning and documentation 
 1. `docs/milestone/m1_scope.md`
 2. `docs/milestone/m3_scope.md`
 3. `docs/product/business-decision-prd-kpi-tree.md`
-4. `docs/architecture/batch/batch-metrics-contract-m2.md`
+4. `docs/architecture/batch-analytics/batch-metrics-contract-m2.md`
 5. `docs/architecture/quality/dbt-semantic-quality-contract-m2.md`
 6. `docs/architecture/cloud/aws-deployment-and-scale-benchmark-m2.md`
 7. `README.md`

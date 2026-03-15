@@ -1,38 +1,44 @@
-# Data Model v1 (Milestone 1)
+# Data Model v1 (M1 Baseline, M1 + M2 Reference)
 
 ## 1. Purpose
 
-Define the minimum data model required to deliver Milestone 1 realtime decisioning:
+Define the baseline realtime data model delivered in M1 and retained as reference through M2:
 
 1. `BOOST`
 2. `REVIEW`
 3. `RESCUE`
 
-This is a semantic-first model. Storage and optimization details are intentionally deferred to Milestone 2.
+This is a semantic-first baseline model. Advanced optimization and extended future-scope modeling are deferred to `docs/milestone/m3_scope.md`.
 
 ---
 
-## 2. Scope (M1)
+## 2. Scope (Baseline Reference)
 
 In scope tables:
 
 1. `lakehouse.bronze.raw_events`
 2. `lakehouse.bronze.invalid_events_content`
 3. `lakehouse.bronze.invalid_events_cdc_videos`
-4. `lakehouse.dims.dim_videos` (current snapshot, Type-1)
-5. `lakehouse.dims.rt_rule_quantile_baselines`
-6. `lakehouse.gold.rt_video_stats_1min`
-7. `lakehouse.qa.run_manifest`
-8. `lakehouse.qa.expected_actions`
+4. `lakehouse.silver.events_conformed`
+5. `lakehouse.silver.user_activity_sessions_30m`
+6. `lakehouse.dims.dim_videos` (current snapshot, Type-1)
+7. `lakehouse.dims.dim_users_scd2`
+8. `lakehouse.dims.dim_videos_scd2`
+9. `lakehouse.dims.rt_rule_quantile_baselines`
+10. `lakehouse.gold.rt_video_stats_1min`
+11. `lakehouse.gold.batch_retention_daily`
+12. `lakehouse.gold.batch_engagement_daily`
+13. `lakehouse.gold.batch_sessionization_daily`
+14. `lakehouse.gold.batch_publish_manifest`
+15. `lakehouse.qa.run_manifest`
+16. `lakehouse.qa.expected_actions`
 
-Out of scope (M2+):
+Out of scope (deferred):
 
-1. full `dim_users` model
-2. full Silver canonical model
-3. global SCD Type-2 rollout across dimensions
-4. storage optimization tuning (partition tuning, compression strategy, compaction policy details)
-5. QA dashboarding and automated alert workflow
-6. operational `rt_action_queue` execution and queue-consumer automation
+1. full Silver canonical model
+2. storage optimization tuning (partition tuning, compression strategy, compaction policy details)
+3. QA dashboarding and automated alert/notification workflow
+4. operational `rt_action_queue` execution and queue-consumer automation
 
 ---
 
@@ -40,15 +46,20 @@ Out of scope (M2+):
 
 1. Semantic stability first, physical optimization later.
 2. Realtime contracts are auditable and deterministic.
-3. Additive schema evolution preferred; avoid breaking changes in M1.
+3. Additive schema evolution preferred; avoid breaking changes to baseline contracts.
+4. Batch tables must declare mutability policy (`append-only`, `partition-overwrite`, or `versioned publish`) explicitly.
+5. Backfill/replay behavior must be deterministic and traceable through publish metadata.
 
 ---
 
-## 4. Time Semantics (M1 Standard)
+## 4. Time Semantics (Baseline Standard)
 
 1. `event_timestamp`: event time in UTC.
 2. `ingested_at` / `processed_at`: system processing timestamps.
 3. Realtime aggregations use event-time 1-minute windows (`window_start`, `window_end`).
+4. Batch outputs use `data_date` (business date) and `published_at` (publish timestamp).
+5. Batch SLA alignment uses `America/New_York` for daily `D-1` publish readiness checks.
+6. Cohort outputs must include explicit cohort anchor date (`cohort_date`) and age index (`day_n`) when applicable.
 
 ---
 
@@ -118,7 +129,7 @@ Required fields (minimum):
 Data contract notes:
 
 1. append-only
-2. no replay from this table in M1 (triage and analysis only)
+2. no replay from this table in current scope (triage and analysis only)
 
 ---
 
@@ -148,11 +159,11 @@ Required fields (minimum):
 Data contract notes:
 
 1. append-only
-2. no replay from this table in M1 (triage and analysis only)
+2. no replay from this table in current scope (triage and analysis only)
 
 ---
 
-### 5.4 `lakehouse.dims.dim_videos` (M1 current snapshot)
+### 5.4 `lakehouse.dims.dim_videos` (current snapshot baseline)
 
 Role:
 
@@ -161,7 +172,7 @@ Role:
 Storage behavior:
 
 1. CDC micro-batch upsert with `MERGE`
-2. Type-1 current snapshot in M1 (no full history table requirement in M1)
+2. Type-1 current snapshot baseline (no full history table requirement in current scope)
 
 Grain:
 
@@ -177,11 +188,16 @@ Required fields (minimum):
 6. `updated_at` TIMESTAMP
 7. `source_ts_ms` BIGINT
 
-M1 usage:
+Usage:
 
 1. `upload_time` for `upload_age <= 60m`
 2. `category + region` for under-exposure cohort baseline
 3. `status` for decision eligibility guardrails
+
+Track boundary (dual-track coexistence):
+
+1. `dim_videos` remains the realtime snapshot dimension for M1/M2 realtime decision paths.
+2. batch historical attribution must use `dim_videos_scd2` (not snapshot `dim_videos`).
 
 ---
 
@@ -218,7 +234,7 @@ Contract:
 
 ### 5.6 `lakehouse.gold.rt_action_queue`
 
-This table is deferred to M3 and is not part of M1 delivery scope.
+This table is deferred to M3 and is not part of M1 + M2 delivery scope.
 
 Reference:
 
@@ -312,15 +328,273 @@ Required fields (minimum):
 
 Data contract notes:
 
-1. refresh cadence: once daily after T+1 completion
-2. no intraday drift for published thresholds in M1
+1. refresh cadence: once daily after batch publish completion
+2. no intraday drift for published thresholds in current scope
 3. rows are immutable after publish for a given `rule_version + effective_from`
 4. any threshold logic change must publish a new `rule_version`
 5. cohort fallback behavior and publish guards are governed by `docs/architecture/realtime-decisioning/metric-contract.md`
 
 ---
 
-## 6. Join Contract (M1)
+### 5.10 M2 Batch Tables
+
+This subsection defines table contracts aligned with M2 batch scope and PRD targets.
+
+#### 5.10.1 `lakehouse.silver.events_conformed`
+
+Role:
+
+1. canonicalized event layer for batch metric derivation (retention/engagement/sessionization)
+2. primary batch source table derived from `lakehouse.bronze.raw_events` parsing and conformance checks
+
+Grain:
+
+1. `event_id`
+
+Required fields (minimum):
+
+1. `event_id` STRING
+2. `event_timestamp` TIMESTAMP
+3. `event_date_et` DATE
+4. `data_date` DATE
+5. `video_id` STRING
+6. `user_id` STRING
+7. `event_type` STRING
+8. `category` STRING
+9. `region` STRING
+
+Data contract notes:
+
+1. `event_id` is the uniqueness key in `events_conformed`.
+2. batch reprocessing must not introduce duplicate `event_id` rows for the same logical event.
+3. `event_type` allowed enum follows the authoritative messaging contract:
+   - `docs/architecture/messaging/kafka-topic-schema-retention-contract-m1.md` (section `5.1 content_events schema`)
+4. `event_date_et` is derived from `event_timestamp` converted to `America/New_York`.
+5. batch partitioning and `D-1` publish checks should align on `event_date_et` semantics.
+6. physical layout baseline: `partition by event_date_et`, `bucket(64, user_id)`.
+7. bucket count may be tuned by benchmark evidence in cloud/scale contract.
+
+#### 5.10.2 `lakehouse.silver.user_activity_sessions_30m`
+
+Role:
+
+1. sessionized user activity using 30-minute inactivity gap rule
+2. derived from `lakehouse.silver.events_conformed`
+
+Grain:
+
+1. `session_id`
+
+Required fields (minimum):
+
+1. `session_id` STRING
+2. `user_id` STRING
+3. `session_start_ts` TIMESTAMP
+4. `session_end_ts` TIMESTAMP
+5. `session_duration_sec` BIGINT
+6. `event_count` BIGINT
+7. `watch_time_sum_ms` BIGINT
+8. `data_date` DATE
+
+Data contract notes:
+
+1. session split rule uses 30-minute inactivity gap.
+2. `session_id` must be deterministic (for example hash of `user_id + session_start_ts`) to keep replay/backfill stable.
+3. physical layout baseline: `partition by data_date`, `bucket(64, user_id)`.
+
+#### 5.10.3 `lakehouse.dims.dim_users_scd2`
+
+Role:
+
+1. historical user attributes for point-in-time batch attribution
+
+Grain:
+
+1. `user_sk` (surrogate key)
+
+Required fields (minimum):
+
+1. `user_sk` STRING (deterministic hash surrogate key)
+2. `user_id` STRING
+3. `new_vs_returning_user` STRING (`new`, `returning`; platform-lifetime definition)
+4. `valid_from` TIMESTAMP
+5. `valid_to` TIMESTAMP
+6. `is_current` BOOLEAN
+
+Data contract notes:
+
+1. `dim_users_scd2` is the canonical user-history dimension.
+2. Current scope does not require a separate realtime `dim_users` snapshot table.
+3. `new_vs_returning_user` is persisted in the dimension and consumed by batch joins; M2 does not rely on ad-hoc query-time derivation.
+4. current/open row convention: `valid_to = 9999-12-31 00:00:00 UTC`.
+5. physical layout baseline: `partition by date(valid_from)`, `bucket(64, user_id)`.
+
+#### 5.10.4 `lakehouse.dims.dim_videos_scd2`
+
+Role:
+
+1. historical video attributes for point-in-time batch attribution
+
+Grain:
+
+1. `video_sk` (surrogate key)
+
+Required fields (minimum):
+
+1. `video_sk` STRING (deterministic hash surrogate key)
+2. `video_id` STRING
+3. `category` STRING
+4. `region` STRING
+5. `status` STRING
+6. `valid_from` TIMESTAMP
+7. `valid_to` TIMESTAMP
+8. `is_current` BOOLEAN
+
+Data contract notes:
+
+1. `dim_videos_scd2` is the canonical batch historical video dimension for point-in-time attribution.
+2. realtime decision paths continue to use snapshot `lakehouse.dims.dim_videos`.
+3. current/open row convention: `valid_to = 9999-12-31 00:00:00 UTC`.
+4. physical layout baseline: `partition by date(valid_from)`, `bucket(64, video_id)`.
+
+#### 5.10.5 `lakehouse.gold.batch_retention_daily`
+
+Role:
+
+1. publishable retention metrics for D1/D7 cohort analysis
+2. derived from `lakehouse.silver.events_conformed` with user/video dimension attribution joins
+
+Grain:
+
+1. `cohort_date + day_n + category + region + new_vs_returning_user`
+
+Required fields (minimum):
+
+1. `cohort_date` DATE
+2. `day_n` INT
+3. `category` STRING
+4. `region` STRING
+5. `new_vs_returning_user` STRING
+6. `cohort_users` BIGINT
+7. `retained_users` BIGINT
+8. `retention_rate` DOUBLE
+9. `data_date` DATE
+10. `published_at` TIMESTAMP
+
+Data contract notes:
+
+1. `new_vs_returning_user` is a required segmentation dimension in batch gold outputs.
+2. when user-state attribution is unavailable, use explicit `unknown` value instead of dropping the dimension.
+3. downstream global/cohort views may aggregate over `new_vs_returning_user` when segment split is not needed.
+4. physical partition baseline: `partition by data_date`.
+5. `day_n` domain is restricted to `{1, 7}` in current scope.
+6. retention formula semantics are governed by `docs/architecture/batch-analytics/batch-metrics-contract-m2.md`.
+
+#### 5.10.6 `lakehouse.gold.batch_engagement_daily`
+
+Role:
+
+1. daily engagement KPI + lightweight funnel outputs
+2. derived from `lakehouse.silver.events_conformed` with user/video dimension attribution joins
+
+Grain:
+
+1. `data_date + category + region + new_vs_returning_user`
+
+Required fields (minimum):
+
+1. `data_date` DATE
+2. `category` STRING
+3. `region` STRING
+4. `new_vs_returning_user` STRING
+5. `impressions` BIGINT
+6. `play_start` BIGINT
+7. `play_finish` BIGINT
+8. `likes` BIGINT
+9. `shares` BIGINT
+10. `skips` BIGINT
+11. `play_start_rate` DOUBLE
+12. `completion_rate` DOUBLE
+13. `interaction_rate` DOUBLE
+14. `skip_rate` DOUBLE
+15. `published_at` TIMESTAMP
+
+Data contract notes:
+
+1. `new_vs_returning_user` is a required segmentation dimension in batch gold outputs.
+2. when user-state attribution is unavailable, use explicit `unknown` value instead of dropping the dimension.
+3. downstream global views may aggregate over `new_vs_returning_user` when segment split is not needed.
+4. physical partition baseline: `partition by data_date`.
+5. engagement formula semantics are governed by `docs/architecture/batch-analytics/batch-metrics-contract-m2.md`.
+
+#### 5.10.7 `lakehouse.gold.batch_sessionization_daily`
+
+Role:
+
+1. daily session behavior outputs for stickiness analysis
+2. derived from `lakehouse.silver.user_activity_sessions_30m` with user/video dimension attribution joins
+
+Grain:
+
+1. `data_date + category + region + new_vs_returning_user`
+
+Required fields (minimum):
+
+1. `data_date` DATE
+2. `category` STRING
+3. `region` STRING
+4. `new_vs_returning_user` STRING
+5. `sessions` BIGINT
+6. `sessions_per_user` DOUBLE
+7. `avg_session_duration_sec` DOUBLE
+8. `events_per_session` DOUBLE
+9. `watch_time_per_session_ms` DOUBLE
+10. `published_at` TIMESTAMP
+
+Data contract notes:
+
+1. `new_vs_returning_user` is a required segmentation dimension in batch gold outputs.
+2. when user-state attribution is unavailable, use explicit `unknown` value instead of dropping the dimension.
+3. downstream global views may aggregate over `new_vs_returning_user` when segment split is not needed.
+4. physical partition baseline: `partition by data_date`.
+5. sessionization formula semantics are governed by `docs/architecture/batch-analytics/batch-metrics-contract-m2.md`.
+
+#### 5.10.8 `lakehouse.gold.batch_publish_manifest`
+
+Role:
+
+1. publish-level audit contract for batch SLA and quality-gate traceability in M2
+
+Grain:
+
+1. `data_date + publish_run_id`
+
+Required fields (minimum):
+
+1. `publish_run_id` STRING
+2. `data_date` DATE
+3. `target_ready_by_et` TIMESTAMP
+4. `published_at` TIMESTAMP
+5. `is_on_time` BOOLEAN
+6. `quality_gate_passed` BOOLEAN
+7. `quality_summary_json` STRING
+8. `status` STRING
+
+Data contract notes:
+
+1. `quality_gate_passed = true` only when all M2 batch gold outputs pass required quality gates:
+   - `lakehouse.gold.batch_retention_daily`
+   - `lakehouse.gold.batch_engagement_daily`
+   - `lakehouse.gold.batch_sessionization_daily`
+2. manifest rows are append-only by `publish_run_id` for publish traceability.
+3. `target_ready_by_et` is fixed to `08:00` (`America/New_York`) for the corresponding `data_date` publish window.
+4. `is_on_time = true` when `published_at <= target_ready_by_et`.
+5. M2 does not introduce per-table batch metric version columns; metric-logic notes are captured in `quality_summary_json`.
+6. explicit batch metric versioning contract is deferred to M3.
+
+---
+
+## 6. Join Contract (Baseline)
 
 Primary realtime join path:
 
@@ -339,24 +613,46 @@ Validation join path:
 
 1. `serving.v_rt_video_decision_context_30m_1m` / `gold.rt_video_stats_1min` joined with `qa.expected_actions` by `video_id + window_start` under a specific `run_id`
 
+### 6.1 M2 Batch Join (As-Of Attribution)
+
+Batch attribution path:
+
+1. batch facts join `dim_users_scd2` on `fact.user_id = dim_users_scd2.user_id`
+2. batch facts join `dim_videos_scd2` on `fact.video_id = dim_videos_scd2.video_id`
+3. as-of condition (left-closed, right-open): `event_ts >= valid_from AND event_ts < valid_to`
+4. `event_ts` maps to the fact event-time column (for example `fact.event_timestamp`)
+
+Guardrails:
+
+1. one fact row maps to exactly one user-dimension version and one video-dimension version
+2. unmatched dimension rows are counted and surfaced in quality checks before publish
+
 ---
 
 ## 7. Generator Contract Alignment
 
-`user_id` policy for M1:
+`user_id` policy for baseline scope:
 
 1. use stable synthetic IDs (for example `u_000001` style pool), not per-event random IDs
 2. this keeps future `dim_users` and retention analysis feasible without replay redesign
 3. run metadata and ground truth are tracked in `lakehouse.qa.*`, not in consumer-facing `gold` outputs
 
+### 7.1 M2 Identity and Segmentation
+
+1. `new_vs_returning_user` uses platform-lifetime definition:
+   - `new`: first-seen activity date for `user_id`
+   - `returning`: any activity after first-seen date
+2. Identity mapping policy must keep batch joins stable across replay/backfill runs.
+3. Surrogate keys use deterministic hash strategy (not sequence identity) to preserve cross-run reproducibility.
+4. Final derivation logic is defined jointly with batch metrics contract; this file anchors required model fields only.
+
 ---
 
-## 8. Deferred to Milestone 2
+## 8. Future Plan (Deferred to M3)
 
-1. `dim_users` table and user-level modeling contracts
-2. Type-2 historical dimensions where business requires point-in-time attribution
-3. Silver-layer compression and storage optimization strategy
-4. expanded canonical model and lineage for batch marts
+1. Silver-layer compression and storage optimization strategy
+2. explicit batch metric versioning contract for retention/engagement/sessionization outputs
+3. canonical deferred-scope reference: `docs/milestone/m3_scope.md`
 
 ---
 
@@ -365,8 +661,10 @@ Validation join path:
 1. table grains and keys are explicit and testable
 2. required columns for each in-scope table are defined and non-ambiguous
 3. realtime join path is defined and grain-safe
-4. model supports current M1 decision contracts without additional schema dependencies
+4. model supports current decision contracts without additional schema dependencies
 5. invalid-record quarantine paths are split and defined:
    - `lakehouse.bronze.invalid_events_content`
    - `lakehouse.bronze.invalid_events_cdc_videos`
 6. QA validation tables are defined and linkable to decision outputs by `run_id` and `video_id + window_start`
+7. Batch tables declare grain, required fields, and publish metadata for SLA/quality traceability.
+8. Batch segmentation supports at minimum `date x category x region` (with `new_vs_returning_user` where available).
