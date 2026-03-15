@@ -50,7 +50,7 @@ Candidate:
 
 Under-exposed:
 
-1. M1 uses global threshold: `impressions_30m <= global_p40_impressions_threshold`
+1. current baseline uses global threshold: `impressions_30m <= global_p40_impressions_threshold`
 
 ## 4. Decision Mapping
 
@@ -62,11 +62,11 @@ Under-exposed:
 ## 5. Quantile Governance
 
 1. Quantile baselines are refreshed daily after T+1 completion.
-2. No intraday threshold drift in M1.
+2. No intraday threshold drift in current baseline.
 3. Baseline set is tied to `rule_version`.
 4. Baselines are published to `lakehouse.dims.rt_rule_quantile_baselines`.
 5. `p90` for candidate evaluation uses global `velocity_30m` distribution.
-6. M1 `p40` for under-exposure uses global `impressions_30m` distribution.
+6. current-baseline `p40` for under-exposure uses global `impressions_30m` distribution.
 7. Global baseline publish guard:
    - publish only when global `sample_size >= 1000`
 8. Baseline rows are immutable after publish for a given `rule_version` and `effective_from`.

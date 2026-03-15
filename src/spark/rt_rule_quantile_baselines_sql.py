@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import Iterable, List, Tuple
 
 RT_RULE_QUANTILE_BASELINES_TABLE = "lakehouse.dims.rt_rule_quantile_baselines"
-M1_RULE_VERSION = "rt_rules_v1"
-M1_EFFECTIVE_FROM = "2026-01-01"
-M1_EFFECTIVE_TO = "2099-12-31"
-M1_COMPUTED_AT = "2026-03-10 00:00:00"
+BASELINE_RULE_VERSION = "rt_rules_v1"
+BASELINE_EFFECTIVE_FROM = "2026-01-01"
+BASELINE_EFFECTIVE_TO = "2099-12-31"
+BASELINE_COMPUTED_AT = "2026-03-10 00:00:00"
 
 _REQUIRED_RT_RULE_QUANTILE_BASELINES_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("rule_version", "STRING"),
@@ -24,16 +24,16 @@ _REQUIRED_RT_RULE_QUANTILE_BASELINES_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("computed_at", "TIMESTAMP"),
 )
 
-_M1_SEED_ROWS_SQL: Tuple[str, ...] = (
+_BASELINE_SEED_ROWS_SQL: Tuple[str, ...] = (
     (
-        f"('{M1_RULE_VERSION}', DATE '{M1_EFFECTIVE_FROM}', DATE '{M1_EFFECTIVE_TO}', "
+        f"('{BASELINE_RULE_VERSION}', DATE '{BASELINE_EFFECTIVE_FROM}', DATE '{BASELINE_EFFECTIVE_TO}', "
         "'velocity_30m', 90, NULL, NULL, 0.68, 1800, FALSE, "
-        f"TIMESTAMP '{M1_COMPUTED_AT}')"
+        f"TIMESTAMP '{BASELINE_COMPUTED_AT}')"
     ),
     (
-        f"('{M1_RULE_VERSION}', DATE '{M1_EFFECTIVE_FROM}', DATE '{M1_EFFECTIVE_TO}', "
+        f"('{BASELINE_RULE_VERSION}', DATE '{BASELINE_EFFECTIVE_FROM}', DATE '{BASELINE_EFFECTIVE_TO}', "
         "'impressions_30m', 40, NULL, NULL, 160.0, 1800, FALSE, "
-        f"TIMESTAMP '{M1_COMPUTED_AT}')"
+        f"TIMESTAMP '{BASELINE_COMPUTED_AT}')"
     ),
 )
 
@@ -86,7 +86,7 @@ def manual_alter_rt_rule_quantile_baselines_statements(
 def publish_rt_rules_v1_seed_sql(
     table_name: str = RT_RULE_QUANTILE_BASELINES_TABLE,
 ) -> str:
-    values_sql = ",\n        ".join(_M1_SEED_ROWS_SQL)
+    values_sql = ",\n        ".join(_BASELINE_SEED_ROWS_SQL)
     return f"""
     INSERT INTO {table_name}
     SELECT
@@ -120,7 +120,7 @@ def publish_rt_rules_v1_seed_sql(
     WHERE NOT EXISTS (
         SELECT 1
         FROM {table_name} existing
-        WHERE existing.rule_version = '{M1_RULE_VERSION}'
-          AND existing.effective_from = DATE '{M1_EFFECTIVE_FROM}'
+        WHERE existing.rule_version = '{BASELINE_RULE_VERSION}'
+          AND existing.effective_from = DATE '{BASELINE_EFFECTIVE_FROM}'
     )
     """.strip()

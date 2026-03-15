@@ -15,7 +15,7 @@ from scripts.emit_cdc_mixed_fixture import (  # noqa: E402
 )
 
 
-class EmitMic43CdcMixedFixtureTests(unittest.TestCase):
+class EmitCdcMixedFixtureTests(unittest.TestCase):
     def test_mixed_fixture_counts_and_expected_final_state(self) -> None:
         records, summary = build_mixed_fixture_records("cdc_contract_vid_001")
         self.assertEqual(len(records), 6)

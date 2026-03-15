@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Define the baseline realtime data model delivered in M1 and retained as reference through M2:
+Define the baseline realtime data model delivered in initial realtime scope and retained as current reference:
 
 1. `BOOST`
 2. `REVIEW`
@@ -196,7 +196,7 @@ Usage:
 
 Track boundary (dual-track coexistence):
 
-1. `dim_videos` remains the realtime snapshot dimension for M1/M2 realtime decision paths.
+1. `dim_videos` remains the realtime snapshot dimension for current realtime decision paths.
 2. batch historical attribution must use `dim_videos_scd2` (not snapshot `dim_videos`).
 
 ---
@@ -234,7 +234,7 @@ Contract:
 
 ### 5.6 `lakehouse.gold.rt_action_queue`
 
-This table is deferred to M3 and is not part of M1 + M2 delivery scope.
+This table is deferred to future plan and is not part of current delivery scope.
 
 Reference:
 
@@ -425,7 +425,7 @@ Data contract notes:
 
 1. `dim_users_scd2` is the canonical user-history dimension.
 2. Current scope does not require a separate realtime `dim_users` snapshot table.
-3. `new_vs_returning_user` is persisted in the dimension and consumed by batch joins; M2 does not rely on ad-hoc query-time derivation.
+3. `new_vs_returning_user` is persisted in the dimension and consumed by batch joins; current scope does not rely on ad-hoc query-time derivation.
 4. current/open row convention: `valid_to = 9999-12-31 00:00:00 UTC`.
 5. physical layout baseline: `partition by date(valid_from)`, `bucket(64, user_id)`.
 
@@ -563,7 +563,7 @@ Data contract notes:
 
 Role:
 
-1. publish-level audit contract for batch SLA and quality-gate traceability in M2
+1. publish-level audit contract for batch SLA and quality-gate traceability in current scope
 
 Grain:
 
@@ -582,15 +582,15 @@ Required fields (minimum):
 
 Data contract notes:
 
-1. `quality_gate_passed = true` only when all M2 batch gold outputs pass required quality gates:
+1. `quality_gate_passed = true` only when all current batch gold outputs pass required quality gates:
    - `lakehouse.gold.batch_retention_daily`
    - `lakehouse.gold.batch_engagement_daily`
    - `lakehouse.gold.batch_sessionization_daily`
 2. manifest rows are append-only by `publish_run_id` for publish traceability.
 3. `target_ready_by_et` is fixed to `08:00` (`America/New_York`) for the corresponding `data_date` publish window.
 4. `is_on_time = true` when `published_at <= target_ready_by_et`.
-5. M2 does not introduce per-table batch metric version columns; metric-logic notes are captured in `quality_summary_json`.
-6. explicit batch metric versioning contract is deferred to M3.
+5. current scope does not introduce per-table batch metric version columns; metric-logic notes are captured in `quality_summary_json`.
+6. explicit batch metric versioning contract is deferred to future plan.
 
 ---
 

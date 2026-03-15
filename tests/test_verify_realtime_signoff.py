@@ -15,7 +15,7 @@ from scripts.verify_realtime_signoff import (  # noqa: E402
 )
 
 
-class VerifyMic38Sprint1SignoffTests(unittest.TestCase):
+class VerifyRealtimeSignoffTests(unittest.TestCase):
     def test_extract_last_json_object_uses_last_json_line(self) -> None:
         log_text = "\n".join(
             [

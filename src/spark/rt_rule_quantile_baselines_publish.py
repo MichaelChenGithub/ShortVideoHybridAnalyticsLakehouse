@@ -1,4 +1,4 @@
-"""Publish M1 global-only quantile baselines into Iceberg."""
+"""Publish baseline global-only quantile baselines into Iceberg."""
 
 from __future__ import annotations
 
@@ -9,18 +9,18 @@ from pyspark.sql import SparkSession
 
 try:
     from spark.rt_rule_quantile_baselines_sql import (
-        M1_EFFECTIVE_FROM,
-        M1_EFFECTIVE_TO,
-        M1_RULE_VERSION,
+        BASELINE_EFFECTIVE_FROM,
+        BASELINE_EFFECTIVE_TO,
+        BASELINE_RULE_VERSION,
         RT_RULE_QUANTILE_BASELINES_TABLE,
         create_rt_rule_quantile_baselines_sql,
         publish_rt_rules_v1_seed_sql,
     )
 except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
     from rt_rule_quantile_baselines_sql import (  # type: ignore
-        M1_EFFECTIVE_FROM,
-        M1_EFFECTIVE_TO,
-        M1_RULE_VERSION,
+        BASELINE_EFFECTIVE_FROM,
+        BASELINE_EFFECTIVE_TO,
+        BASELINE_RULE_VERSION,
         RT_RULE_QUANTILE_BASELINES_TABLE,
         create_rt_rule_quantile_baselines_sql,
         publish_rt_rules_v1_seed_sql,
@@ -29,9 +29,9 @@ except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
 
 def _published_filter() -> str:
     return (
-        f"rule_version = '{M1_RULE_VERSION}' "
-        f"AND effective_from = DATE '{M1_EFFECTIVE_FROM}' "
-        f"AND effective_to = DATE '{M1_EFFECTIVE_TO}'"
+        f"rule_version = '{BASELINE_RULE_VERSION}' "
+        f"AND effective_from = DATE '{BASELINE_EFFECTIVE_FROM}' "
+        f"AND effective_to = DATE '{BASELINE_EFFECTIVE_TO}'"
     )
 
 
@@ -42,7 +42,7 @@ def _split_table_name(table_name: str) -> Tuple[str, str, str]:
     return parts[0], parts[1], parts[2]
 
 
-def publish_global_m1_baselines(
+def publish_global_baselines(
     spark: SparkSession,
     table_name: str = RT_RULE_QUANTILE_BASELINES_TABLE,
 ) -> None:
@@ -68,7 +68,7 @@ def publish_global_m1_baselines(
     ).collect()[0]["row_count"]
     if cohort_rows != 0:
         raise RuntimeError(
-            f"M1 global-only publish expects no cohort rows, found {cohort_rows}"
+            f"baseline global-only publish expects no cohort rows, found {cohort_rows}"
         )
 
     min_global_sample = spark.sql(
@@ -88,7 +88,7 @@ def publish_global_m1_baselines(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Publish M1 global-only baselines to rt_rule_quantile_baselines",
+        description="Publish baseline global-only baselines to rt_rule_quantile_baselines",
     )
     parser.add_argument(
         "--table",
@@ -101,7 +101,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
     spark = SparkSession.builder.appName("rt_rule_quantile_baselines_publish").getOrCreate()
-    publish_global_m1_baselines(spark, args.table)
+    publish_global_baselines(spark, args.table)
     print(f"[RULE-BASELINE] Publish completed for table: {args.table}")
 
 

@@ -63,7 +63,7 @@ Watermark policy by scenario:
 1. `baseline` -> `RT_CONTENT_EVENTS_WATERMARK=2 minutes`
 2. `lag_prone` -> `RT_CONTENT_EVENTS_WATERMARK=5 minutes`
 
-M1 trigger guidance:
+Baseline trigger guidance:
 1. Keep `trigger_gold=1 minute` for sign-off.
 2. If trigger is changed for temporary testing, restore to `1 minute` before sign-off runs.
 

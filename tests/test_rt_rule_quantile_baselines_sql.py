@@ -9,9 +9,9 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from spark.rt_rule_quantile_baselines_sql import (  # noqa: E402
-    M1_EFFECTIVE_FROM,
-    M1_EFFECTIVE_TO,
-    M1_RULE_VERSION,
+    BASELINE_EFFECTIVE_FROM,
+    BASELINE_EFFECTIVE_TO,
+    BASELINE_RULE_VERSION,
     create_rt_rule_quantile_baselines_sql,
     manual_alter_rt_rule_quantile_baselines_statements,
     missing_rt_rule_quantile_baselines_columns,
@@ -73,8 +73,8 @@ class RtRuleQuantileBaselinesSqlTests(unittest.TestCase):
         sql = publish_rt_rules_v1_seed_sql()
         self.assertIn("INSERT INTO lakehouse.dims.rt_rule_quantile_baselines", sql)
         self.assertIn("WHERE NOT EXISTS", sql)
-        self.assertIn(f"existing.rule_version = '{M1_RULE_VERSION}'", sql)
-        self.assertIn(f"existing.effective_from = DATE '{M1_EFFECTIVE_FROM}'", sql)
+        self.assertIn(f"existing.rule_version = '{BASELINE_RULE_VERSION}'", sql)
+        self.assertIn(f"existing.effective_from = DATE '{BASELINE_EFFECTIVE_FROM}'", sql)
 
         upper_sql = sql.upper()
         self.assertNotIn("UPDATE ", upper_sql)
@@ -83,9 +83,9 @@ class RtRuleQuantileBaselinesSqlTests(unittest.TestCase):
 
     def test_publish_sql_contains_fixed_window_and_required_seed_rows(self) -> None:
         sql = publish_rt_rules_v1_seed_sql()
-        self.assertIn(f"DATE '{M1_EFFECTIVE_FROM}'", sql)
-        self.assertIn(f"DATE '{M1_EFFECTIVE_TO}'", sql)
-        self.assertEqual(sql.count(f"('{M1_RULE_VERSION}'"), 2)
+        self.assertIn(f"DATE '{BASELINE_EFFECTIVE_FROM}'", sql)
+        self.assertIn(f"DATE '{BASELINE_EFFECTIVE_TO}'", sql)
+        self.assertEqual(sql.count(f"('{BASELINE_RULE_VERSION}'"), 2)
 
         self.assertIn("'velocity_30m', 90, NULL, NULL, 0.68, 1800, FALSE", sql)
         self.assertIn("'impressions_30m', 40, NULL, NULL, 160.0, 1800, FALSE", sql)

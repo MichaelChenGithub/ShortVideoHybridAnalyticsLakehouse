@@ -1,5 +1,5 @@
 {
-  "run_id": "m1_20260304_seed42_r001",
+  "run_id": "baseline_20260304_seed42_r001",
   "seed": 42,
   "duration_minutes": 30,
   "events_per_sec": 120,

@@ -42,8 +42,8 @@ Recovery:
 
 ## 4. Realtime Baseline Reference (Historical)
 
-1. Watermark handling exists in M1 streaming logic, but explicit late-data monitoring and watermark-drop observability instrumentation are not part of M1+M2 delivery.
-2. Manual release-guard behavior (`WARN/CRIT` style operator review) is inherited as historical baseline, not an M2 delivery item.
+1. Watermark handling exists in current streaming baseline, but explicit late-data monitoring and watermark-drop observability instrumentation are not part of current delivery.
+2. Manual release-guard behavior (`WARN/CRIT` style operator review) is inherited as historical baseline, not a current-scope delivery item.
 3. Reference scope anchor:
    - `docs/milestone/delivered-scope.md`
 

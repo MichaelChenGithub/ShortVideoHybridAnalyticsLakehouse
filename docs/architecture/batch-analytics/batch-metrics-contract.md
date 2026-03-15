@@ -4,7 +4,7 @@ Status: Draft
 
 ## 1. Purpose
 
-Define authoritative batch metric semantics for M2 analytics outputs:
+Define authoritative batch metric semantics for current analytics outputs:
 
 1. retention (`D1`, `D7`)
 2. engagement (daily KPI + lightweight funnel)
@@ -14,7 +14,7 @@ This document is the formula/semantic source of truth for batch outputs.
 
 ## 2. Scope
 
-In scope (M2):
+In scope:
 
 1. `lakehouse.gold.batch_retention_daily`
 2. `lakehouse.gold.batch_engagement_daily`
@@ -54,7 +54,7 @@ Grain:
 
 Domain:
 
-1. `day_n in {1, 7}` for M2
+1. `day_n in {1, 7}` in current scope
 
 Definitions:
 
@@ -114,4 +114,4 @@ Definitions:
 
 1. explicit batch metric versioning contract
 2. expanded retention horizons beyond `D1`/`D7`
-3. additional engagement/session metrics that are not required for M2 KPI coverage
+3. additional engagement/session metrics that are not required in current scope KPI coverage

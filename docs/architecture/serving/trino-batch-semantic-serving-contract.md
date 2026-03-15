@@ -5,11 +5,11 @@ Status: `Draft`
 
 ## 1. Purpose
 
-Define stable consumer-facing semantic interfaces for M2 batch analytics outputs.
+Define stable consumer-facing semantic interfaces for current batch analytics outputs.
 
 ## 2. Scope
 
-In scope (M2):
+In scope:
 
 1. batch semantic views for retention, engagement, and sessionization
 2. serving contracts (grain, keys, required fields, freshness/publish expectations)
@@ -19,7 +19,7 @@ Out of scope (deferred):
 
 1. T+1 reconciliation implementation details
 2. advanced semantic automation workflows
-3. additional batch marts not required by M2 KPI scope
+3. additional batch marts not required by current KPI scope
 
 ## 3. Contract Precedence
 
@@ -74,7 +74,7 @@ Key required fields:
 
 Semantic notes:
 
-1. `day_n` is limited to `{1, 7}` in M2.
+1. `day_n` is limited to `{1, 7}` in current scope.
 2. cohort is activity-date based and supports both `new` and `returning` segments.
 3. when `cohort_users = 0`, retention output should be treated as not computable (`NULL`/no row), not forced to `0`.
 

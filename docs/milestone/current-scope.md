@@ -27,9 +27,9 @@ This is the authoritative current-scope document for planning and documentation 
      - equivalent daily processed volume `>= 432M rows/day`
 
 ## 3. Out of Scope
-1. T+1 reconciliation implementation (deferred to M3).
-2. Operational action queue execution and consumer automation (deferred to M3).
-3. Automated degraded-mode switching and automated rollout blocking workflow (deferred to M3).
+1. T+1 reconciliation implementation (deferred to future plan).
+2. Operational action queue execution and consumer automation (deferred to future plan).
+3. Automated degraded-mode switching and automated rollout blocking workflow (deferred to future plan).
 4. Broader optimization-only initiatives not required for feature delivery narrative.
 
 ## 4. Definition of Done
@@ -39,7 +39,7 @@ This is the authoritative current-scope document for planning and documentation 
 3. Batch metric outputs include `Retention (D1/D7)`, `Engagement (daily KPI + funnel)`, and `Sessionization (30-minute gap)`.
 4. Core semantic products meet daily publish quality target `>= 99%`.
 5. Cloud benchmark artifacts demonstrate ingest/volume targets (`>= 5,000 events/sec` sustained, `>= 10,000 events/sec` peak, `>= 432M rows/day`).
-6. Cross-document wording is aligned to this through-M2 scope without conflicting milestone claims.
+6. Cross-document wording is aligned to this current scope without conflicting milestone claims.
 7. Deferred/conflicting items are centralized under `docs/milestone/future-plan.md`.
 
 ## 5. Related Documents

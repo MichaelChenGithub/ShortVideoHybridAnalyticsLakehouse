@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Define Kafka as a governed data interface baseline for realtime decisioning across M1 + M2.
+Define Kafka as a governed data interface baseline for realtime decisioning across current scope.
 
 This contract covers:
 
@@ -212,7 +212,7 @@ Alert intent:
 Monitoring implementation note:
 
 1. current scope supports lightweight monitoring (logs + periodic checks).
-2. Prometheus/Grafana integration and automated notification routing are deferred to M3 (`docs/milestone/future-plan.md`).
+2. Prometheus/Grafana integration and automated notification routing are deferred to future plan (`docs/milestone/future-plan.md`).
 
 ---
 

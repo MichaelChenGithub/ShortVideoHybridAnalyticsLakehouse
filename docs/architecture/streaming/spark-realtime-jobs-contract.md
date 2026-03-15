@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Define execution contracts for Milestone 1 Spark realtime processing.
+Define execution contracts for current Spark realtime processing.
 
 In scope jobs:
 
@@ -68,9 +68,9 @@ Isolation principle:
 
 ### 4.3 Watermark
 
-1. fixed watermark baseline for `content_events` aggregation: `2 minutes` in M1
+1. fixed watermark baseline for `content_events` aggregation: `2 minutes` in current baseline
 2. lag-prone deployments should use `5 minutes` watermark for `content_events` aggregation
-3. no dynamic watermark adjustment in M1
+3. no dynamic watermark adjustment in current baseline
 
 ### 4.4 Starting offsets
 1. `content_events`: `latest`
@@ -103,7 +103,7 @@ Checkpoint naming pattern:
 
 1. `s3a://checkpoints/jobs/<job_name>/<sink_name>/v1`
 
-M1 checkpoint paths:
+Checkpoint paths:
 
 1. `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
 2. `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
@@ -183,7 +183,7 @@ Minimum runtime checks:
 Observability note:
 
 1. Prometheus/Grafana deep instrumentation is deferred to future scope.
-2. Explicit dropped-by-watermark observability instrumentation is deferred to M3 (`docs/milestone/future-plan.md`).
+2. Explicit dropped-by-watermark observability instrumentation is deferred to future plan (`docs/milestone/future-plan.md`).
 
 ---
 

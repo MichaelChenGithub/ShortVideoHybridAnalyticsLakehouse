@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Define a deterministic simulation contract for Milestone 1 realtime decisioning.
+Define a deterministic simulation contract for current realtime decisioning.
 
 This contract is designed to validate:
 
@@ -23,7 +23,7 @@ In scope:
 4. scenario matrix for decision validation
 5. QA validation tables for run metadata and expected actions
 
-Out of scope (M2+):
+Out of scope (future expansions):
 
 1. DLQ replay workflow
 2. Prometheus/Grafana observability for generator
@@ -79,7 +79,7 @@ Validation rules:
 2. sum(`scenario_mix`) must equal 1.0 (+/- 1e-6)
 3. `late_event_ratio` must be in `[0, 0.2]` 
 4. `duration_minutes >= 10`
-5. `scenario_mix` must contain exactly these keys in M1:
+5. `scenario_mix` must contain exactly these keys in current baseline:
    - `normal_baseline`
    - `viral_high_quality`
    - `viral_low_quality`
@@ -91,7 +91,7 @@ Example:
 
 ```json
 {
-  "run_id": "m1_20260304_seed42_r001",
+  "run_id": "baseline_20260304_seed42_r001",
   "seed": 42,
   "duration_minutes": 30,
   "events_per_sec": 120,
@@ -141,7 +141,7 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 
 ### 5.3 Upstream dependency policy
 
-1. generator must not read Iceberg tables to decide IDs in M1
+1. generator must not read Iceberg tables to decide IDs in current baseline
 2. validity is guaranteed by CDC bootstrap ordering, not by downstream lookups
 
 ---
@@ -171,11 +171,11 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 1. late events are simulated by offsetting `event_timestamp` backwards.
 2. `late_event_ratio` defines the fraction of emitted `content_events` treated as late events.
 3. for late events, lateness offset is sampled deterministically in `[121 seconds, 210 seconds]`.
-4. recommended lateness split in M1:
+4. recommended lateness split in current baseline:
    - 80% in `[121s, 150s]`
    - 20% in `[151s, 210s]`
-5. maximum lateness in M1 is `210 seconds`.
-6. generator does not control runtime watermark and does not auto-tune it in M1.
+5. maximum lateness in current baseline is `210 seconds`.
+6. generator does not control runtime watermark and does not auto-tune it in current baseline.
 7. streaming runtime watermark policy follows `spark-realtime-jobs-contract.md` (baseline `2 minutes`, lag-prone target `5 minutes`).
 
 ### 6.5 Delivery profile for strict late-drop validation

@@ -5,7 +5,7 @@
 Capture delivered scope as a reference baseline.
 
 This document is historical/reference-oriented.  
-Current active scope through M2 is defined in `docs/milestone/current-scope.md`.
+Current active scope current scope is defined in `docs/milestone/current-scope.md`.
 
 ## 2. Delivered Scope Summary
 

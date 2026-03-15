@@ -4,7 +4,7 @@ Status: Draft
 
 ## 1. Purpose
 
-Define orchestration contracts for M2 batch analytics delivery:
+Define orchestration contracts for current batch analytics delivery:
 
 1. job dependency order
 2. daily schedule and publish readiness target
@@ -13,7 +13,7 @@ Define orchestration contracts for M2 batch analytics delivery:
 
 ## 2. Scope
 
-In scope (M2):
+In scope:
 
 1. batch DAG order for retention/engagement/sessionization outputs
 2. publish readiness workflow for `D-1` outputs
@@ -62,9 +62,9 @@ If any condition fails, publish-ready signal must not be emitted.
 
 1. retries are allowed inside the same daily run window to recover transient failures.
 2. rerun for the same `data_date` must be idempotent at table-partition grain (no duplicate published slice).
-3. rerun/backfill is operator-triggered (manual in M2).
+3. rerun/backfill is operator-triggered (manual in current scope).
 4. a rerun completed after `08:00` (`America/New_York`) can still publish but is marked late by manifest evidence.
-5. automated remediation workflows are deferred to M3.
+5. automated remediation workflows are deferred to future plan.
 
 ## 7. Runtime Evidence Requirements
 

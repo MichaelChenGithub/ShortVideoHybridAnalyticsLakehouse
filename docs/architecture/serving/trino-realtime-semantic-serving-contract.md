@@ -17,11 +17,11 @@ This document standardizes:
 2. view-to-metric and view-to-decision-preview mappings
 3. serving contracts (grain, keys, required fields, freshness expectations)
 4. read-time join and performance guardrails for demo-safe Trino workloads
-5. explicit boundary with M3 deferred scope
+5. explicit boundary with future-plan deferred scope
 
 ## 2. Scope
 
-In scope (M1 + M2):
+In scope:
 
 1. Trino semantic views for BI/dashboard queries
 2. contract definitions for metric-serving and decision-preview views
@@ -31,7 +31,7 @@ In scope (M1 + M2):
 Out of scope (deferred):
 
 1. queue-serving views (`v_rt_action_queue_current`, `v_rt_action_queue_active`) and execution semantics (Future Plan)
-2. replacing Gold tables as source of truth (not planned in M1/M2)
+2. replacing Gold tables as source of truth (not planned in current scope)
 3. full production hardening and advanced performance optimization
 4. advanced automation workflows deferred to future plan (`docs/milestone/future-plan.md`)
 

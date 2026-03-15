@@ -68,9 +68,9 @@ from pyspark.sql import SparkSession
 
 sys.path.insert(0, "/home/iceberg/local/src")
 from spark.rt_rule_quantile_baselines_sql import (  # noqa: E402
-    M1_EFFECTIVE_FROM,
-    M1_EFFECTIVE_TO,
-    M1_RULE_VERSION,
+    BASELINE_EFFECTIVE_FROM,
+    BASELINE_EFFECTIVE_TO,
+    BASELINE_RULE_VERSION,
 )
 
 table_name = os.environ["RULE_BASELINE_TABLE"]
@@ -81,9 +81,9 @@ catalog_name, schema_name, relation_name = parts
 
 spark = SparkSession.builder.getOrCreate()
 published_filter = (
-    f"rule_version = '{M1_RULE_VERSION}' "
-    f"AND effective_from = DATE '{M1_EFFECTIVE_FROM}' "
-    f"AND effective_to = DATE '{M1_EFFECTIVE_TO}'"
+    f"rule_version = '{BASELINE_RULE_VERSION}' "
+    f"AND effective_from = DATE '{BASELINE_EFFECTIVE_FROM}' "
+    f"AND effective_to = DATE '{BASELINE_EFFECTIVE_TO}'"
 )
 
 published_count = spark.sql(

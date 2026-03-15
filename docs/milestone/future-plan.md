@@ -21,7 +21,7 @@ When other docs mention deferred or conflicting scope, they should point here.
 
 1. Segment/cohort-level reconciliation and policy controls.
 2. Expanded reliability automation and operational guardrails.
-3. Additional optimization and platform-hardening initiatives after M2 feature delivery.
+3. Additional optimization and platform-hardening initiatives after current feature delivery.
 
 ## 4. Input References
 

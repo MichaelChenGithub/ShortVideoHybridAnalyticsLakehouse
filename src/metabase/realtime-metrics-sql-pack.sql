@@ -1,4 +1,4 @@
--- Metabase Realtime Dashboard: Metabase realtime dashboard + acceptance SQL pack (M1-S2).
+-- Metabase Realtime Dashboard: Metabase realtime dashboard + acceptance SQL pack (baseline scope).
 -- Scope lock:
 -- 1) Uses only serving views:
 --    - lakehouse.serving.v_rt_video_metrics_30m_1m

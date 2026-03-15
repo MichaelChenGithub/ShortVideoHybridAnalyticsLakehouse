@@ -104,8 +104,8 @@ content_events + cdc.content.videos
 
 ## Deferred Scope (Future Plan Reference)
 
-1. Operational action-queue execution is deferred to M3.
-2. T+1 reconciliation implementation is deferred to M3.
+1. Operational action-queue execution is deferred to future plan.
+2. T+1 reconciliation implementation is deferred to future plan.
 3. Canonical future plan:
    - `docs/milestone/future-plan.md`
 
@@ -123,7 +123,7 @@ content_events + cdc.content.videos
 6. Release guard:
    - `WARN`: manual review required before promoting new `rule_version`
    - `CRIT`: block promotion until freshness/quality checks return to healthy
-   - automated blocking workflow is deferred to M3
+   - automated blocking workflow is deferred to future plan
 
 ## Scope Boundaries
 

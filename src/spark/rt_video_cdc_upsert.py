@@ -169,7 +169,7 @@ def split_valid_and_invalid_rows(df: DataFrame) -> tuple[DataFrame, DataFrame]:
         .when(col("op").isNull(), lit("required field op is missing"))
         .when(
             ~col("op").isin("c", "u"),
-            lit("op must be one of c/u for M1 CDC upsert scope"),
+            lit("op must be one of c/u for CDC upsert scope"),
         )
         .when(col("ts_ms").isNull(), lit("required field ts_ms is missing"))
         .when(col("schema_version").isNull(), lit("required field schema_version is missing"))

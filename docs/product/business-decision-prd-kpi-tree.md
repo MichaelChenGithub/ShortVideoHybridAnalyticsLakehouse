@@ -2,7 +2,7 @@
 
 ## 1. Document Purpose
 
-Define the business objective, KPI tree, and success criteria for the M1 + M2 platform scope.
+Define the business objective, KPI tree, and success criteria for the current scope platform scope.
 
 This PRD is the upstream business contract for realtime decisioning, batch analytics expansion, semantic serving, and data-quality governance.
 
@@ -125,7 +125,7 @@ Publish contract:
 
 ## 8. Success Criteria
 
-M1 + M2 scope is considered complete when:
+current scope scope is considered complete when:
 
 1. realtime recommendation preview and health metrics are queryable and contract-valid, with realtime freshness `P95 <= 3 minutes`.
 2. batch analytics outcomes are published daily by `08:00` (`America/New_York`) for `D-1` data.
@@ -149,7 +149,7 @@ Mitigation: enforce semantic contracts and dbt quality coverage before publish.
 3. Scale benchmarks can expose infra bottlenecks before feature completeness.  
 Mitigation: preserve benchmark artifacts and tune incrementally by measured bottlenecks.
 
-4. Deferred M3 items may be requested early by stakeholders.  
+4. Deferred future-plan items may be requested early by stakeholders.  
 Mitigation: keep deferred scope centralized and explicit in future-plan references.
 
 ## 10. Linked Contracts and Scope Anchors
