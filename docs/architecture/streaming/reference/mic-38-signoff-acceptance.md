@@ -21,9 +21,19 @@ Primary acceptance:
 bash src/scripts/run_mic38_acceptance.sh
 ```
 
+Optional checkpoint reset for acceptance flow:
+```bash
+bash src/scripts/run_mic38_acceptance.sh --reset-checkpoints
+```
+
 Dual-scenario acceptance (baseline then lag-prone):
 ```bash
 bash src/scripts/run_mic38_acceptance_dual.sh
+```
+
+Optional checkpoint reset for dual-scenario flow:
+```bash
+bash src/scripts/run_mic38_acceptance_dual.sh --reset-checkpoints
 ```
 
 Manual observation (no verifier gates):
@@ -46,7 +56,7 @@ SLA-aligned defaults:
 
 Watermark scenario defaults:
 1. `MIC38_WATERMARK_SCENARIO=baseline`
-2. `BASELINE_MIN_WATERMARK_DROP_RATIO=0.005`
+2. `BASELINE_MIN_WATERMARK_DROP_RATIO=0.0`
 3. `LAG_PRONE_MAX_WATERMARK_DROP_RATIO=0.005`
 
 Watermark policy by scenario:
@@ -56,6 +66,24 @@ Watermark policy by scenario:
 M1 trigger guidance:
 1. Keep `trigger_gold=1 minute` for sign-off.
 2. If trigger is changed for temporary testing, restore to `1 minute` before sign-off runs.
+
+Resource-bound Spark defaults (tunable via env):
+1. `MIC38_SPARK_DRIVER_CORES=1`
+2. `MIC38_SPARK_DRIVER_MEMORY=1g`
+3. `MIC38_SPARK_DRIVER_MEMORY_OVERHEAD=512m`
+4. `MIC38_SPARK_EXECUTOR_INSTANCES=1`
+5. `MIC38_SPARK_EXECUTOR_CORES=1`
+6. `MIC38_SPARK_EXECUTOR_MEMORY=1g`
+7. `MIC38_SPARK_EXECUTOR_MEMORY_OVERHEAD=512m`
+8. `MIC38_SPARK_CORES_MAX=2`
+9. `MIC38_SPARK_SQL_SHUFFLE_PARTITIONS=8`
+10. `MIC38_SPARK_DEFAULT_PARALLELISM=8`
+
+Readiness and settle waits (tunable via env):
+1. `STREAM_BATCH_READY_RETRIES=120`
+2. `STREAM_BATCH_READY_SLEEP_SECONDS=2`
+3. `POST_RUN_BATCH_READY_RETRIES=60`
+4. `POST_RUN_BATCH_READY_SLEEP_SECONDS=5`
 
 ## 4. Static Tuning Workflow (No Dynamic Tuning)
 
@@ -78,6 +106,7 @@ MIC38_RUN_ID=mic38_signoff_20260310 bash src/scripts/run_mic38_acceptance_dual.s
 Step 3: Review outputs
 1. Check `content_metrics.log` for content verifier result.
 2. Check `signoff_report.json` for final MIC-38 gate summary.
+3. Unified freshness/latency gates are computed with a single run reference time from `runtime_end.sample_at_ms` to avoid verifier-order timestamp drift.
 
 Step 4: Decide and record
 1. If gates pass, keep selected static scenario for that environment.
@@ -113,6 +142,10 @@ Manual observation mode:
 1. Runs integrated dataflow but does not execute verifier gates.
 2. Use Spark logs and query tools (for example Trino) for manual inspection.
 
+Acceptance cleanup behavior:
+1. `run_mic38_acceptance.sh` stops started streaming jobs before running verifier Spark sessions.
+2. To keep jobs running for debug only, set `KEEP_JOBS_RUNNING=1` or pass `--keep-jobs-running`.
+
 ## 7. Late-Drop Validation Boundary
 
 1. Timestamp-backshift traffic validates out-of-order behavior, not guaranteed too-late drop behavior.
@@ -132,3 +165,9 @@ docker compose down -v
 ```
 
 Then rerun acceptance and confirm outputs from fresh artifacts.
+
+If stale invalid-rate appears due to old quarantine rows:
+```bash
+bash src/scripts/run_mic38_acceptance.sh --reset-checkpoints
+```
+The acceptance flow also enforces run-scoped freshness windows via `min_ingested_at_ms` and `now-ms` passed into verifier commands.

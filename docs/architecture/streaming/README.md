@@ -39,6 +39,13 @@ Optional (clear checkpoints before job restart):
 bash src/scripts/run_mic38_observe.sh --reset-checkpoints
 ```
 
+Acceptance and dual-scenario flows also support checkpoint reset:
+
+```bash
+bash src/scripts/run_mic38_acceptance.sh --reset-checkpoints
+bash src/scripts/run_mic38_acceptance_dual.sh --reset-checkpoints
+```
+
 ## Maintenance Rules
 
 1. Add or update acceptance commands in script files under `src/scripts/` first.
