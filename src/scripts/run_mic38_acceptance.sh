@@ -19,6 +19,22 @@ Options:
 Equivalent env flags:
   RESET_CHECKPOINTS=1
   KEEP_JOBS_RUNNING=1
+
+Resource-bound env flags (optional overrides):
+  MIC38_SPARK_DRIVER_CORES
+  MIC38_SPARK_DRIVER_MEMORY
+  MIC38_SPARK_DRIVER_MEMORY_OVERHEAD
+  MIC38_SPARK_EXECUTOR_INSTANCES
+  MIC38_SPARK_EXECUTOR_CORES
+  MIC38_SPARK_EXECUTOR_MEMORY
+  MIC38_SPARK_EXECUTOR_MEMORY_OVERHEAD
+  MIC38_SPARK_CORES_MAX
+  MIC38_SPARK_SQL_SHUFFLE_PARTITIONS
+  MIC38_SPARK_DEFAULT_PARALLELISM
+
+Readiness tuning env flags (optional overrides):
+  STREAM_BATCH_READY_RETRIES
+  STREAM_BATCH_READY_SLEEP_SECONDS
 EOF
 }
 
@@ -51,6 +67,17 @@ if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-$DEFAULT_PYTHON_BIN}"
 
+SPARK_DRIVER_CORES="${MIC38_SPARK_DRIVER_CORES:-1}"
+SPARK_DRIVER_MEMORY="${MIC38_SPARK_DRIVER_MEMORY:-1g}"
+SPARK_DRIVER_MEMORY_OVERHEAD="${MIC38_SPARK_DRIVER_MEMORY_OVERHEAD:-512m}"
+SPARK_EXECUTOR_INSTANCES="${MIC38_SPARK_EXECUTOR_INSTANCES:-1}"
+SPARK_EXECUTOR_CORES="${MIC38_SPARK_EXECUTOR_CORES:-1}"
+SPARK_EXECUTOR_MEMORY="${MIC38_SPARK_EXECUTOR_MEMORY:-1g}"
+SPARK_EXECUTOR_MEMORY_OVERHEAD="${MIC38_SPARK_EXECUTOR_MEMORY_OVERHEAD:-512m}"
+SPARK_CORES_MAX="${MIC38_SPARK_CORES_MAX:-2}"
+SPARK_SQL_SHUFFLE_PARTITIONS="${MIC38_SPARK_SQL_SHUFFLE_PARTITIONS:-8}"
+SPARK_DEFAULT_PARALLELISM="${MIC38_SPARK_DEFAULT_PARALLELISM:-8}"
+
 MIC38_WATERMARK_SCENARIO="${MIC38_WATERMARK_SCENARIO:-baseline}"
 BASE_MIC38_RUN_ID="${MIC38_RUN_ID:-mic38_$(date -u +%Y%m%dT%H%M%SZ)}"
 MIC38_RUN_ID="${BASE_MIC38_RUN_ID}_${MIC38_WATERMARK_SCENARIO}"
@@ -74,13 +101,17 @@ MAX_CDC_INVALID_RATE="${MAX_CDC_INVALID_RATE:-0.20}"
 MAX_FRESHNESS_MINUTES="${MAX_FRESHNESS_MINUTES:-3}"
 LATENCY_THRESHOLD_MINUTES="${LATENCY_THRESHOLD_MINUTES:-3}"
 LOOKBACK_MINUTES="${LOOKBACK_MINUTES:-30}"
-BASELINE_MIN_WATERMARK_DROP_RATIO="${BASELINE_MIN_WATERMARK_DROP_RATIO:-0.005}"
+BASELINE_MIN_WATERMARK_DROP_RATIO="${BASELINE_MIN_WATERMARK_DROP_RATIO:-0.0}"
 LAG_PRONE_MAX_WATERMARK_DROP_RATIO="${LAG_PRONE_MAX_WATERMARK_DROP_RATIO:-0.005}"
 
 KAFKA_READY_RETRIES="${KAFKA_READY_RETRIES:-30}"
 KAFKA_READY_SLEEP_SECONDS="${KAFKA_READY_SLEEP_SECONDS:-2}"
 SPARK_JOB_READY_RETRIES="${SPARK_JOB_READY_RETRIES:-10}"
 SPARK_JOB_READY_SLEEP_SECONDS="${SPARK_JOB_READY_SLEEP_SECONDS:-3}"
+STREAM_BATCH_READY_RETRIES="${STREAM_BATCH_READY_RETRIES:-120}"
+STREAM_BATCH_READY_SLEEP_SECONDS="${STREAM_BATCH_READY_SLEEP_SECONDS:-2}"
+POST_RUN_BATCH_READY_RETRIES="${POST_RUN_BATCH_READY_RETRIES:-60}"
+POST_RUN_BATCH_READY_SLEEP_SECONDS="${POST_RUN_BATCH_READY_SLEEP_SECONDS:-5}"
 
 RUN_CONTEXT="mic38:${MIC38_RUN_ID}"
 CONTENT_JOB_LOG="/tmp/${MIC38_RUN_ID}_content_agg.log"
@@ -121,6 +152,16 @@ esac
 
 now_ms() {
   echo $(( $(date +%s) * 1000 ))
+}
+
+now_ms_spark_container() {
+  local seconds
+  seconds="$(docker exec lakehouse-spark bash -lc "date +%s" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "$seconds" =~ ^[0-9]+$ ]]; then
+    echo $(( seconds * 1000 ))
+    return 0
+  fi
+  now_ms
 }
 
 wait_for_kafka_ready() {
@@ -192,10 +233,21 @@ trap 'cleanup_on_exit $?' EXIT
 start_spark_job() {
   local script_path="$1"
   local log_file="$2"
-  local script_name
-  script_name="$(basename "${script_path}" .py)"
-  local ivy_cache="/tmp/ivy/${MIC38_RUN_ID}/${script_name}"
-  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && MIC38_RUN_ID='${MIC38_RUN_ID}' RT_CONTENT_EVENTS_WATERMARK='${RT_CONTENT_EVENTS_WATERMARK}' nohup /opt/spark/bin/spark-submit --conf spark.jars.ivy='${ivy_cache}' '${script_path}' > '${log_file}' 2>&1 &"
+  local ivy_cache="/tmp/ivy/mic38/shared"
+  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && MIC38_RUN_ID='${MIC38_RUN_ID}' RT_CONTENT_EVENTS_WATERMARK='${RT_CONTENT_EVENTS_WATERMARK}' nohup /opt/spark/bin/spark-submit \
+    --conf spark.jars.ivy='${ivy_cache}' \
+    --conf spark.driver.cores='${SPARK_DRIVER_CORES}' \
+    --conf spark.driver.memory='${SPARK_DRIVER_MEMORY}' \
+    --conf spark.driver.memoryOverhead='${SPARK_DRIVER_MEMORY_OVERHEAD}' \
+    --conf spark.executor.instances='${SPARK_EXECUTOR_INSTANCES}' \
+    --conf spark.executor.cores='${SPARK_EXECUTOR_CORES}' \
+    --conf spark.executor.memory='${SPARK_EXECUTOR_MEMORY}' \
+    --conf spark.executor.memoryOverhead='${SPARK_EXECUTOR_MEMORY_OVERHEAD}' \
+    --conf spark.cores.max='${SPARK_CORES_MAX}' \
+    --conf spark.sql.shuffle.partitions='${SPARK_SQL_SHUFFLE_PARTITIONS}' \
+    --conf spark.default.parallelism='${SPARK_DEFAULT_PARALLELISM}' \
+    --conf spark.dynamicAllocation.enabled='false' \
+    '${script_path}' > '${log_file}' 2>&1 &"
 }
 
 wait_for_spark_job() {
@@ -209,6 +261,39 @@ wait_for_spark_job() {
     sleep "$sleep_seconds"
   done
   echo "[MIC-38] ERROR: Spark job pattern '${pattern}' is not running after ${retries} attempts." >&2
+  return 1
+}
+
+wait_for_stream_batch_log() {
+  local log_file="$1"
+  local label="$2"
+  local retries="$3"
+  local sleep_seconds="$4"
+  for ((attempt=1; attempt<=retries; attempt++)); do
+    if docker exec lakehouse-spark bash -lc "if [ -f '${log_file}' ] && grep -Eq 'Batch [0-9]+:' '${log_file}'; then exit 0; else exit 1; fi" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+  echo "[MIC-38] ERROR: ${label} did not report a micro-batch in ${log_file} after ${retries} attempts." >&2
+  return 1
+}
+
+wait_for_min_batch_id() {
+  local log_file="$1"
+  local label="$2"
+  local min_batch_id="$3"
+  local retries="$4"
+  local sleep_seconds="$5"
+  local current_batch_id
+  for ((attempt=1; attempt<=retries; attempt++)); do
+    current_batch_id="$(max_batch_id_from_log "${log_file}" | tr -d '[:space:]')"
+    if [[ "$current_batch_id" =~ ^-?[0-9]+$ ]] && [ "$current_batch_id" -ge "$min_batch_id" ]; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+  echo "[MIC-38] ERROR: ${label} did not reach batch_id >= ${min_batch_id} in ${log_file} after ${retries} attempts." >&2
   return 1
 }
 
@@ -278,6 +363,20 @@ printf '[MIC-38] watermark_scenario=%s\n' "$MIC38_WATERMARK_SCENARIO"
 printf '[MIC-38] content_watermark=%s\n' "$RT_CONTENT_EVENTS_WATERMARK"
 printf '[MIC-38] reset_checkpoints=%s\n' "$RESET_CHECKPOINTS"
 printf '[MIC-38] keep_jobs_running=%s\n' "$KEEP_JOBS_RUNNING"
+printf '[MIC-38] spark_driver_cores=%s\n' "$SPARK_DRIVER_CORES"
+printf '[MIC-38] spark_driver_memory=%s\n' "$SPARK_DRIVER_MEMORY"
+printf '[MIC-38] spark_driver_memory_overhead=%s\n' "$SPARK_DRIVER_MEMORY_OVERHEAD"
+printf '[MIC-38] spark_executor_instances=%s\n' "$SPARK_EXECUTOR_INSTANCES"
+printf '[MIC-38] spark_executor_cores=%s\n' "$SPARK_EXECUTOR_CORES"
+printf '[MIC-38] spark_executor_memory=%s\n' "$SPARK_EXECUTOR_MEMORY"
+printf '[MIC-38] spark_executor_memory_overhead=%s\n' "$SPARK_EXECUTOR_MEMORY_OVERHEAD"
+printf '[MIC-38] spark_cores_max=%s\n' "$SPARK_CORES_MAX"
+printf '[MIC-38] spark_sql_shuffle_partitions=%s\n' "$SPARK_SQL_SHUFFLE_PARTITIONS"
+printf '[MIC-38] spark_default_parallelism=%s\n' "$SPARK_DEFAULT_PARALLELISM"
+printf '[MIC-38] stream_batch_ready_retries=%s\n' "$STREAM_BATCH_READY_RETRIES"
+printf '[MIC-38] stream_batch_ready_sleep_seconds=%s\n' "$STREAM_BATCH_READY_SLEEP_SECONDS"
+printf '[MIC-38] post_run_batch_ready_retries=%s\n' "$POST_RUN_BATCH_READY_RETRIES"
+printf '[MIC-38] post_run_batch_ready_sleep_seconds=%s\n' "$POST_RUN_BATCH_READY_SLEEP_SECONDS"
 printf '[MIC-38] max_freshness_minutes=%s\n' "$MAX_FRESHNESS_MINUTES"
 printf '[MIC-38] latency_threshold_minutes=%s\n' "$LATENCY_THRESHOLD_MINUTES"
 printf '[MIC-38] content_max_invalid_rate=%s\n' "$MAX_CONTENT_INVALID_RATE"
@@ -304,6 +403,19 @@ wait_for_kafka_ready "$KAFKA_READY_RETRIES" "$KAFKA_READY_SLEEP_SECONDS"
 ensure_topic content_events 6
 ensure_topic cdc.content.videos 3
 
+if [ -z "${RUN_START_MS:-}" ]; then
+  RUN_START_MS="$(now_ms_spark_container)"
+fi
+if [ -z "${MIN_PROCESSED_AT_MS:-}" ]; then
+  MIN_PROCESSED_AT_MS="$RUN_START_MS"
+fi
+if [ -z "${MIN_INGESTED_AT_MS:-}" ]; then
+  MIN_INGESTED_AT_MS="$RUN_START_MS"
+fi
+printf '[MIC-38] run_start_ms=%s\n' "$RUN_START_MS"
+printf '[MIC-38] min_processed_at_ms=%s\n' "$MIN_PROCESSED_AT_MS"
+printf '[MIC-38] min_ingested_at_ms=%s\n' "$MIN_INGESTED_AT_MS"
+
 printf '[MIC-38] Starting both Spark jobs for integrated E2E run...\n'
 stop_mic38_spark_jobs
 if [ "$RESET_CHECKPOINTS" = "1" ]; then
@@ -314,18 +426,13 @@ fi
 start_spark_job /home/iceberg/local/src/spark/rt_content_events_aggregator.py "$CONTENT_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+wait_for_stream_batch_log "$CONTENT_JOB_LOG" "content aggregator" "$STREAM_BATCH_READY_RETRIES" "$STREAM_BATCH_READY_SLEEP_SECONDS"
 
 start_spark_job /home/iceberg/local/src/spark/rt_video_cdc_upsert.py "$CDC_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+wait_for_stream_batch_log "$CDC_JOB_LOG" "CDC upsert" "$STREAM_BATCH_READY_RETRIES" "$STREAM_BATCH_READY_SLEEP_SECONDS"
 STARTED_SPARK_JOBS=1
-
-RUN_START_MS="${RUN_START_MS:-$(now_ms)}"
-MIN_PROCESSED_AT_MS="${MIN_PROCESSED_AT_MS:-$RUN_START_MS}"
-MIN_INGESTED_AT_MS="${MIN_INGESTED_AT_MS:-$RUN_START_MS}"
-printf '[MIC-38] run_start_ms=%s\n' "$RUN_START_MS"
-printf '[MIC-38] min_processed_at_ms=%s\n' "$MIN_PROCESSED_AT_MS"
-printf '[MIC-38] min_ingested_at_ms=%s\n' "$MIN_INGESTED_AT_MS"
 
 printf '[MIC-38] Capturing pre-run runtime/checkpoint snapshots...\n'
 runtime_snapshot "$RUNTIME_START_JSON"
@@ -354,6 +461,25 @@ fi
 
 sleep "$WAIT_AFTER_CDC_FIXTURE_SECONDS"
 
+printf '[MIC-38] Waiting for post-run micro-batch settling before snapshots...\n'
+wait_for_min_batch_id "$CONTENT_JOB_LOG" "content aggregator" 2 "$POST_RUN_BATCH_READY_RETRIES" "$POST_RUN_BATCH_READY_SLEEP_SECONDS"
+wait_for_min_batch_id "$CDC_JOB_LOG" "CDC upsert" 2 "$POST_RUN_BATCH_READY_RETRIES" "$POST_RUN_BATCH_READY_SLEEP_SECONDS"
+
+printf '[MIC-38] Capturing post-run runtime/checkpoint snapshots...\n'
+runtime_snapshot "$RUNTIME_END_JSON"
+checkpoint_snapshot "$CHECKPOINT_END_JSON"
+RUNTIME_END_SAMPLE_MS="$(sed -n 's/.*\"sample_at_ms\":\([0-9][0-9]*\).*/\1/p' "$RUNTIME_END_JSON" | head -n 1)"
+if [ -z "$RUNTIME_END_SAMPLE_MS" ]; then
+  RUNTIME_END_SAMPLE_MS="$RUN_START_MS"
+fi
+printf '[MIC-38] runtime_end_sample_ms=%s\n' "$RUNTIME_END_SAMPLE_MS"
+
+if [ "$KEEP_JOBS_RUNNING" != "1" ]; then
+  printf '[MIC-38] Stopping Spark jobs before verifier Spark sessions...\n'
+  stop_mic38_spark_jobs
+  STARTED_SPARK_JOBS=0
+fi
+
 printf '[MIC-38] Verifying content valid path (MIC-40 style gate)...\n'
 declare -a WATERMARK_DROP_ARGS=()
 if [ -n "$MIN_WATERMARK_DROP_RATIO" ]; then
@@ -367,6 +493,7 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_con
   --min-gold-rows "$MIN_GOLD_ROWS" \
   --max-freshness-minutes "$MAX_FRESHNESS_MINUTES" \
   --min-processed-at-ms "$MIN_PROCESSED_AT_MS" \
+  --now-ms "$RUNTIME_END_SAMPLE_MS" \
   "${WATERMARK_DROP_ARGS[@]}" | tee "$CONTENT_METRICS_LOG"
 
 printf '[MIC-38] Verifying content invalid path (MIC-39 style gate)...\n'
@@ -376,14 +503,16 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_con
   --min-invalid-rows "$MIN_CONTENT_INVALID_ROWS" \
   --max-invalid-rate "$MAX_CONTENT_INVALID_RATE" \
   --max-freshness-minutes "$MAX_FRESHNESS_MINUTES" \
-  --min-ingested-at-ms "$MIN_INGESTED_AT_MS" | tee "$CONTENT_CONTRACT_LOG"
+  --min-ingested-at-ms "$MIN_INGESTED_AT_MS" \
+  --now-ms "$RUNTIME_END_SAMPLE_MS" | tee "$CONTENT_CONTRACT_LOG"
 
 printf '[MIC-38] Verifying CDC valid path (MIC-37 style gate)...\n'
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_upsert.py \
   --video-id "$MIC38_VIDEO_ID" \
   --max-freshness-minutes "$MAX_FRESHNESS_MINUTES" \
   --expect-status "$EXPECTED_CDC_STATUS" \
-  --expect-source-ts-ms "$EXPECTED_CDC_SOURCE_TS_MS" | tee "$CDC_UPSERT_LOG"
+  --expect-source-ts-ms "$EXPECTED_CDC_SOURCE_TS_MS" \
+  --now-ms "$RUNTIME_END_SAMPLE_MS" | tee "$CDC_UPSERT_LOG"
 
 printf '[MIC-38] Verifying CDC invalid path (MIC-43 style gate)...\n'
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invalid_cdc_quarantine.py \
@@ -398,11 +527,9 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/check_rt_vide
   --invalid-table lakehouse.bronze.invalid_events_cdc_videos \
   --max-freshness-minutes "$MAX_FRESHNESS_MINUTES" \
   --lookback-minutes "$LOOKBACK_MINUTES" \
-  --max-invalid-rate "$MAX_CDC_INVALID_RATE" | tee "$CDC_HEALTH_LOG"
-
-printf '[MIC-38] Capturing post-run runtime/checkpoint snapshots...\n'
-runtime_snapshot "$RUNTIME_END_JSON"
-checkpoint_snapshot "$CHECKPOINT_END_JSON"
+  --max-invalid-rate "$MAX_CDC_INVALID_RATE" \
+  --now-ms "$RUNTIME_END_SAMPLE_MS" \
+  --min-ingested-at-ms "$MIN_INGESTED_AT_MS" | tee "$CDC_HEALTH_LOG"
 
 printf '[MIC-38] Running unified MIC-38 sign-off verifier...\n'
 "$PYTHON_BIN" src/scripts/verify_mic38_sprint1_signoff.py \

@@ -73,6 +73,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-freshness-minutes", type=int, default=10)
     parser.add_argument("--lookback-minutes", type=int, default=10)
     parser.add_argument("--max-invalid-rate", type=float)
+    parser.add_argument("--now-ms", type=int, default=None)
+    parser.add_argument("--min-ingested-at-ms", type=int)
     return parser.parse_args(argv)
 
 
@@ -82,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parse_args(argv)
     spark = SparkSession.builder.appName("check_rt_video_cdc_health").getOrCreate()
+    reference_now_ms = args.now_ms if args.now_ms is not None else utc_now_ms()
+    reference_now_dt = datetime.fromtimestamp(reference_now_ms / 1000, tz=timezone.utc)
 
     dim_df = spark.read.format("iceberg").load(args.dim_table)
     latest_source_ts_ms = dim_df.selectExpr("max(source_ts_ms) AS latest_source_ts_ms").collect()[0][
@@ -91,19 +95,25 @@ def main(argv: list[str] | None = None) -> int:
         latest_source_ts_ms = int(latest_source_ts_ms)
 
     invalid_df = spark.read.format("iceberg").load(args.invalid_table)
-    lookback_start = datetime.now(timezone.utc) - timedelta(minutes=args.lookback_minutes)
-    invalid_count_lookback = invalid_df.filter(col("ingested_at") >= lit(lookback_start)).count()
+    lookback_start = reference_now_dt - timedelta(minutes=args.lookback_minutes)
+    invalid_window_df = invalid_df.filter(col("ingested_at") >= lit(lookback_start))
+    if args.min_ingested_at_ms is not None:
+        invalid_window_df = invalid_window_df.filter(
+            (col("ingested_at").cast("long") * 1000) >= args.min_ingested_at_ms
+        )
+    invalid_count_lookback = invalid_window_df.count()
 
     errors, metrics = validate_cdc_health(
         latest_source_ts_ms=latest_source_ts_ms,
-        now_ms=utc_now_ms(),
+        now_ms=reference_now_ms,
         max_freshness_minutes=args.max_freshness_minutes,
         invalid_count_lookback=invalid_count_lookback,
         lookback_minutes=args.lookback_minutes,
         max_invalid_rate=args.max_invalid_rate,
     )
 
-    metrics["checked_at"] = datetime.now(timezone.utc).isoformat()
+    metrics["checked_at"] = reference_now_dt.isoformat()
+    metrics["min_ingested_at_ms"] = args.min_ingested_at_ms
 
     if errors:
         print("FAIL: MIC-43 CDC health check failed")

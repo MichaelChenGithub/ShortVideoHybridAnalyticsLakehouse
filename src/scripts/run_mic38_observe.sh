@@ -19,6 +19,22 @@ Options:
 Equivalent env flags:
   RESET_CHECKPOINTS=1
   PRINT_MAINTENANCE_HINT=1
+
+Resource-bound env flags (optional overrides):
+  MIC38_SPARK_DRIVER_CORES
+  MIC38_SPARK_DRIVER_MEMORY
+  MIC38_SPARK_DRIVER_MEMORY_OVERHEAD
+  MIC38_SPARK_EXECUTOR_INSTANCES
+  MIC38_SPARK_EXECUTOR_CORES
+  MIC38_SPARK_EXECUTOR_MEMORY
+  MIC38_SPARK_EXECUTOR_MEMORY_OVERHEAD
+  MIC38_SPARK_CORES_MAX
+  MIC38_SPARK_SQL_SHUFFLE_PARTITIONS
+  MIC38_SPARK_DEFAULT_PARALLELISM
+
+Readiness tuning env flags (optional overrides):
+  STREAM_BATCH_READY_RETRIES
+  STREAM_BATCH_READY_SLEEP_SECONDS
 EOF
 }
 
@@ -51,6 +67,17 @@ if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-$DEFAULT_PYTHON_BIN}"
 
+SPARK_DRIVER_CORES="${MIC38_SPARK_DRIVER_CORES:-1}"
+SPARK_DRIVER_MEMORY="${MIC38_SPARK_DRIVER_MEMORY:-1g}"
+SPARK_DRIVER_MEMORY_OVERHEAD="${MIC38_SPARK_DRIVER_MEMORY_OVERHEAD:-512m}"
+SPARK_EXECUTOR_INSTANCES="${MIC38_SPARK_EXECUTOR_INSTANCES:-1}"
+SPARK_EXECUTOR_CORES="${MIC38_SPARK_EXECUTOR_CORES:-1}"
+SPARK_EXECUTOR_MEMORY="${MIC38_SPARK_EXECUTOR_MEMORY:-1g}"
+SPARK_EXECUTOR_MEMORY_OVERHEAD="${MIC38_SPARK_EXECUTOR_MEMORY_OVERHEAD:-512m}"
+SPARK_CORES_MAX="${MIC38_SPARK_CORES_MAX:-2}"
+SPARK_SQL_SHUFFLE_PARTITIONS="${MIC38_SPARK_SQL_SHUFFLE_PARTITIONS:-8}"
+SPARK_DEFAULT_PARALLELISM="${MIC38_SPARK_DEFAULT_PARALLELISM:-8}"
+
 MIC38_RUN_ID="${MIC38_RUN_ID:-mic38_observe_$(date -u +%Y%m%dT%H%M%SZ)}"
 MIC38_VIDEO_ID="${MIC38_VIDEO_ID:-${MIC38_RUN_ID}_cdc_vid_001}"
 CONTENT_JOB_PATTERN="[r]t_content_events_aggregator.py"
@@ -65,6 +92,8 @@ KAFKA_READY_RETRIES="${KAFKA_READY_RETRIES:-30}"
 KAFKA_READY_SLEEP_SECONDS="${KAFKA_READY_SLEEP_SECONDS:-2}"
 SPARK_JOB_READY_RETRIES="${SPARK_JOB_READY_RETRIES:-10}"
 SPARK_JOB_READY_SLEEP_SECONDS="${SPARK_JOB_READY_SLEEP_SECONDS:-3}"
+STREAM_BATCH_READY_RETRIES="${STREAM_BATCH_READY_RETRIES:-120}"
+STREAM_BATCH_READY_SLEEP_SECONDS="${STREAM_BATCH_READY_SLEEP_SECONDS:-2}"
 
 BASE_TS_MS="${BASE_TS_MS:-$(( $(date +%s) * 1000 ))}"
 
@@ -125,7 +154,21 @@ trap 'cleanup_on_error $?' EXIT
 start_spark_job() {
   local script_path="$1"
   local log_file="$2"
-  docker exec lakehouse-spark bash -lc "MIC38_RUN_ID='${MIC38_RUN_ID}' nohup /opt/spark/bin/spark-submit '${script_path}' > '${log_file}' 2>&1 &"
+  local ivy_cache="/tmp/ivy/mic38/shared"
+  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && MIC38_RUN_ID='${MIC38_RUN_ID}' nohup /opt/spark/bin/spark-submit \
+    --conf spark.jars.ivy='${ivy_cache}' \
+    --conf spark.driver.cores='${SPARK_DRIVER_CORES}' \
+    --conf spark.driver.memory='${SPARK_DRIVER_MEMORY}' \
+    --conf spark.driver.memoryOverhead='${SPARK_DRIVER_MEMORY_OVERHEAD}' \
+    --conf spark.executor.instances='${SPARK_EXECUTOR_INSTANCES}' \
+    --conf spark.executor.cores='${SPARK_EXECUTOR_CORES}' \
+    --conf spark.executor.memory='${SPARK_EXECUTOR_MEMORY}' \
+    --conf spark.executor.memoryOverhead='${SPARK_EXECUTOR_MEMORY_OVERHEAD}' \
+    --conf spark.cores.max='${SPARK_CORES_MAX}' \
+    --conf spark.sql.shuffle.partitions='${SPARK_SQL_SHUFFLE_PARTITIONS}' \
+    --conf spark.default.parallelism='${SPARK_DEFAULT_PARALLELISM}' \
+    --conf spark.dynamicAllocation.enabled='false' \
+    '${script_path}' > '${log_file}' 2>&1 &"
 }
 
 wait_for_spark_job() {
@@ -139,6 +182,21 @@ wait_for_spark_job() {
     sleep "$sleep_seconds"
   done
   echo "[MIC-38-OBSERVE] ERROR: Spark job pattern '${pattern}' is not running after ${retries} attempts." >&2
+  return 1
+}
+
+wait_for_stream_batch_log() {
+  local log_file="$1"
+  local label="$2"
+  local retries="$3"
+  local sleep_seconds="$4"
+  for ((attempt=1; attempt<=retries; attempt++)); do
+    if docker exec lakehouse-spark bash -lc "if [ -f '${log_file}' ] && grep -Eq 'Batch [0-9]+:' '${log_file}'; then exit 0; else exit 1; fi" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+  echo "[MIC-38-OBSERVE] ERROR: ${label} did not report a micro-batch in ${log_file} after ${retries} attempts." >&2
   return 1
 }
 
@@ -158,6 +216,18 @@ printf '[MIC-38-OBSERVE] Starting manual-observe flow...\n'
 printf '[MIC-38-OBSERVE] run_id=%s\n' "$MIC38_RUN_ID"
 printf '[MIC-38-OBSERVE] cdc_video_id=%s\n' "$MIC38_VIDEO_ID"
 printf '[MIC-38-OBSERVE] reset_checkpoints=%s\n' "$RESET_CHECKPOINTS"
+printf '[MIC-38-OBSERVE] spark_driver_cores=%s\n' "$SPARK_DRIVER_CORES"
+printf '[MIC-38-OBSERVE] spark_driver_memory=%s\n' "$SPARK_DRIVER_MEMORY"
+printf '[MIC-38-OBSERVE] spark_driver_memory_overhead=%s\n' "$SPARK_DRIVER_MEMORY_OVERHEAD"
+printf '[MIC-38-OBSERVE] spark_executor_instances=%s\n' "$SPARK_EXECUTOR_INSTANCES"
+printf '[MIC-38-OBSERVE] spark_executor_cores=%s\n' "$SPARK_EXECUTOR_CORES"
+printf '[MIC-38-OBSERVE] spark_executor_memory=%s\n' "$SPARK_EXECUTOR_MEMORY"
+printf '[MIC-38-OBSERVE] spark_executor_memory_overhead=%s\n' "$SPARK_EXECUTOR_MEMORY_OVERHEAD"
+printf '[MIC-38-OBSERVE] spark_cores_max=%s\n' "$SPARK_CORES_MAX"
+printf '[MIC-38-OBSERVE] spark_sql_shuffle_partitions=%s\n' "$SPARK_SQL_SHUFFLE_PARTITIONS"
+printf '[MIC-38-OBSERVE] spark_default_parallelism=%s\n' "$SPARK_DEFAULT_PARALLELISM"
+printf '[MIC-38-OBSERVE] stream_batch_ready_retries=%s\n' "$STREAM_BATCH_READY_RETRIES"
+printf '[MIC-38-OBSERVE] stream_batch_ready_sleep_seconds=%s\n' "$STREAM_BATCH_READY_SLEEP_SECONDS"
 
 printf '[MIC-38-OBSERVE] Starting required services...\n'
 docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
@@ -176,10 +246,12 @@ fi
 start_spark_job /home/iceberg/local/src/spark/rt_content_events_aggregator.py "$CONTENT_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+wait_for_stream_batch_log "$CONTENT_JOB_LOG" "content aggregator" "$STREAM_BATCH_READY_RETRIES" "$STREAM_BATCH_READY_SLEEP_SECONDS"
 
 start_spark_job /home/iceberg/local/src/spark/rt_video_cdc_upsert.py "$CDC_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+wait_for_stream_batch_log "$CDC_JOB_LOG" "CDC upsert" "$STREAM_BATCH_READY_RETRIES" "$STREAM_BATCH_READY_SLEEP_SECONDS"
 STARTED_SPARK_JOBS=1
 
 printf '[MIC-38-OBSERVE] Emitting bounded generator traffic (MIC-38 shared run shape)...\n'

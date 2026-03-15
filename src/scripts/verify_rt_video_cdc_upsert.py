@@ -83,6 +83,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--expect-status")
     parser.add_argument("--expect-source-ts-ms", type=int)
     parser.add_argument("--min-row-count", type=int, default=1)
+    parser.add_argument("--now-ms", type=int, default=None)
     return parser.parse_args(argv)
 
 
@@ -106,10 +107,12 @@ def main(argv: list[str] | None = None) -> int:
         for row in table_df.filter(col("video_id") == args.video_id).limit(2).collect()
     ]
 
+    reference_now_ms = args.now_ms if args.now_ms is not None else utc_now_ms()
+
     errors = validate_video_snapshot(
         rows,
         video_id=args.video_id,
-        now_ms=utc_now_ms(),
+        now_ms=reference_now_ms,
         max_freshness_minutes=args.max_freshness_minutes,
         expected_status=args.expect_status,
         expected_source_ts_ms=args.expect_source_ts_ms,

@@ -108,6 +108,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-invalid-rate", type=float, default=0.20)
     parser.add_argument("--max-freshness-minutes", type=int, default=10)
     parser.add_argument("--min-ingested-at-ms", type=int, default=None)
+    parser.add_argument("--now-ms", type=int, default=None)
     return parser.parse_args(argv)
 
 
@@ -167,9 +168,11 @@ def main(argv: list[str] | None = None) -> int:
         "max_invalid_ingested_at_ms": max_invalid_ingested_at_ms,
     }
 
+    reference_now_ms = args.now_ms if args.now_ms is not None else utc_now_ms()
+
     errors = validate_content_contract_snapshot(
         snapshot,
-        now_ms=utc_now_ms(),
+        now_ms=reference_now_ms,
         min_raw_rows=args.min_raw_rows,
         min_gold_rows=args.min_gold_rows,
         min_invalid_rows=args.min_invalid_rows,

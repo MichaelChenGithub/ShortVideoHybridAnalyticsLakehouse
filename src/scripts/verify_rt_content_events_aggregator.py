@@ -139,6 +139,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--min-processed-at-ms", type=int, default=None)
     parser.add_argument("--min-watermark-drop-ratio", type=float, default=None)
     parser.add_argument("--max-watermark-drop-ratio", type=float, default=None)
+    parser.add_argument("--now-ms", type=int, default=None)
     return parser.parse_args(argv)
 
 
@@ -248,9 +249,11 @@ def main(argv: list[str] | None = None) -> int:
         "max_processed_at_ms": max_processed_at_ms,
     }
 
+    reference_now_ms = args.now_ms if args.now_ms is not None else utc_now_ms()
+
     errors = validate_aggregator_snapshot(
         snapshot,
-        now_ms=utc_now_ms(),
+        now_ms=reference_now_ms,
         min_raw_rows=args.min_raw_rows,
         min_gold_rows=args.min_gold_rows,
         max_freshness_minutes=args.max_freshness_minutes,

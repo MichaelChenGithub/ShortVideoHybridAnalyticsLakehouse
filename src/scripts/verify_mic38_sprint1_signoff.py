@@ -391,20 +391,19 @@ def build_signoff_report(
     )
     gates.append(gate)
 
-    content_freshness_age_ms = _safe_age_ms(
-        content_max_processed_at_ms,
-        now_ms=content_metrics_checked_at_ms,
-    )
+    # Use a single reference time for unified freshness/latency gates to avoid
+    # verifier-order drift from sequential command execution timestamps.
+    content_freshness_age_ms = _safe_age_ms(content_max_processed_at_ms, now_ms=now_ms)
     content_invalid_freshness_age_ms = _safe_age_ms(
         content_max_invalid_ingested_at_ms,
-        now_ms=content_contract_checked_at_ms,
+        now_ms=now_ms,
     )
     cdc_freshness_age_ms_raw = cdc_health.get("freshness_age_ms")
     cdc_freshness_age_ms = _as_int(cdc_freshness_age_ms_raw, default=-1)
     if cdc_freshness_age_ms < 0:
         cdc_freshness_age_ms = _safe_age_ms(
             cdc_health.get("latest_source_ts_ms"),
-            now_ms=cdc_health_checked_at_ms,
+            now_ms=now_ms,
         )
 
     max_freshness_ms = max_freshness_minutes * 60 * 1_000
