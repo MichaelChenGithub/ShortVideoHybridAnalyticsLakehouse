@@ -70,24 +70,34 @@ Definition: share of `RESCUE` previews that later show recovery outcomes in simu
 Target: `>= 0.70`.
 
 4. `Batch Metric Coverage`  
-Definition: retention/engagement/sessionization outputs are published in governed semantic surfaces.
+Definition: governed semantic outputs include `Retention` (`D1`, `D7` cohort metrics), `Engagement` (daily KPI plus lightweight funnel), and `Sessionization` (30-minute inactivity-gap session metrics).
+Coverage baseline: at minimum, batch outputs are analyzable by `date x category x region` (and optionally `new_vs_returning_user` where available).
 
 5. `Semantic Quality Coverage`  
-Definition: dbt quality checks cover core model constraints and business-critical fields.
+Definition: core semantic data products pass defined quality gates before daily publish for stable cross-team interpretation and reuse.
+Target: daily publish availability for core semantic products `>= 99%`.
+Implementation details: quality gate implementation is defined in `docs/architecture/quality/dbt-semantic-quality-contract-m2.md`.
 
 6. `Cloud Scale Evidence`  
-Definition: benchmark artifacts report supported throughput/volume and freshness behavior.
+Definition: benchmark artifacts report supported throughput/volume and freshness behavior for business reporting continuity.
+Target:
+1. sustained ingest rate `>= 5,000 events/sec`
+2. peak ingest rate `>= 10,000 events/sec`
+3. equivalent daily processed volume `>= 432M rows/day`
 
 ### 6.3 Guardrail KPIs
 
 1. `Realtime Freshness Breach`  
 Definition: periods where realtime freshness exceeds policy thresholds.
+Guardrail target: `P95 <= 3 minutes`
 
 2. `Batch Completeness and Freshness`  
 Definition: scheduled batch outputs satisfy completeness and freshness checks.
+Guardrail target: `D-1` outputs are ready by `08:00` (`America/New_York`).
 
 3. `Data Quality Gate Health`  
 Definition: semantic/dbt quality checks pass for publishable outputs.
+Guardrail target: daily publish availability for core semantic products `>= 99%`.
 
 4. `False Suppression Rate (simulation-backed)`  
 Definition: share of recommendations that suppress content later evaluated as high quality.  
@@ -106,9 +116,9 @@ Priority order:
 
 ### 7.2 Analytics Outcomes (Batch)
 
-1. `RETENTION_METRICS`: D1/D7 retention outputs for cohort/trend analysis
-2. `ENGAGEMENT_METRICS`: watch/completion/skip/interaction aggregates for performance diagnosis
-3. `SESSIONIZATION_METRICS`: session-level behavior outputs for usage pattern analysis
+1. `RETENTION_METRICS`: `D1` and `D7` retention, shaped as `cohort_date x day_n x segment` (for example `region`, `category`, `new_vs_returning_user`) to identify fast-decay cohorts and higher-return-visit content patterns.
+2. `ENGAGEMENT_METRICS`: daily KPI plus lightweight funnel (`impression -> play_start -> play_finish -> interaction`) with core counts and rates (`play_start_rate`, `completion_rate`, `interaction_rate`, `skip_rate`) to diagnose stage-level drop-off and segment-level quality mismatch.
+3. `SESSIONIZATION_METRICS`: session outputs using 30-minute inactivity split (`sessions`, `sessions_per_user`, `avg_session_duration`, `events_per_session`, `watch_time_per_session`) to evaluate visit frequency, session depth, and stickiness changes.
 
 Publish contract:
 1. Batch outcomes are publishable data products (not queue actions).
@@ -118,11 +128,16 @@ Publish contract:
 
 M1 + M2 scope is considered complete when:
 
-1. realtime recommendation preview and health metrics are queryable and contract-valid
-2. batch retention/engagement/sessionization metrics are implemented and documented
-3. semantic + dbt quality workflows are defined and testable
-4. cloud benchmark artifacts are available for delivery evidence and portfolio storytelling
-5. platform outputs remain deterministic, auditable, and version-traceable
+1. realtime recommendation preview and health metrics are queryable and contract-valid, with realtime freshness `P95 <= 3 minutes`.
+2. batch analytics outcomes are published daily by `08:00` (`America/New_York`) for `D-1` data.
+3. batch metric coverage includes:
+   - `Retention`: `D1` and `D7` cohort outputs
+   - `Engagement`: daily KPI plus lightweight funnel outputs
+   - `Sessionization`: 30-minute inactivity-gap session outputs
+4. batch outputs are analyzable at minimum by `date x category x region` (and `new_vs_returning_user` where available).
+5. core semantic data products meet daily publish availability target `>= 99%`.
+6. cloud benchmark artifacts demonstrate ingest/volume targets (`>= 5,000 events/sec`, `>= 10,000 events/sec` peak, `>= 432M rows/day`) and are retained as delivery evidence.
+7. platform outputs remain deterministic, auditable, and version-traceable.
 
 ## 9. Risks and Trade-offs
 
@@ -146,3 +161,6 @@ Mitigation: keep deferred scope centralized and explicit in future-plan referenc
 4. `docs/architecture/realtime-decisioning/metric-contract.md`
 5. `docs/architecture/realtime-decisioning/acceptance-criteria.md`
 6. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
+7. `docs/architecture/batch/batch-metrics-contract-m2.md`
+8. `docs/architecture/quality/dbt-semantic-quality-contract-m2.md`
+9. `docs/architecture/cloud/aws-deployment-and-scale-benchmark-m2.md`
