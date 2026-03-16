@@ -1,6 +1,6 @@
 # Domain Acceptance Criteria: Batch Analytics
 
-Status: Draft
+Status: Final
 
 ## 1. Functional Coverage
 

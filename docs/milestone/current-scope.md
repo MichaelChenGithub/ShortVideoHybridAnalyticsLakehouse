@@ -12,7 +12,7 @@ This is the authoritative current-scope document for planning and documentation 
    - retention metrics (`D1`, `D7` cohort outputs)
    - engagement metrics (daily KPI + lightweight funnel)
    - sessionization metrics (30-minute inactivity-gap session outputs)
-   - minimum analysis cuts: `date x category x region` (plus `new_vs_returning_user` where available)
+   - minimum analysis cuts: `date x category x region x new_vs_returning_user`
 2. Semantic + dbt quality expansion:
    - semantic serving layer refinement for analytics usage
    - dbt model organization and quality checks

@@ -416,7 +416,7 @@ Required fields (minimum):
 
 1. `user_sk` STRING (deterministic hash surrogate key)
 2. `user_id` STRING
-3. `new_vs_returning_user` STRING (`new`, `returning`; platform-lifetime definition)
+3. `new_vs_returning_user` STRING (`new`, `returning`, `unknown`; platform-lifetime definition with explicit fallback)
 4. `valid_from` TIMESTAMP
 5. `valid_to` TIMESTAMP
 6. `is_current` BOOLEAN
@@ -642,6 +642,7 @@ Guardrails:
 1. `new_vs_returning_user` uses platform-lifetime definition:
    - `new`: first-seen activity date for `user_id`
    - `returning`: any activity after first-seen date
+   - `unknown`: fallback when authoritative user-state attribution is unavailable during batch derivation
 2. Identity mapping policy must keep batch joins stable across replay/backfill runs.
 3. Surrogate keys use deterministic hash strategy (not sequence identity) to preserve cross-run reproducibility.
 4. Final derivation logic is defined jointly with batch metrics contract; this file anchors required model fields only.
@@ -667,4 +668,4 @@ Guardrails:
    - `lakehouse.bronze.invalid_events_cdc_videos`
 6. QA validation tables are defined and linkable to decision outputs by `run_id` and `video_id + window_start`
 7. Batch tables declare grain, required fields, and publish metadata for SLA/quality traceability.
-8. Batch segmentation supports at minimum `date x category x region` (with `new_vs_returning_user` where available).
+8. Batch segmentation supports at minimum `date x category x region x new_vs_returning_user`.

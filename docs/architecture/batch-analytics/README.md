@@ -1,6 +1,6 @@
 # Batch Architecture
 
-Status: Draft
+Status: Final
 
 ## 1. Purpose
 

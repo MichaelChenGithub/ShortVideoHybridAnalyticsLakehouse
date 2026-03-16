@@ -1,6 +1,6 @@
 # dbt Semantic Quality Contract
 
-Status: Draft
+Status: Final
 
 ## 1. Purpose
 

@@ -1,6 +1,6 @@
 # Batch Acceptance Runbook
 
-Status: Draft
+Status: Final
 
 ## 1. Purpose
 

@@ -70,7 +70,7 @@ Target: `>= 0.70`.
 
 4. `Batch Metric Coverage`  
 Definition: governed semantic outputs include `Retention` (`D1`, `D7` cohort metrics), `Engagement` (daily KPI plus lightweight funnel), and `Sessionization` (30-minute inactivity-gap session metrics).
-Coverage baseline: at minimum, batch outputs are analyzable by `date x category x region` (and optionally `new_vs_returning_user` where available).
+Coverage baseline: at minimum, batch outputs are analyzable by `date x category x region x new_vs_returning_user`.
 
 5. `Semantic Quality Coverage`  
 Definition: core semantic data products pass defined quality gates before daily publish for stable cross-team interpretation and reuse.
@@ -133,7 +133,7 @@ current scope scope is considered complete when:
    - `Retention`: `D1` and `D7` cohort outputs
    - `Engagement`: daily KPI plus lightweight funnel outputs
    - `Sessionization`: 30-minute inactivity-gap session outputs
-4. batch outputs are analyzable at minimum by `date x category x region` (and `new_vs_returning_user` where available).
+4. batch outputs are analyzable at minimum by `date x category x region x new_vs_returning_user`.
 5. core semantic data products meet daily publish availability target `>= 99%`.
 6. cloud benchmark artifacts demonstrate ingest/volume targets (`>= 5,000 events/sec`, `>= 10,000 events/sec` peak, `>= 432M rows/day`) and are retained as delivery evidence.
 7. platform outputs remain deterministic, auditable, and version-traceable.

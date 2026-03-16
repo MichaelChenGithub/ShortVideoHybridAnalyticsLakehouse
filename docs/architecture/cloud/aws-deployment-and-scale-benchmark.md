@@ -1,6 +1,6 @@
 # AWS Deployment and Scale Benchmark
 
-Status: Draft
+Status: Final
 
 ## 1. Purpose
 
@@ -20,7 +20,7 @@ Cloud baseline stack:
 
 1. sustained ingest rate target: `>= 5,000 events/sec`
 2. peak ingest rate target: `>= 10,000 events/sec`
-3. daily volume target: `100M+ events/day`
+3. equivalent daily processed volume target: `>= 432M rows/day`
 4. realtime freshness target: `P95 < 3 minutes`
 5. batch publish readiness target: `D-1` outputs ready by `08:00` (`America/New_York`)
 

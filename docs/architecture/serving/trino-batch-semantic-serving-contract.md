@@ -1,7 +1,7 @@
 # Design Doc: Trino Batch Semantic Serving Contract
 
 Date: `2026-03-15`
-Status: `Draft`
+Status: `Final`
 
 ## 1. Purpose
 
@@ -75,7 +75,7 @@ Key required fields:
 Semantic notes:
 
 1. `day_n` is limited to `{1, 7}` in current scope.
-2. cohort is activity-date based and supports both `new` and `returning` segments.
+2. cohort is activity-date based and supports governed `new`, `returning`, and `unknown` segments.
 3. when `cohort_users = 0`, retention output should be treated as not computable (`NULL`/no row), not forced to `0`.
 
 ### 5.2 `lakehouse.serving.v_bt_engagement_daily`

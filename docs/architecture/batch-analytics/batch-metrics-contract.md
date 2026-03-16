@@ -1,6 +1,6 @@
 # Batch Metrics Contract
 
-Status: Draft
+Status: Final
 
 ## 1. Purpose
 
@@ -38,7 +38,7 @@ If formula text conflicts with downstream SQL examples, this contract wins.
 ## 4. Shared Semantics
 
 1. batch publish target: `D-1` outputs ready by `08:00` (`America/New_York`).
-2. minimum segmentation coverage: `date x category x region`, with required `new_vs_returning_user`.
+2. minimum segmentation coverage: `date x category x region x new_vs_returning_user`.
 3. when user-state attribution is unavailable, use explicit `new_vs_returning_user = 'unknown'`.
 4. denominator protection uses `max(denominator, 1)` to avoid divide-by-zero.
 
@@ -61,6 +61,7 @@ Definitions:
 1. `cohort_users`: number of unique users in the `cohort_date` cohort.
 2. `retained_users`: number of those cohort users active on `cohort_date + day_n`.
 3. `retention_rate = retained_users / max(cohort_users, 1)`.
+4. if `cohort_users = 0`, retention is not computable and should be emitted as `NULL` or omitted from the published slice; it must not be forced to `0`.
 
 ## 6. Engagement Metrics
 
