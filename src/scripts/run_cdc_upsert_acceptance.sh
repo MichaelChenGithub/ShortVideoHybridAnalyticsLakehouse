@@ -14,6 +14,7 @@ Environment overrides:
   WAIT_AFTER_FIXTURE_SECONDS
   BASE_TS_MS
   EXPECTED_SOURCE_TS_MS
+  MIN_RAW_ROWS
 EOF
 }
 
@@ -39,6 +40,7 @@ WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_FIXTURE_SECONDS="${WAIT_AFTER_FIXTURE_SECONDS:-75}"
 BASE_TS_MS="${BASE_TS_MS:-$(( $(date +%s) * 1000 ))}"
 EXPECTED_SOURCE_TS_MS="${EXPECTED_SOURCE_TS_MS:-$((BASE_TS_MS + 2000))}"
+MIN_RAW_ROWS="${MIN_RAW_ROWS:-4}"
 
 printf '[CDC-UPSERT] Starting required services...\n'
 docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
@@ -84,8 +86,18 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_vid
   --expect-status "$EXPECTED_STATUS" \
   --expect-source-ts-ms "$EXPECTED_SOURCE_TS_MS"
 
+printf '[CDC-UPSERT] Verifying raw CDC bronze landing...\n'
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_raw_bronze.py \
+  --video-id "$VIDEO_ID" \
+  --table lakehouse.bronze.raw_cdc_videos \
+  --min-row-count "$MIN_RAW_ROWS" \
+  --expect-status "$EXPECTED_STATUS" \
+  --expect-latest-ts-ms "$EXPECTED_SOURCE_TS_MS" \
+  --min-source-ts-ms "$BASE_TS_MS"
+
 printf '[CDC-UPSERT] Checking checkpoint files...\n'
 docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
+docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 | head -n 40"
 
 printf '[CDC-UPSERT] Confirming query process is alive...\n'
 docker exec lakehouse-spark bash -lc "pgrep -f rt_video_cdc_upsert.py"

@@ -37,6 +37,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                 "content_metrics": "PASS",
                 "content_contract": "PASS",
                 "cdc_upsert": "PASS",
+                "cdc_raw": "PASS",
                 "cdc_invalid": "PASS",
                 "cdc_health": "PASS",
             },
@@ -61,6 +62,11 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                 "source_ts_ms": now_ms - 30_000,
                 "status": "copyright_strike",
                 "updated_at": "2026-03-08T00:00:00Z",
+            },
+            cdc_raw={
+                "row_count": 4,
+                "latest_status": "copyright_strike",
+                "latest_ts_ms": now_ms - 30_000,
             },
             cdc_invalid={
                 "row_count": 4,
@@ -109,6 +115,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                     "content_gold": {"file_count": 10},
                     "content_invalid": {"file_count": 5},
                     "cdc_dim": {"file_count": 8},
+                    "cdc_raw": {"file_count": 8},
                     "cdc_invalid": {"file_count": 3},
                 }
             },
@@ -118,6 +125,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                     "content_gold": {"file_count": 12},
                     "content_invalid": {"file_count": 7},
                     "cdc_dim": {"file_count": 10},
+                    "cdc_raw": {"file_count": 10},
                     "cdc_invalid": {"file_count": 6},
                 }
             },
@@ -142,6 +150,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                 "content_metrics": "PASS",
                 "content_contract": "PASS",
                 "cdc_upsert": "PASS",
+                "cdc_raw": "PASS",
                 "cdc_invalid": "PASS",
                 "cdc_health": "PASS",
             },
@@ -166,6 +175,11 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                 "source_ts_ms": now_ms - 450_000,
                 "status": "copyright_strike",
                 "updated_at": "2026-03-08T00:00:00Z",
+            },
+            cdc_raw={
+                "row_count": 0,
+                "latest_status": None,
+                "latest_ts_ms": None,
             },
             cdc_invalid={
                 "row_count": 4,
@@ -214,6 +228,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                     "content_gold": {"file_count": 10},
                     "content_invalid": {"file_count": 5},
                     "cdc_dim": {"file_count": 8},
+                    "cdc_raw": {"file_count": 3},
                     "cdc_invalid": {"file_count": 3},
                 }
             },
@@ -223,6 +238,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                     "content_gold": {"file_count": 10},
                     "content_invalid": {"file_count": 5},
                     "cdc_dim": {"file_count": 8},
+                    "cdc_raw": {"file_count": 3},
                     "cdc_invalid": {"file_count": 3},
                 }
             },
@@ -242,6 +258,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
         self.assertIn("checkpoint_growth", failed_gate_names)
         self.assertIn("freshness_sla", failed_gate_names)
         self.assertIn("latency_p95_proxy_lt_threshold", failed_gate_names)
+        self.assertIn("sprint1_key_tables_run_scoped", failed_gate_names)
 
     def test_build_signoff_report_uses_runtime_end_sample_at_for_freshness(self) -> None:
         verifier_now_ms = 2_000_000
@@ -255,6 +272,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                 "content_metrics": "PASS",
                 "content_contract": "PASS",
                 "cdc_upsert": "PASS",
+                "cdc_raw": "PASS",
                 "cdc_invalid": "PASS",
                 "cdc_health": "PASS",
             },
@@ -281,6 +299,11 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                 "source_ts_ms": verifier_now_ms - 100_000,
                 "status": "copyright_strike",
                 "updated_at": "2026-03-08T00:00:00Z",
+            },
+            cdc_raw={
+                "row_count": 4,
+                "latest_status": "copyright_strike",
+                "latest_ts_ms": verifier_now_ms - 100_000,
             },
             cdc_invalid={
                 "row_count": 4,
@@ -330,6 +353,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                     "content_gold": {"file_count": 10},
                     "content_invalid": {"file_count": 5},
                     "cdc_dim": {"file_count": 8},
+                    "cdc_raw": {"file_count": 8},
                     "cdc_invalid": {"file_count": 3},
                 }
             },
@@ -339,6 +363,7 @@ class VerifyRealtimeSignoffTests(unittest.TestCase):
                     "content_gold": {"file_count": 12},
                     "content_invalid": {"file_count": 7},
                     "cdc_dim": {"file_count": 10},
+                    "cdc_raw": {"file_count": 10},
                     "cdc_invalid": {"file_count": 6},
                 }
             },
