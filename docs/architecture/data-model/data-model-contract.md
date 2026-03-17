@@ -416,18 +416,20 @@ Required fields (minimum):
 
 1. `user_sk` STRING (deterministic hash surrogate key)
 2. `user_id` STRING
-3. `new_vs_returning_user` STRING (`new`, `returning`, `unknown`; platform-lifetime definition with explicit fallback)
-4. `valid_from` TIMESTAMP
-5. `valid_to` TIMESTAMP
-6. `is_current` BOOLEAN
+3. `region` STRING
+4. `new_vs_returning_user` STRING (`new`, `returning`, `unknown`; platform-lifetime definition with explicit fallback)
+5. `valid_from` TIMESTAMP
+6. `valid_to` TIMESTAMP
+7. `is_current` BOOLEAN
 
 Data contract notes:
 
 1. `dim_users_scd2` is the canonical user-history dimension.
 2. Current scope does not require a separate realtime `dim_users` snapshot table.
-3. `new_vs_returning_user` is persisted in the dimension and consumed by batch joins; current scope does not rely on ad-hoc query-time derivation.
-4. current/open row convention: `valid_to = 9999-12-31 00:00:00 UTC`.
-5. physical layout baseline: `partition by date(valid_from)`, `bucket(64, user_id)`.
+3. `region` captures the user's current region snapshot history via CDC and is distinct from `dim_videos_scd2.region`.
+4. `new_vs_returning_user` is persisted in the dimension and consumed by batch joins; current scope does not rely on ad-hoc query-time derivation.
+5. current/open row convention: `valid_to = 9999-12-31 00:00:00 UTC`.
+6. physical layout baseline: `partition by date(valid_from)`, `bucket(64, user_id)`.
 
 #### 5.10.4 `lakehouse.dims.dim_videos_scd2`
 

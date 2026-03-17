@@ -97,17 +97,18 @@ class _FakeAdminClientCreate:
 class KafkaPreflightEvaluatorTests(unittest.TestCase):
     def test_evaluator_passes_when_topics_meet_partition_minimums(self) -> None:
         info, errors = evaluate_topic_contract(
-            topic_partitions={"content_events": 6, "cdc.content.videos": 3},
-            topic_replication_factors={"content_events": 1, "cdc.content.videos": 1},
+            topic_partitions={"content_events": 6, "cdc.content.videos": 3, "cdc.users.profiles": 3},
+            topic_replication_factors={"content_events": 1, "cdc.content.videos": 1, "cdc.users.profiles": 1},
             topic_errors={},
             expectations=(
                 TopicExpectation(topic="content_events", min_partitions=6),
                 TopicExpectation(topic="cdc.content.videos", min_partitions=3),
+                TopicExpectation(topic="cdc.users.profiles", min_partitions=3, key_field="user_id"),
             ),
         )
 
         self.assertEqual(errors, [])
-        self.assertEqual(len(info), 2)
+        self.assertEqual(len(info), 3)
 
     def test_evaluator_fails_when_topic_is_missing(self) -> None:
         _, errors = evaluate_topic_contract(
@@ -181,7 +182,7 @@ class KafkaBootstrapPlanningTests(unittest.TestCase):
             topic_errors={},
             expectations=expectations,
         )
-        self.assertEqual([item.topic for item in missing], ["content_events", "cdc.content.videos"])
+        self.assertEqual([item.topic for item in missing], ["content_events", "cdc.content.videos", "cdc.users.profiles"])
 
     def test_plans_only_missing_topic(self) -> None:
         expectations = build_default_topic_expectations()
@@ -190,13 +191,16 @@ class KafkaBootstrapPlanningTests(unittest.TestCase):
             topic_errors={},
             expectations=expectations,
         )
-        self.assertEqual([item.topic for item in missing], ["cdc.content.videos"])
+        self.assertEqual([item.topic for item in missing], ["cdc.content.videos", "cdc.users.profiles"])
 
     def test_plans_none_when_topics_already_known(self) -> None:
         expectations = build_default_topic_expectations()
         missing = plan_topics_to_create(
             topic_partitions={"content_events": 6},
-            topic_errors={"cdc.content.videos": "KafkaError{code=LEADER_NOT_AVAILABLE}"},
+            topic_errors={
+                "cdc.content.videos": "KafkaError{code=LEADER_NOT_AVAILABLE}",
+                "cdc.users.profiles": "KafkaError{code=LEADER_NOT_AVAILABLE}",
+            },
             expectations=expectations,
         )
         self.assertEqual(missing, [])
@@ -233,6 +237,7 @@ class KafkaTopicCreateTests(unittest.TestCase):
         _FakeAdminClientCreate.futures = {
             "content_events": _FakeFutureOk(),
             "cdc.content.videos": _FakeFutureOk(),
+            "cdc.users.profiles": _FakeFutureOk(),
         }
         expectations = build_default_topic_expectations()
         with patch(
@@ -244,12 +249,13 @@ class KafkaTopicCreateTests(unittest.TestCase):
                 expectations=expectations,
             )
 
-        self.assertEqual(created, ["content_events", "cdc.content.videos"])
+        self.assertEqual(created, ["content_events", "cdc.content.videos", "cdc.users.profiles"])
 
     def test_create_missing_topics_topic_already_exists_is_non_fatal(self) -> None:
         _FakeAdminClientCreate.futures = {
             "content_events": _FakeFutureExists(),
             "cdc.content.videos": _FakeFutureOk(),
+            "cdc.users.profiles": _FakeFutureOk(),
         }
         expectations = build_default_topic_expectations()
         with patch(
@@ -261,7 +267,7 @@ class KafkaTopicCreateTests(unittest.TestCase):
                 expectations=expectations,
             )
 
-        self.assertEqual(created, ["cdc.content.videos"])
+        self.assertEqual(created, ["cdc.content.videos", "cdc.users.profiles"])
 
     def test_create_missing_topics_raises_for_non_recoverable_error(self) -> None:
         _FakeAdminClientCreate.futures = {
@@ -287,10 +293,14 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
         expectations = build_default_topic_expectations()
         metadata_calls = [
             ({}, {}, {}),
-            ({"content_events": 6, "cdc.content.videos": 3}, {"content_events": 1, "cdc.content.videos": 1}, {}),
+            (
+                {"content_events": 6, "cdc.content.videos": 3, "cdc.users.profiles": 3},
+                {"content_events": 1, "cdc.content.videos": 1, "cdc.users.profiles": 1},
+                {},
+            ),
         ]
         metadata_loader = Mock(side_effect=metadata_calls)
-        topic_creator = Mock(return_value=["content_events", "cdc.content.videos"])
+        topic_creator = Mock(return_value=["content_events", "cdc.content.videos", "cdc.users.profiles"])
         logs = []
 
         status = bootstrap_kafka_topics(
@@ -301,7 +311,7 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
             topic_creator=topic_creator,
         )
 
-        self.assertEqual(status["created"], ["content_events", "cdc.content.videos"])
+        self.assertEqual(status["created"], ["content_events", "cdc.content.videos", "cdc.users.profiles"])
         self.assertEqual(status["already_present"], [])
         topic_creator.assert_called_once()
         self.assertTrue(any("creating missing topics" in line for line in logs))
@@ -311,8 +321,8 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
         expectations = build_default_topic_expectations()
         metadata_loader = Mock(
             return_value=(
-                {"content_events": 6, "cdc.content.videos": 3},
-                {"content_events": 1, "cdc.content.videos": 1},
+                {"content_events": 6, "cdc.content.videos": 3, "cdc.users.profiles": 3},
+                {"content_events": 1, "cdc.content.videos": 1, "cdc.users.profiles": 1},
                 {},
             )
         )
@@ -328,7 +338,7 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
         )
 
         self.assertEqual(status["created"], [])
-        self.assertEqual(status["already_present"], ["content_events", "cdc.content.videos"])
+        self.assertEqual(status["already_present"], ["content_events", "cdc.content.videos", "cdc.users.profiles"])
         topic_creator.assert_not_called()
         self.assertTrue(any("no missing topics to create" in line for line in logs))
 
@@ -338,8 +348,8 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
             side_effect=[
                 ({}, {}, {}),
                 (
-                    {"content_events": 6, "cdc.content.videos": 3},
-                    {"content_events": 1, "cdc.content.videos": 1},
+                    {"content_events": 6, "cdc.content.videos": 3, "cdc.users.profiles": 3},
+                    {"content_events": 1, "cdc.content.videos": 1, "cdc.users.profiles": 1},
                     {},
                 ),
             ]
@@ -356,10 +366,10 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
         )
 
         self.assertEqual(status["created"], ["content_events"])
-        self.assertEqual(status["already_present"], ["cdc.content.videos"])
+        self.assertEqual(status["already_present"], ["cdc.content.videos", "cdc.users.profiles"])
         self.assertTrue(
             any(
-                "topic bootstrap status: created=['content_events'], already_present=['cdc.content.videos']"
+                "topic bootstrap status: created=['content_events'], already_present=['cdc.content.videos', 'cdc.users.profiles']"
                 in line
                 for line in logs
             )
@@ -375,7 +385,7 @@ class KafkaBootstrapOrchestrationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             KafkaPreflightError,
-            "topics still missing after create attempt: cdc.content.videos",
+            "topics still missing after create attempt: cdc.content.videos, cdc.users.profiles",
         ):
             bootstrap_kafka_topics(
                 bootstrap_servers="localhost:9092",
@@ -393,8 +403,8 @@ class KafkaPreflightRunnerTests(unittest.TestCase):
             expectations=build_default_topic_expectations(),
             logger=messages.append,
             metadata_loader=lambda **_: (
-                {"content_events": 6, "cdc.content.videos": 3},
-                {"content_events": 1, "cdc.content.videos": 1},
+                {"content_events": 6, "cdc.content.videos": 3, "cdc.users.profiles": 3},
+                {"content_events": 1, "cdc.content.videos": 1, "cdc.users.profiles": 1},
                 {},
             ),
         )
@@ -406,7 +416,7 @@ class KafkaPreflightRunnerTests(unittest.TestCase):
     def test_runner_aggregates_failures(self) -> None:
         with self.assertRaisesRegex(
             KafkaPreflightError,
-            "Kafka preflight checks failed:\\n- topic 'content_events' is missing\\n- topic 'cdc.content.videos' has 2 partitions; expected >= 3",
+            "Kafka preflight checks failed:\\n- topic 'content_events' is missing\\n- topic 'cdc.content.videos' has 2 partitions; expected >= 3\\n- topic 'cdc.users.profiles' is missing",
         ):
             run_kafka_preflight(
                 bootstrap_servers="localhost:9092",

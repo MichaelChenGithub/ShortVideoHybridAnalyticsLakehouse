@@ -35,9 +35,9 @@ class CdcContractTests(unittest.TestCase):
         return result, sink
 
     @staticmethod
-    def _cdc_signature(sink: InMemoryEventSink):
+    def _video_cdc_signature(sink: InMemoryEventSink):
         signature = []
-        for record in sink.cdc_events:
+        for record in sink.video_cdc_events:
             payload = record.value
             after = payload["after"]
             signature.append(
@@ -54,23 +54,41 @@ class CdcContractTests(unittest.TestCase):
             )
         return signature
 
-    def test_cdc_schema_and_key_contract(self) -> None:
+    @staticmethod
+    def _user_cdc_signature(sink: InMemoryEventSink):
+        signature = []
+        for record in sink.user_cdc_events:
+            payload = record.value
+            after = payload["after"]
+            signature.append(
+                (
+                    record.key,
+                    payload["op"],
+                    payload["ts_ms"],
+                    after["user_id"],
+                    after["new_vs_returning_user"],
+                    after["region"],
+                )
+            )
+        return signature
+
+    def test_video_cdc_schema_and_key_contract(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             result, sink = self._run_once(td)
 
-            self.assertGreater(result.summary["cdc_bootstrap_events"], 0)
-            self.assertGreater(result.summary["cdc_update_events"], 0)
+            self.assertGreater(result.summary["video_cdc_bootstrap_events"], 0)
+            self.assertGreater(result.summary["video_cdc_update_events"], 0)
             self.assertEqual(
-                result.summary["cdc_total_events"],
-                result.summary["cdc_bootstrap_events"] + result.summary["cdc_update_events"],
+                result.summary["video_cdc_total_events"],
+                result.summary["video_cdc_bootstrap_events"] + result.summary["video_cdc_update_events"],
             )
-            self.assertEqual(len(sink.cdc_events), result.summary["cdc_total_events"])
+            self.assertEqual(len(sink.video_cdc_events), result.summary["video_cdc_total_events"])
 
             c_count = 0
             u_count = 0
             ops_seen = set()
             events_by_video = {}
-            for record in sink.cdc_events:
+            for record in sink.video_cdc_events:
                 payload = record.value
                 self.assertIn("op", payload)
                 self.assertIn(payload["op"], {"c", "u"})
@@ -95,8 +113,8 @@ class CdcContractTests(unittest.TestCase):
                 events_by_video.setdefault(after["video_id"], []).append(payload)
 
             self.assertEqual(ops_seen, {"c", "u"})
-            self.assertEqual(c_count, result.summary["cdc_bootstrap_events"])
-            self.assertEqual(u_count, result.summary["cdc_update_events"])
+            self.assertEqual(c_count, result.summary["video_cdc_bootstrap_events"])
+            self.assertEqual(u_count, result.summary["video_cdc_update_events"])
             self.assertEqual(c_count, u_count)
 
             for video_id, events in events_by_video.items():
@@ -109,9 +127,11 @@ class CdcContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             _, sink = self._run_once(td)
 
-            self.assertGreater(len(sink.cdc_events), 0)
+            self.assertGreater(len(sink.video_cdc_events), 0)
+            self.assertGreater(len(sink.user_cdc_events), 0)
             self.assertGreater(len(sink.content_events), 0)
-            self.assertLess(sink.cdc_events[0].emitted_at, sink.content_events[0].emitted_at)
+            self.assertLess(sink.video_cdc_events[0].emitted_at, sink.content_events[0].emitted_at)
+            self.assertLess(sink.user_cdc_events[0].emitted_at, sink.content_events[0].emitted_at)
 
     def test_video_registry_artifact_written_without_external_lookup(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -136,7 +156,64 @@ class CdcContractTests(unittest.TestCase):
             _, left_sink = self._run_once(left_dir)
             _, right_sink = self._run_once(right_dir)
 
-            self.assertEqual(self._cdc_signature(left_sink), self._cdc_signature(right_sink))
+            self.assertEqual(self._video_cdc_signature(left_sink), self._video_cdc_signature(right_sink))
+            self.assertEqual(self._user_cdc_signature(left_sink), self._user_cdc_signature(right_sink))
+
+    def test_user_cdc_schema_and_key_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            result, sink = self._run_once(td)
+
+            self.assertGreater(result.summary["user_cdc_bootstrap_events"], 0)
+            self.assertGreater(result.summary["user_cdc_update_events"], 0)
+            self.assertEqual(
+                result.summary["user_cdc_total_events"],
+                result.summary["user_cdc_bootstrap_events"] + result.summary["user_cdc_update_events"],
+            )
+            self.assertEqual(len(sink.user_cdc_events), result.summary["user_cdc_total_events"])
+
+            c_count = 0
+            u_count = 0
+            events_by_user = {}
+            for record in sink.user_cdc_events:
+                payload = record.value
+                after = payload["after"]
+                for key in ("user_id", "new_vs_returning_user", "region"):
+                    self.assertIn(key, after)
+                self.assertEqual(record.key, after["user_id"])
+                self.assertIn(after["new_vs_returning_user"], {"new", "returning", "unknown"})
+                self.assertIn(after["region"], {"NA", "LATAM", "EMEA", "APAC"})
+                if payload["op"] == "c":
+                    c_count += 1
+                else:
+                    u_count += 1
+                events_by_user.setdefault(after["user_id"], []).append(payload)
+
+            self.assertEqual(c_count, result.summary["user_cdc_bootstrap_events"])
+            self.assertEqual(u_count, result.summary["user_cdc_update_events"])
+            self.assertEqual(c_count, u_count)
+            for user_id, events in events_by_user.items():
+                self.assertEqual(len(events), 2, msg=f"user_id={user_id} expected exactly c+u events")
+                self.assertEqual(events[0]["op"], "c")
+                self.assertEqual(events[1]["op"], "u")
+                self.assertGreater(events[1]["ts_ms"], events[0]["ts_ms"])
+
+    def test_user_registry_artifact_written_without_external_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            result, _ = self._run_once(td)
+
+            artifacts = result.summary["artifacts"]
+            registry_path = Path(artifacts["user_registry"])
+            self.assertTrue(registry_path.exists())
+
+            registry_format = artifacts["user_registry_format"]
+            self.assertIn(registry_format, {"parquet", "jsonl_fallback"})
+
+            if registry_format == "jsonl_fallback":
+                rows = [json.loads(line) for line in registry_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+                self.assertGreater(len(rows), 0)
+                sample = rows[0]
+                for field in ("user_id", "new_vs_returning_user", "region"):
+                    self.assertIn(field, sample)
 
 
 if __name__ == "__main__":

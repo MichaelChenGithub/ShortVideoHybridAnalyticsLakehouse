@@ -74,6 +74,8 @@ class BoundedRunCliBehaviorTests(unittest.TestCase):
             self.assertEqual(expectations[0].min_partitions, 8)
             self.assertEqual(expectations[1].topic, "cdc.content.videos")
             self.assertEqual(expectations[1].min_partitions, 4)
+            self.assertEqual(expectations[2].topic, "cdc.users.profiles")
+            self.assertEqual(expectations[2].min_partitions, 3)
 
         def _preflight_side_effect(**kwargs):
             call_order.append("preflight")
@@ -82,6 +84,8 @@ class BoundedRunCliBehaviorTests(unittest.TestCase):
             self.assertEqual(expectations[0].min_partitions, 8)
             self.assertEqual(expectations[1].topic, "cdc.content.videos")
             self.assertEqual(expectations[1].min_partitions, 4)
+            self.assertEqual(expectations[2].topic, "cdc.users.profiles")
+            self.assertEqual(expectations[2].min_partitions, 3)
 
         def _sink_side_effect(*args, **kwargs):
             del args, kwargs

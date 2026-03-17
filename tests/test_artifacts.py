@@ -37,10 +37,12 @@ class ArtifactTests(unittest.TestCase):
             artifacts = result.summary["artifacts"]
             run_config_path = Path(artifacts["run_config"])
             video_registry_path = Path(artifacts["video_registry"])
+            user_registry_path = Path(artifacts["user_registry"])
             expected_actions_path = Path(artifacts["expected_actions"])
 
             self.assertTrue(run_config_path.exists())
             self.assertTrue(video_registry_path.exists())
+            self.assertTrue(user_registry_path.exists())
             self.assertTrue(expected_actions_path.exists())
 
             run_cfg = json.loads(run_config_path.read_text(encoding="utf-8"))
@@ -54,6 +56,16 @@ class ArtifactTests(unittest.TestCase):
                 first = json.loads(lines[0])
                 self.assertIn("expected_action", first)
                 self.assertIn("video_id", first)
+
+            user_registry_format = artifacts["user_registry_format"]
+            self.assertIn(user_registry_format, {"parquet", "jsonl_fallback"})
+            if user_registry_format == "jsonl_fallback":
+                lines = user_registry_path.read_text(encoding="utf-8").strip().splitlines()
+                self.assertGreater(len(lines), 0)
+                first = json.loads(lines[0])
+                self.assertIn("user_id", first)
+                self.assertIn("new_vs_returning_user", first)
+                self.assertIn("region", first)
 
 
 if __name__ == "__main__":

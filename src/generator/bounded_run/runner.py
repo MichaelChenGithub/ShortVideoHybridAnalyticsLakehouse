@@ -45,6 +45,9 @@ class RunResult:
 
 
 class BoundedRunGenerator:
+    USER_REGIONS = ("NA", "LATAM", "EMEA", "APAC")
+    USER_STATES = ("new", "returning", "unknown")
+
     def __init__(
         self,
         config: RunConfig,
@@ -71,6 +74,22 @@ class BoundedRunGenerator:
     def _build_user_pool(self, total_events: int) -> List[str]:
         pool_size = max(200, min(5000, max(1, total_events // 60)))
         return [self.id_factory.next_user_id() for _ in range(pool_size)]
+
+    def _build_user_registry(self, total_events: int) -> List[Dict[str, Any]]:
+        user_ids = self._build_user_pool(total_events)
+        region_rng = make_rng(self.config.seed, "user-regions")
+        state_rng = make_rng(self.config.seed, "user-states")
+        rows: List[Dict[str, Any]] = []
+        for idx, user_id in enumerate(user_ids):
+            rows.append(
+                {
+                    "user_id": user_id,
+                    "new_vs_returning_user": state_rng.choice(self.USER_STATES),
+                    "region": region_rng.choice(self.USER_REGIONS),
+                    "registry_seq": idx,
+                }
+            )
+        return rows
 
     def _video_count_for_scenario(self, scenario: str, event_count: int) -> int:
         if scenario == SCENARIO_INVALID_PAYLOAD_BURST:
@@ -106,8 +125,8 @@ class BoundedRunGenerator:
 
         return rows, by_scenario
 
-    def _emit_cdc_bootstrap(self, registry_rows: List[Dict[str, Any]]) -> int:
-        cdc_count = 0
+    def _emit_video_cdc_bootstrap(self, registry_rows: List[Dict[str, Any]]) -> int:
+        video_cdc_count = 0
         for idx, row in enumerate(registry_rows):
             event = {
                 "op": "c",
@@ -122,12 +141,12 @@ class BoundedRunGenerator:
                 },
             }
             emitted_at = self.clock.now()
-            self.sink.emit_cdc_event(row["video_id"], event, emitted_at)
-            cdc_count += 1
-        return cdc_count
+            self.sink.emit_video_cdc_event(row["video_id"], event, emitted_at)
+            video_cdc_count += 1
+        return video_cdc_count
 
-    def _emit_cdc_updates(self, registry_rows: List[Dict[str, Any]]) -> int:
-        cdc_update_count = 0
+    def _emit_video_cdc_updates(self, registry_rows: List[Dict[str, Any]]) -> int:
+        video_cdc_update_count = 0
         for idx, row in enumerate(registry_rows):
             update_ts_ms = int((self.config.started_at + timedelta(milliseconds=idx)).timestamp() * 1000) + 60000
             event = {
@@ -143,7 +162,47 @@ class BoundedRunGenerator:
                 },
             }
             emitted_at = self.clock.now()
-            self.sink.emit_cdc_event(row["video_id"], event, emitted_at)
+            self.sink.emit_video_cdc_event(row["video_id"], event, emitted_at)
+            video_cdc_update_count += 1
+        return video_cdc_update_count
+
+    def _emit_user_cdc_bootstrap(self, user_registry_rows: List[Dict[str, Any]]) -> int:
+        cdc_count = 0
+        for idx, row in enumerate(user_registry_rows):
+            event = {
+                "op": "c",
+                "ts_ms": int((self.config.started_at + timedelta(seconds=120, milliseconds=idx)).timestamp() * 1000),
+                "schema_version": self.schema_version,
+                "after": {
+                    "user_id": row["user_id"],
+                    "new_vs_returning_user": row["new_vs_returning_user"],
+                    "region": row["region"],
+                },
+            }
+            self.sink.emit_user_cdc_event(row["user_id"], event, self.clock.now())
+            cdc_count += 1
+        return cdc_count
+
+    def _emit_user_cdc_updates(self, user_registry_rows: List[Dict[str, Any]]) -> int:
+        cdc_update_count = 0
+        for idx, row in enumerate(user_registry_rows):
+            state_value = row["new_vs_returning_user"]
+            if state_value == "new" and idx % 5 == 0:
+                state_value = "returning"
+            region_value = row["region"]
+            if idx % 7 == 0:
+                region_value = self.USER_REGIONS[(self.USER_REGIONS.index(region_value) + 1) % len(self.USER_REGIONS)]
+            event = {
+                "op": "u",
+                "ts_ms": int((self.config.started_at + timedelta(seconds=180, milliseconds=idx)).timestamp() * 1000),
+                "schema_version": self.schema_version,
+                "after": {
+                    "user_id": row["user_id"],
+                    "new_vs_returning_user": state_value,
+                    "region": region_value,
+                },
+            }
+            self.sink.emit_user_cdc_event(row["user_id"], event, self.clock.now())
             cdc_update_count += 1
         return cdc_update_count
 
@@ -246,7 +305,7 @@ class BoundedRunGenerator:
         scenario_sequence = build_scenario_sequence(planned_counts, self.config.seed)
 
         registry_rows, videos_by_scenario = self._build_registry(planned_counts)
-        user_pool = self._build_user_pool(total_events)
+        user_registry_rows = self._build_user_registry(total_events)
         late_offsets = self._build_late_offsets(total_events)
 
         self._log("[m1] run init complete")
@@ -255,10 +314,15 @@ class BoundedRunGenerator:
             "initialized_at": _to_utc_iso(self.clock.now()),
         }
 
-        cdc_count = self._emit_cdc_bootstrap(registry_rows)
-        lifecycle["cdc_bootstrap_emitted_at"] = _to_utc_iso(self.clock.now())
-        cdc_update_count = self._emit_cdc_updates(registry_rows)
-        cdc_total_count = cdc_count + cdc_update_count
+        video_cdc_count = self._emit_video_cdc_bootstrap(registry_rows)
+        lifecycle["video_cdc_bootstrap_emitted_at"] = _to_utc_iso(self.clock.now())
+        lifecycle["cdc_bootstrap_emitted_at"] = lifecycle["video_cdc_bootstrap_emitted_at"]
+        video_cdc_update_count = self._emit_video_cdc_updates(registry_rows)
+        video_cdc_total_count = video_cdc_count + video_cdc_update_count
+        user_cdc_count = self._emit_user_cdc_bootstrap(user_registry_rows)
+        lifecycle["user_cdc_bootstrap_emitted_at"] = _to_utc_iso(self.clock.now())
+        user_cdc_update_count = self._emit_user_cdc_updates(user_registry_rows)
+        user_cdc_total_count = user_cdc_count + user_cdc_update_count
 
         self.clock.sleep(self.cdc_gate_seconds)
         lifecycle["content_started_at"] = _to_utc_iso(self.clock.now())
@@ -289,7 +353,8 @@ class BoundedRunGenerator:
                 event_timestamp = base_timestamp - timedelta(seconds=late_offset)
 
                 event_id = self.id_factory.next_event_id()
-                user_id = user_pool[user_rng.randint(0, len(user_pool) - 1)]
+                user_row = user_registry_rows[user_rng.randint(0, len(user_registry_rows) - 1)]
+                user_id = user_row["user_id"]
 
                 if scenario == SCENARIO_INVALID_PAYLOAD_BURST:
                     event = self._make_invalid_event(user_id, event_id, event_index)
@@ -332,9 +397,15 @@ class BoundedRunGenerator:
             "sink_mode": self.sink.mode,
             "planned_total_events": total_events,
             "emitted_total_events": event_index,
-            "cdc_bootstrap_events": cdc_count,
-            "cdc_update_events": cdc_update_count,
-            "cdc_total_events": cdc_total_count,
+            "cdc_bootstrap_events": video_cdc_count,
+            "cdc_update_events": video_cdc_update_count,
+            "cdc_total_events": video_cdc_total_count,
+            "video_cdc_bootstrap_events": video_cdc_count,
+            "video_cdc_update_events": video_cdc_update_count,
+            "video_cdc_total_events": video_cdc_total_count,
+            "user_cdc_bootstrap_events": user_cdc_count,
+            "user_cdc_update_events": user_cdc_update_count,
+            "user_cdc_total_events": user_cdc_total_count,
             "invalid_payload_events": invalid_payload_events,
             "planned_scenario_counts": planned_counts,
             "emitted_scenario_counts": scenario_emitted_counts,
@@ -361,6 +432,7 @@ class BoundedRunGenerator:
             artifacts_root=self.artifacts_root,
             config=self.config,
             video_registry_rows=registry_rows,
+            user_registry_rows=user_registry_rows,
             expected_action_rows=expected_action_rows,
             run_summary=summary,
         )
@@ -369,8 +441,11 @@ class BoundedRunGenerator:
         self._log(
             "[m1] run complete: "
             "content="
-            f"{event_index}, cdc_bootstrap={cdc_count}, cdc_updates={cdc_update_count}, "
-            f"cdc_total={cdc_total_count}, invalid={invalid_payload_events}"
+            f"{event_index}, video_cdc_bootstrap={video_cdc_count}, "
+            f"video_cdc_updates={video_cdc_update_count}, video_cdc_total={video_cdc_total_count}, "
+            f"user_cdc_bootstrap={user_cdc_count}, "
+            f"user_cdc_updates={user_cdc_update_count}, user_cdc_total={user_cdc_total_count}, "
+            f"invalid={invalid_payload_events}"
         )
 
         return RunResult(summary=summary)

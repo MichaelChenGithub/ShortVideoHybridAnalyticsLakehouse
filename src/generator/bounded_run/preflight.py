@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Sequence, Tuple
 
-from .constants import TOPIC_CDC_VIDEOS, TOPIC_CONTENT_EVENTS
+from .constants import TOPIC_CDC_USERS, TOPIC_CDC_VIDEOS, TOPIC_CONTENT_EVENTS
 
 
 class KafkaPreflightError(RuntimeError):
@@ -24,7 +24,8 @@ def build_default_topic_expectations(
     *,
     content_events_min_partitions: int = 6,
     cdc_videos_min_partitions: int = 3,
-) -> Tuple[TopicExpectation, TopicExpectation]:
+    cdc_users_min_partitions: int = 3,
+) -> Tuple[TopicExpectation, TopicExpectation, TopicExpectation]:
     return (
         TopicExpectation(
             topic=TOPIC_CONTENT_EVENTS,
@@ -37,6 +38,12 @@ def build_default_topic_expectations(
             min_partitions=cdc_videos_min_partitions,
             replication_factor=1,
             key_field="video_id",
+        ),
+        TopicExpectation(
+            topic=TOPIC_CDC_USERS,
+            min_partitions=cdc_users_min_partitions,
+            replication_factor=1,
+            key_field="user_id",
         ),
     )
 

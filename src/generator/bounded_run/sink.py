@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .constants import TOPIC_CDC_VIDEOS, TOPIC_CONTENT_EVENTS
+from .constants import TOPIC_CDC_USERS, TOPIC_CDC_VIDEOS, TOPIC_CONTENT_EVENTS
 
 
 @dataclass
@@ -25,6 +25,12 @@ class EventSink:
         raise NotImplementedError
 
     def emit_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
+        self.emit_video_cdc_event(key, value, emitted_at)
+
+    def emit_video_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
+        raise NotImplementedError
+
+    def emit_user_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
         raise NotImplementedError
 
     def flush(self) -> None:
@@ -36,13 +42,18 @@ class InMemoryEventSink(EventSink):
 
     def __init__(self) -> None:
         self.content_events: List[EmittedRecord] = []
-        self.cdc_events: List[EmittedRecord] = []
+        self.video_cdc_events: List[EmittedRecord] = []
+        self.user_cdc_events: List[EmittedRecord] = []
+        self.cdc_events = self.video_cdc_events
 
     def emit_content_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
         self.content_events.append(EmittedRecord(TOPIC_CONTENT_EVENTS, key, value, emitted_at))
 
-    def emit_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
-        self.cdc_events.append(EmittedRecord(TOPIC_CDC_VIDEOS, key, value, emitted_at))
+    def emit_video_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
+        self.video_cdc_events.append(EmittedRecord(TOPIC_CDC_VIDEOS, key, value, emitted_at))
+
+    def emit_user_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
+        self.user_cdc_events.append(EmittedRecord(TOPIC_CDC_USERS, key, value, emitted_at))
 
     def flush(self) -> None:
         return
@@ -55,7 +66,8 @@ class KafkaEventSink(EventSink):
         self,
         bootstrap_servers: str,
         content_topic: str = TOPIC_CONTENT_EVENTS,
-        cdc_topic: str = TOPIC_CDC_VIDEOS,
+        video_cdc_topic: str = TOPIC_CDC_VIDEOS,
+        user_cdc_topic: str = TOPIC_CDC_USERS,
     ) -> None:
         try:
             from confluent_kafka import Producer  # type: ignore
@@ -74,7 +86,8 @@ class KafkaEventSink(EventSink):
             }
         )
         self._content_topic = content_topic
-        self._cdc_topic = cdc_topic
+        self._video_cdc_topic = video_cdc_topic
+        self._user_cdc_topic = user_cdc_topic
         self._delivery_errors: List[str] = []
 
     def _delivery_callback(self, err: Optional[Exception], msg: Any) -> None:
@@ -94,9 +107,13 @@ class KafkaEventSink(EventSink):
         del emitted_at
         self._produce(self._content_topic, key, value)
 
-    def emit_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
+    def emit_video_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
         del emitted_at
-        self._produce(self._cdc_topic, key, value)
+        self._produce(self._video_cdc_topic, key, value)
+
+    def emit_user_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
+        del emitted_at
+        self._produce(self._user_cdc_topic, key, value)
 
     def flush(self) -> None:
         self._producer.flush()
