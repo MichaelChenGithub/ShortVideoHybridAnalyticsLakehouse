@@ -45,7 +45,8 @@ Input topic:
 Output tables:
 
 1. `lakehouse.dims.dim_videos` (Type-1 current snapshot via MERGE upsert)
-2. `lakehouse.bronze.invalid_events_cdc_videos` (quarantine)
+2. `lakehouse.bronze.raw_cdc_videos` (append-only valid CDC bronze history for downstream SCD2)
+3. `lakehouse.bronze.invalid_events_cdc_videos` (quarantine)
 
 Isolation principle:
 
@@ -60,6 +61,7 @@ Isolation principle:
 1. `raw_events` sink query: `processingTime = 10 seconds`
 2. `rt_video_stats_1min` sink query: `processingTime = 1 minute`
 3. `dim_videos` CDC upsert query: `processingTime = 1 minute`
+4. `raw_cdc_videos` CDC bronze query: `processingTime = 1 minute`
 
 ### 4.2 Windowing
 
@@ -109,7 +111,8 @@ Checkpoint paths:
 2. `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
 3. `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1`
 4. `s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1`
-5. `s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1`
+5. `s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1`
+6. `s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1`
 
 Rules:
 
