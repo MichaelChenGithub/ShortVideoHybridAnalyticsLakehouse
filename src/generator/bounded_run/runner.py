@@ -316,7 +316,6 @@ class BoundedRunGenerator:
 
         video_cdc_count = self._emit_video_cdc_bootstrap(registry_rows)
         lifecycle["video_cdc_bootstrap_emitted_at"] = _to_utc_iso(self.clock.now())
-        lifecycle["cdc_bootstrap_emitted_at"] = lifecycle["video_cdc_bootstrap_emitted_at"]
         video_cdc_update_count = self._emit_video_cdc_updates(registry_rows)
         video_cdc_total_count = video_cdc_count + video_cdc_update_count
         user_cdc_count = self._emit_user_cdc_bootstrap(user_registry_rows)
@@ -397,9 +396,6 @@ class BoundedRunGenerator:
             "sink_mode": self.sink.mode,
             "planned_total_events": total_events,
             "emitted_total_events": event_index,
-            "cdc_bootstrap_events": video_cdc_count,
-            "cdc_update_events": video_cdc_update_count,
-            "cdc_total_events": video_cdc_total_count,
             "video_cdc_bootstrap_events": video_cdc_count,
             "video_cdc_update_events": video_cdc_update_count,
             "video_cdc_total_events": video_cdc_total_count,

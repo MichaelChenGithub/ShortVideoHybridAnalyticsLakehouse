@@ -24,9 +24,6 @@ class EventSink:
     def emit_content_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
         raise NotImplementedError
 
-    def emit_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
-        self.emit_video_cdc_event(key, value, emitted_at)
-
     def emit_video_cdc_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
         raise NotImplementedError
 
@@ -44,7 +41,6 @@ class InMemoryEventSink(EventSink):
         self.content_events: List[EmittedRecord] = []
         self.video_cdc_events: List[EmittedRecord] = []
         self.user_cdc_events: List[EmittedRecord] = []
-        self.cdc_events = self.video_cdc_events
 
     def emit_content_event(self, key: str, value: Dict[str, Any], emitted_at: datetime) -> None:
         self.content_events.append(EmittedRecord(TOPIC_CONTENT_EVENTS, key, value, emitted_at))
