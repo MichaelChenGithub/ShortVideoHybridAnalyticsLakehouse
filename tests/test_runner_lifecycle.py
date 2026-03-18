@@ -41,28 +41,37 @@ class RunnerLifecycleTests(unittest.TestCase):
             ).run()
 
             lifecycle = result.summary["lifecycle"]
-            cdc_end = _parse_iso(lifecycle["cdc_bootstrap_emitted_at"])
+            video_cdc_end = _parse_iso(lifecycle["video_cdc_bootstrap_emitted_at"])
+            user_cdc_end = _parse_iso(lifecycle["user_cdc_bootstrap_emitted_at"])
             content_start = _parse_iso(lifecycle["content_started_at"])
             content_end = _parse_iso(lifecycle["content_ended_at"])
 
-            self.assertEqual((content_start - cdc_end).total_seconds(), 300)
+            self.assertEqual((content_start - video_cdc_end).total_seconds(), 300)
+            self.assertEqual((content_start - user_cdc_end).total_seconds(), 300)
             self.assertEqual(
                 (content_end - content_start).total_seconds(),
                 config.duration_minutes * 60,
             )
 
-            first_cdc_time = sink.cdc_events[0].emitted_at
+            first_video_cdc_time = sink.video_cdc_events[0].emitted_at
+            first_user_cdc_time = sink.user_cdc_events[0].emitted_at
             first_content_time = sink.content_events[0].emitted_at
-            self.assertLess(first_cdc_time, first_content_time)
+            self.assertLess(first_video_cdc_time, first_content_time)
+            self.assertLess(first_user_cdc_time, first_content_time)
 
             self.assertEqual(result.summary["planned_total_events"], config.total_content_events)
             self.assertEqual(result.summary["emitted_total_events"], config.total_content_events)
-            self.assertGreater(result.summary["cdc_update_events"], 0)
+            self.assertGreater(result.summary["video_cdc_update_events"], 0)
             self.assertEqual(
-                result.summary["cdc_total_events"],
-                result.summary["cdc_bootstrap_events"] + result.summary["cdc_update_events"],
+                result.summary["video_cdc_total_events"],
+                result.summary["video_cdc_bootstrap_events"] + result.summary["video_cdc_update_events"],
             )
-            self.assertEqual(len(sink.cdc_events), result.summary["cdc_total_events"])
+            self.assertEqual(len(sink.video_cdc_events), result.summary["video_cdc_total_events"])
+            self.assertEqual(
+                result.summary["user_cdc_total_events"],
+                result.summary["user_cdc_bootstrap_events"] + result.summary["user_cdc_update_events"],
+            )
+            self.assertEqual(len(sink.user_cdc_events), result.summary["user_cdc_total_events"])
             self.assertTrue(result.summary["acceptance"]["total_volume_pass"])
 
 

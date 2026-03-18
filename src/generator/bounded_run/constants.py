@@ -50,3 +50,4 @@ DEFAULT_CDC_GATE_SECONDS = 300
 
 TOPIC_CONTENT_EVENTS = "content_events"
 TOPIC_CDC_VIDEOS = "cdc.content.videos"
+TOPIC_CDC_USERS = "cdc.users.profiles"
