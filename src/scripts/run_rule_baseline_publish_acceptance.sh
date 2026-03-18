@@ -31,7 +31,7 @@ TABLE_NAME="${TABLE_NAME:-lakehouse.dims.rt_rule_quantile_baselines}"
 RESET_TABLE="${RESET_TABLE:-1}"
 
 printf '[RULE-BASELINE] Starting required services...\n'
-docker compose up -d minio minio-mc iceberg-rest spark
+docker compose up -d minio minio-mc catalog-postgres iceberg-rest spark
 
 if [ "$RESET_TABLE" = "1" ]; then
   printf '[RULE-BASELINE] Resetting table for deterministic local acceptance...\n'

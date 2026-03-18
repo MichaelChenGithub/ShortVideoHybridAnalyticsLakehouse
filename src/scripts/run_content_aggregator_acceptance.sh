@@ -42,7 +42,7 @@ MAX_FRESHNESS_MINUTES="${MAX_FRESHNESS_MINUTES:-10}"
 CONTENT_AGGREGATOR_RUN_ID="${CONTENT_AGGREGATOR_RUN_ID:-content_aggregator_$(date -u +%Y%m%dT%H%M%SZ)}"
 
 printf '[CONTENT-AGGREGATOR] Starting required services...\n'
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
 
 printf '[CONTENT-AGGREGATOR] Ensuring topic exists...\n'
 for _ in 1 2 3 4 5; do

@@ -35,8 +35,23 @@ services:
       "
 
   # ---------------------------
-  # 2. Metadata Layer (Iceberg REST) - [NEW]
+  # 2. Metadata Layer (Iceberg REST + Catalog DB)
   # ---------------------------
+  catalog-postgres:
+    image: postgres:16-alpine
+    container_name: lakehouse-catalog-postgres
+    environment:
+      POSTGRES_DB: iceberg
+      POSTGRES_USER: iceberg
+      POSTGRES_PASSWORD: iceberg
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iceberg -d iceberg"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - catalog-postgres-data:/var/lib/postgresql/data
+
   iceberg-rest:
     image: tabulario/iceberg-rest:latest
     container_name: lakehouse-catalog
@@ -46,11 +61,18 @@ services:
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_REGION=us-east-1
+      - CATALOG_CATALOG__IMPL=org.apache.iceberg.jdbc.JdbcCatalog
+      - CATALOG_URI=jdbc:postgresql://catalog-postgres:5432/iceberg
+      - CATALOG_JDBC_USER=iceberg
+      - CATALOG_JDBC_PASSWORD=iceberg
       - CATALOG_WAREHOUSE=s3://warehouse/
       - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
       - CATALOG_S3_ENDPOINT=http://minio:9000
     depends_on:
-      - minio
+      minio:
+        condition: service_started
+      catalog-postgres:
+        condition: service_healthy
 
   # ---------------------------
   # 3. Ingestion Layer (Kafka)
@@ -175,3 +197,4 @@ services:
 
 volumes:
   metabase-data:
+  catalog-postgres-data:
