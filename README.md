@@ -102,6 +102,11 @@ content_events + cdc.content.videos
         -> Metabase operations dashboard (health metrics + recommendation preview)
 ```
 
+## Local Integration Infra Notes
+
+1. Local Iceberg REST catalog metadata backend uses PostgreSQL (`catalog-postgres` service in `docker-compose.yml`), not the image default SQLite backend.
+2. This avoids SQLite file-lock contention under concurrent streaming commits (for example CDC + content sinks writing during acceptance/signoff runs).
+
 ## Deferred Scope (Future Plan Reference)
 
 1. Operational action-queue execution is deferred to future plan.

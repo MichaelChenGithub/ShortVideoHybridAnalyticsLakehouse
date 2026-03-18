@@ -51,7 +51,7 @@ MAX_INVALID_RATE="${MAX_INVALID_RATE:-}"
 MIN_RAW_ROWS="${MIN_RAW_ROWS:-2}"
 
 printf '[CDC-CONTRACT] Starting required services...\n'
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
 
 printf '[CDC-CONTRACT] Ensuring CDC topic exists...\n'
 for _ in 1 2 3 4 5; do

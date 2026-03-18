@@ -43,7 +43,7 @@ EXPECTED_SOURCE_TS_MS="${EXPECTED_SOURCE_TS_MS:-$((BASE_TS_MS + 2000))}"
 MIN_RAW_ROWS="${MIN_RAW_ROWS:-4}"
 
 printf '[CDC-UPSERT] Starting required services...\n'
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
 
 printf '[CDC-UPSERT] Ensuring topic exists...\n'
 for _ in 1 2 3 4 5; do

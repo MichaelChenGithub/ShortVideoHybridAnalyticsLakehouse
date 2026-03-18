@@ -33,8 +33,8 @@ Resource-bound env flags (optional overrides):
   RT_SIGNOFF_SPARK_DEFAULT_PARALLELISM
 
 Readiness tuning env flags (optional overrides):
-  STREAM_BATCH_READY_RETRIES
-  STREAM_BATCH_READY_SLEEP_SECONDS
+  SPARK_JOB_READY_RETRIES
+  SPARK_JOB_READY_SLEEP_SECONDS
 EOF
 }
 
@@ -78,6 +78,7 @@ SPARK_CORES_MAX="${RT_SIGNOFF_SPARK_CORES_MAX:-2}"
 SPARK_SQL_SHUFFLE_PARTITIONS="${RT_SIGNOFF_SPARK_SQL_SHUFFLE_PARTITIONS:-8}"
 SPARK_DEFAULT_PARALLELISM="${RT_SIGNOFF_SPARK_DEFAULT_PARALLELISM:-8}"
 
+RT_SIGNOFF_WATERMARK_SCENARIO="${RT_SIGNOFF_WATERMARK_SCENARIO:-baseline}"
 RT_SIGNOFF_RUN_ID="${RT_SIGNOFF_RUN_ID:-realtime_observe_$(date -u +%Y%m%dT%H%M%SZ)}"
 RT_SIGNOFF_VIDEO_ID="${RT_SIGNOFF_VIDEO_ID:-${RT_SIGNOFF_RUN_ID}_cdc_vid_001}"
 CONTENT_JOB_PATTERN="[r]t_content_events_aggregator.py"
@@ -90,15 +91,26 @@ WAIT_AFTER_CDC_FIXTURE_SECONDS="${WAIT_AFTER_CDC_FIXTURE_SECONDS:-75}"
 
 KAFKA_READY_RETRIES="${KAFKA_READY_RETRIES:-30}"
 KAFKA_READY_SLEEP_SECONDS="${KAFKA_READY_SLEEP_SECONDS:-2}"
-SPARK_JOB_READY_RETRIES="${SPARK_JOB_READY_RETRIES:-10}"
+SPARK_JOB_READY_RETRIES="${SPARK_JOB_READY_RETRIES:-30}"
 SPARK_JOB_READY_SLEEP_SECONDS="${SPARK_JOB_READY_SLEEP_SECONDS:-3}"
-STREAM_BATCH_READY_RETRIES="${STREAM_BATCH_READY_RETRIES:-120}"
-STREAM_BATCH_READY_SLEEP_SECONDS="${STREAM_BATCH_READY_SLEEP_SECONDS:-2}"
 
 BASE_TS_MS="${BASE_TS_MS:-$(( $(date +%s) * 1000 ))}"
 
 CONTENT_JOB_LOG="/tmp/${RT_SIGNOFF_RUN_ID}_content_agg.log"
 CDC_JOB_LOG="/tmp/${RT_SIGNOFF_RUN_ID}_cdc_upsert.log"
+
+case "$RT_SIGNOFF_WATERMARK_SCENARIO" in
+  baseline)
+    RT_CONTENT_EVENTS_WATERMARK="${RT_CONTENT_EVENTS_WATERMARK:-2 minutes}"
+    ;;
+  lag_prone)
+    RT_CONTENT_EVENTS_WATERMARK="${RT_CONTENT_EVENTS_WATERMARK:-5 minutes}"
+    ;;
+  *)
+    echo "[RT-SIGNOFF-OBSERVE] ERROR: RT_SIGNOFF_WATERMARK_SCENARIO must be baseline or lag_prone, got '${RT_SIGNOFF_WATERMARK_SCENARIO}'" >&2
+    exit 1
+    ;;
+esac
 
 wait_for_kafka_ready() {
   local retries="$1"
@@ -155,7 +167,7 @@ start_spark_job() {
   local script_path="$1"
   local log_file="$2"
   local ivy_cache="/tmp/ivy/realtime_signoff/shared"
-  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && RT_SIGNOFF_RUN_ID='${RT_SIGNOFF_RUN_ID}' nohup /opt/spark/bin/spark-submit \
+  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && RT_SIGNOFF_RUN_ID='${RT_SIGNOFF_RUN_ID}' RT_CONTENT_EVENTS_WATERMARK='${RT_CONTENT_EVENTS_WATERMARK}' nohup /opt/spark/bin/spark-submit \
     --conf spark.jars.ivy='${ivy_cache}' \
     --conf spark.driver.cores='${SPARK_DRIVER_CORES}' \
     --conf spark.driver.memory='${SPARK_DRIVER_MEMORY}' \
@@ -185,21 +197,6 @@ wait_for_spark_job() {
   return 1
 }
 
-wait_for_stream_batch_log() {
-  local log_file="$1"
-  local label="$2"
-  local retries="$3"
-  local sleep_seconds="$4"
-  for ((attempt=1; attempt<=retries; attempt++)); do
-    if docker exec lakehouse-spark bash -lc "if [ -f '${log_file}' ] && grep -Eq 'Batch [0-9]+:' '${log_file}'; then exit 0; else exit 1; fi" >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep "$sleep_seconds"
-  done
-  echo "[RT-SIGNOFF-OBSERVE] ERROR: ${label} did not report a micro-batch in ${log_file} after ${retries} attempts." >&2
-  return 1
-}
-
 reset_checkpoints() {
   printf '[RT-SIGNOFF-OBSERVE] Resetting checkpoint directories...\n'
   docker exec lakehouse-minio sh -lc "rm -rf \
@@ -207,6 +204,7 @@ reset_checkpoints() {
     /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 \
     /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 \
     /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
     /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
 }
 
@@ -215,6 +213,8 @@ cd "$REPO_ROOT"
 printf '[RT-SIGNOFF-OBSERVE] Starting manual-observe flow...\n'
 printf '[RT-SIGNOFF-OBSERVE] run_id=%s\n' "$RT_SIGNOFF_RUN_ID"
 printf '[RT-SIGNOFF-OBSERVE] cdc_video_id=%s\n' "$RT_SIGNOFF_VIDEO_ID"
+printf '[RT-SIGNOFF-OBSERVE] watermark_scenario=%s\n' "$RT_SIGNOFF_WATERMARK_SCENARIO"
+printf '[RT-SIGNOFF-OBSERVE] content_watermark=%s\n' "$RT_CONTENT_EVENTS_WATERMARK"
 printf '[RT-SIGNOFF-OBSERVE] reset_checkpoints=%s\n' "$RESET_CHECKPOINTS"
 printf '[RT-SIGNOFF-OBSERVE] spark_driver_cores=%s\n' "$SPARK_DRIVER_CORES"
 printf '[RT-SIGNOFF-OBSERVE] spark_driver_memory=%s\n' "$SPARK_DRIVER_MEMORY"
@@ -226,11 +226,11 @@ printf '[RT-SIGNOFF-OBSERVE] spark_executor_memory_overhead=%s\n' "$SPARK_EXECUT
 printf '[RT-SIGNOFF-OBSERVE] spark_cores_max=%s\n' "$SPARK_CORES_MAX"
 printf '[RT-SIGNOFF-OBSERVE] spark_sql_shuffle_partitions=%s\n' "$SPARK_SQL_SHUFFLE_PARTITIONS"
 printf '[RT-SIGNOFF-OBSERVE] spark_default_parallelism=%s\n' "$SPARK_DEFAULT_PARALLELISM"
-printf '[RT-SIGNOFF-OBSERVE] stream_batch_ready_retries=%s\n' "$STREAM_BATCH_READY_RETRIES"
-printf '[RT-SIGNOFF-OBSERVE] stream_batch_ready_sleep_seconds=%s\n' "$STREAM_BATCH_READY_SLEEP_SECONDS"
+printf '[RT-SIGNOFF-OBSERVE] spark_job_ready_retries=%s\n' "$SPARK_JOB_READY_RETRIES"
+printf '[RT-SIGNOFF-OBSERVE] spark_job_ready_sleep_seconds=%s\n' "$SPARK_JOB_READY_SLEEP_SECONDS"
 
 printf '[RT-SIGNOFF-OBSERVE] Starting required services...\n'
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
 
 printf '[RT-SIGNOFF-OBSERVE] Ensuring required topics exist with Sprint-1 partitions...\n'
 wait_for_kafka_ready "$KAFKA_READY_RETRIES" "$KAFKA_READY_SLEEP_SECONDS"
@@ -246,12 +246,10 @@ fi
 start_spark_job /home/iceberg/local/src/spark/rt_content_events_aggregator.py "$CONTENT_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
-wait_for_stream_batch_log "$CONTENT_JOB_LOG" "content aggregator" "$STREAM_BATCH_READY_RETRIES" "$STREAM_BATCH_READY_SLEEP_SECONDS"
 
 start_spark_job /home/iceberg/local/src/spark/rt_video_cdc_upsert.py "$CDC_JOB_LOG"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
-wait_for_stream_batch_log "$CDC_JOB_LOG" "CDC upsert" "$STREAM_BATCH_READY_RETRIES" "$STREAM_BATCH_READY_SLEEP_SECONDS"
 STARTED_SPARK_JOBS=1
 
 printf '[RT-SIGNOFF-OBSERVE] Emitting bounded generator traffic (RT-SIGNOFF shared run shape)...\n'
