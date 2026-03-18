@@ -9,15 +9,19 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from spark.rt_video_cdc_upsert_sql import (  # noqa: E402
+    create_raw_cdc_videos_sql,
     create_dim_videos_sql,
     create_invalid_events_cdc_videos_sql,
     manual_alter_invalid_events_cdc_videos_statements,
+    manual_alter_raw_cdc_videos_statements,
     manual_alter_statements,
     merge_dim_videos_sql,
     missing_invalid_events_cdc_videos_columns,
+    missing_raw_cdc_videos_columns,
     missing_required_columns,
     required_dim_videos_columns,
     required_invalid_events_cdc_videos_columns,
+    required_raw_cdc_videos_columns,
 )
 
 
@@ -54,6 +58,25 @@ class RtVideoCdcUpsertSqlTests(unittest.TestCase):
         )
         self.assertEqual(required_invalid_events_cdc_videos_columns(), expected)
 
+    def test_raw_cdc_required_columns_match_contract(self) -> None:
+        expected = (
+            ("op", "STRING"),
+            ("ts_ms", "BIGINT"),
+            ("schema_version", "STRING"),
+            ("video_id", "STRING"),
+            ("category", "STRING"),
+            ("region", "STRING"),
+            ("upload_time", "STRING"),
+            ("status", "STRING"),
+            ("source_topic", "STRING"),
+            ("source_partition", "INT"),
+            ("source_offset", "BIGINT"),
+            ("kafka_timestamp", "TIMESTAMP"),
+            ("raw_value", "STRING"),
+            ("ingested_at", "TIMESTAMP"),
+        )
+        self.assertEqual(required_raw_cdc_videos_columns(), expected)
+
     def test_create_invalid_cdc_sql_contains_required_fields(self) -> None:
         sql = create_invalid_events_cdc_videos_sql()
         self.assertIn(
@@ -61,6 +84,15 @@ class RtVideoCdcUpsertSqlTests(unittest.TestCase):
             sql,
         )
         for column_name, data_type in required_invalid_events_cdc_videos_columns():
+            self.assertIn(f"{column_name} {data_type}", sql)
+
+    def test_create_raw_cdc_sql_contains_required_fields(self) -> None:
+        sql = create_raw_cdc_videos_sql()
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS lakehouse.bronze.raw_cdc_videos",
+            sql,
+        )
+        for column_name, data_type in required_raw_cdc_videos_columns():
             self.assertIn(f"{column_name} {data_type}", sql)
 
     def test_missing_columns_and_manual_alter_sql(self) -> None:
@@ -124,6 +156,43 @@ class RtVideoCdcUpsertSqlTests(unittest.TestCase):
                 "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (error_code STRING);",
                 "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (error_reason STRING);",
                 "ALTER TABLE lakehouse.bronze.invalid_events_cdc_videos ADD COLUMNS (ingested_at TIMESTAMP);",
+            ],
+        )
+
+    def test_raw_cdc_missing_columns_and_manual_alter_sql(self) -> None:
+        existing = ["op", "ts_ms", "video_id"]
+        missing = missing_raw_cdc_videos_columns(existing)
+        self.assertEqual(
+            missing,
+            [
+                ("schema_version", "STRING"),
+                ("category", "STRING"),
+                ("region", "STRING"),
+                ("upload_time", "STRING"),
+                ("status", "STRING"),
+                ("source_topic", "STRING"),
+                ("source_partition", "INT"),
+                ("source_offset", "BIGINT"),
+                ("kafka_timestamp", "TIMESTAMP"),
+                ("raw_value", "STRING"),
+                ("ingested_at", "TIMESTAMP"),
+            ],
+        )
+        statements = manual_alter_raw_cdc_videos_statements(existing)
+        self.assertEqual(
+            statements,
+            [
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (schema_version STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (category STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (region STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (upload_time STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (status STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (source_topic STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (source_partition INT);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (source_offset BIGINT);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (kafka_timestamp TIMESTAMP);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (raw_value STRING);",
+                "ALTER TABLE lakehouse.bronze.raw_cdc_videos ADD COLUMNS (ingested_at TIMESTAMP);",
             ],
         )
 

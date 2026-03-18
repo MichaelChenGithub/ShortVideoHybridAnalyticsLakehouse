@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Iterable, List, Tuple
 
 try:
-    from spark.rt_video_cdc_contract import DIM_VIDEOS_TABLE, INVALID_CDC_TABLE
+    from spark.rt_video_cdc_contract import DIM_VIDEOS_TABLE, INVALID_CDC_TABLE, RAW_CDC_TABLE
 except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
-    from rt_video_cdc_contract import DIM_VIDEOS_TABLE, INVALID_CDC_TABLE
+    from rt_video_cdc_contract import DIM_VIDEOS_TABLE, INVALID_CDC_TABLE, RAW_CDC_TABLE
 
 _REQUIRED_DIM_VIDEOS_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("video_id", "STRING"),
@@ -31,6 +31,23 @@ _REQUIRED_INVALID_CDC_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("ingested_at", "TIMESTAMP"),
 )
 
+_REQUIRED_RAW_CDC_COLUMNS: Tuple[Tuple[str, str], ...] = (
+    ("op", "STRING"),
+    ("ts_ms", "BIGINT"),
+    ("schema_version", "STRING"),
+    ("video_id", "STRING"),
+    ("category", "STRING"),
+    ("region", "STRING"),
+    ("upload_time", "STRING"),
+    ("status", "STRING"),
+    ("source_topic", "STRING"),
+    ("source_partition", "INT"),
+    ("source_offset", "BIGINT"),
+    ("kafka_timestamp", "TIMESTAMP"),
+    ("raw_value", "STRING"),
+    ("ingested_at", "TIMESTAMP"),
+)
+
 
 def required_dim_videos_columns() -> Tuple[Tuple[str, str], ...]:
     return _REQUIRED_DIM_VIDEOS_COLUMNS
@@ -38,6 +55,10 @@ def required_dim_videos_columns() -> Tuple[Tuple[str, str], ...]:
 
 def required_invalid_events_cdc_videos_columns() -> Tuple[Tuple[str, str], ...]:
     return _REQUIRED_INVALID_CDC_COLUMNS
+
+
+def required_raw_cdc_videos_columns() -> Tuple[Tuple[str, str], ...]:
+    return _REQUIRED_RAW_CDC_COLUMNS
 
 
 def create_dim_videos_sql(table_name: str = DIM_VIDEOS_TABLE) -> str:
@@ -76,6 +97,28 @@ def create_invalid_events_cdc_videos_sql(table_name: str = INVALID_CDC_TABLE) ->
     """.strip()
 
 
+def create_raw_cdc_videos_sql(table_name: str = RAW_CDC_TABLE) -> str:
+    return f"""
+    CREATE TABLE IF NOT EXISTS {table_name} (
+        op STRING,
+        ts_ms BIGINT,
+        schema_version STRING,
+        video_id STRING,
+        category STRING,
+        region STRING,
+        upload_time STRING,
+        status STRING,
+        source_topic STRING,
+        source_partition INT,
+        source_offset BIGINT,
+        kafka_timestamp TIMESTAMP,
+        raw_value STRING,
+        ingested_at TIMESTAMP
+    ) USING iceberg
+    PARTITIONED BY (days(ingested_at))
+    """.strip()
+
+
 def missing_required_columns(existing_columns: Iterable[str]) -> List[Tuple[str, str]]:
     existing = {name.lower() for name in existing_columns}
     return [(name, data_type) for name, data_type in _REQUIRED_DIM_VIDEOS_COLUMNS if name.lower() not in existing]
@@ -100,6 +143,15 @@ def missing_invalid_events_cdc_videos_columns(existing_columns: Iterable[str]) -
     ]
 
 
+def missing_raw_cdc_videos_columns(existing_columns: Iterable[str]) -> List[Tuple[str, str]]:
+    existing = {name.lower() for name in existing_columns}
+    return [
+        (name, data_type)
+        for name, data_type in _REQUIRED_RAW_CDC_COLUMNS
+        if name.lower() not in existing
+    ]
+
+
 def manual_alter_invalid_events_cdc_videos_statements(
     existing_columns: Iterable[str],
     table_name: str = INVALID_CDC_TABLE,
@@ -107,6 +159,16 @@ def manual_alter_invalid_events_cdc_videos_statements(
     return [
         f"ALTER TABLE {table_name} ADD COLUMNS ({name} {data_type});"
         for name, data_type in missing_invalid_events_cdc_videos_columns(existing_columns)
+    ]
+
+
+def manual_alter_raw_cdc_videos_statements(
+    existing_columns: Iterable[str],
+    table_name: str = RAW_CDC_TABLE,
+) -> List[str]:
+    return [
+        f"ALTER TABLE {table_name} ADD COLUMNS ({name} {data_type});"
+        for name, data_type in missing_raw_cdc_videos_columns(existing_columns)
     ]
 
 

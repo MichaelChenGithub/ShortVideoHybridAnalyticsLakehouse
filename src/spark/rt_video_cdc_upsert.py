@@ -13,10 +13,13 @@ try:
     from spark.rt_video_cdc_upsert_sql import (
         create_dim_videos_sql,
         create_invalid_events_cdc_videos_sql,
+        create_raw_cdc_videos_sql,
         manual_alter_invalid_events_cdc_videos_statements,
+        manual_alter_raw_cdc_videos_statements,
         manual_alter_statements,
         merge_dim_videos_sql,
         missing_invalid_events_cdc_videos_columns,
+        missing_raw_cdc_videos_columns,
         missing_required_columns,
     )
 except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
@@ -24,10 +27,13 @@ except ModuleNotFoundError:  # pragma: no cover - direct spark-submit fallback
     from rt_video_cdc_upsert_sql import (
         create_dim_videos_sql,
         create_invalid_events_cdc_videos_sql,
+        create_raw_cdc_videos_sql,
         manual_alter_invalid_events_cdc_videos_statements,
+        manual_alter_raw_cdc_videos_statements,
         manual_alter_statements,
         merge_dim_videos_sql,
         missing_invalid_events_cdc_videos_columns,
+        missing_raw_cdc_videos_columns,
         missing_required_columns,
     )
 
@@ -58,6 +64,7 @@ def init_output_tables(spark: SparkSession, settings: JobSettings) -> None:
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.dims")
     spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.bronze")
     spark.sql(create_dim_videos_sql(settings.dim_videos_table))
+    spark.sql(create_raw_cdc_videos_sql(settings.raw_cdc_table))
     spark.sql(create_invalid_events_cdc_videos_sql(settings.invalid_cdc_table))
 
     dim_columns = list(_table_columns(spark, settings.dim_videos_table))
@@ -78,6 +85,18 @@ def init_output_tables(spark: SparkSession, settings: JobSettings) -> None:
             manual_alter_invalid_events_cdc_videos_statements(
                 invalid_columns,
                 settings.invalid_cdc_table,
+            ),
+        )
+
+    raw_columns = list(_table_columns(spark, settings.raw_cdc_table))
+    raw_missing = missing_raw_cdc_videos_columns(raw_columns)
+    if raw_missing:
+        _raise_missing_columns_error(
+            settings.raw_cdc_table,
+            raw_missing,
+            manual_alter_raw_cdc_videos_statements(
+                raw_columns,
+                settings.raw_cdc_table,
             ),
         )
 
@@ -180,7 +199,12 @@ def split_valid_and_invalid_rows(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     valid_rows = df.filter(valid_condition).select(
         "op",
         "ts_ms",
+        "schema_version",
+        "source_topic",
+        "source_partition",
         "source_offset",
+        "kafka_timestamp",
+        "raw_value",
         "video_id",
         "category",
         "region",
@@ -231,6 +255,16 @@ def process_videos_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
     print(f"Batch {batch_id}: merged CDC updates into dim_videos.")
 
 
+def process_raw_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
+    count_rows = df.count()
+    if count_rows == 0:
+        print(f"Batch {batch_id}: no valid raw CDC rows.")
+        return
+
+    print(f"Batch {batch_id}: writing {count_rows} raw CDC rows to {table_name}.")
+    df.write.format("iceberg").mode("append").save(table_name)
+
+
 def process_invalid_batch(df: DataFrame, batch_id: int, table_name: str) -> None:
     count_rows = df.count()
     if count_rows == 0:
@@ -250,7 +284,26 @@ def main() -> None:
     cdc_stream = read_video_cdc_stream(spark, settings)
     valid_rows, invalid_rows = split_valid_and_invalid_rows(cdc_stream)
 
+    raw_rows = valid_rows.select(
+        "op",
+        "ts_ms",
+        "schema_version",
+        "video_id",
+        "category",
+        "region",
+        "upload_time",
+        "status",
+        "source_topic",
+        "source_partition",
+        "source_offset",
+        "kafka_timestamp",
+        "raw_value",
+        current_timestamp().alias("ingested_at"),
+    )
+
+    raw_table_columns = list(_table_columns(spark, settings.raw_cdc_table))
     invalid_table_columns = list(_table_columns(spark, settings.invalid_cdc_table))
+    raw_rows = align_to_table_columns(raw_rows, raw_table_columns)
     invalid_rows = align_to_table_columns(invalid_rows, invalid_table_columns)
 
     query_dim = (
@@ -258,6 +311,15 @@ def main() -> None:
             lambda df, batch_id: process_videos_batch(df, batch_id, settings.dim_videos_table)
         )
         .option("checkpointLocation", settings.checkpoint_dim_videos)
+        .trigger(processingTime=settings.trigger_interval)
+        .start()
+    )
+
+    query_raw = (
+        raw_rows.writeStream.foreachBatch(
+            lambda df, batch_id: process_raw_batch(df, batch_id, settings.raw_cdc_table)
+        )
+        .option("checkpointLocation", settings.checkpoint_raw_cdc)
         .trigger(processingTime=settings.trigger_interval)
         .start()
     )
@@ -271,8 +333,8 @@ def main() -> None:
         .start()
     )
 
-    # Keep local references so both queries remain active until process exit.
-    _ = (query_dim, query_invalid)
+    # Keep local references so all queries remain active until process exit.
+    _ = (query_dim, query_raw, query_invalid)
     spark.streams.awaitAnyTermination()
 
 

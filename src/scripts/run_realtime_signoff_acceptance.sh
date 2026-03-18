@@ -95,6 +95,7 @@ MIN_RAW_ROWS="${MIN_RAW_ROWS:-1}"
 MIN_GOLD_ROWS="${MIN_GOLD_ROWS:-1}"
 MIN_CONTENT_INVALID_ROWS="${MIN_CONTENT_INVALID_ROWS:-1}"
 MIN_CDC_INVALID_ROWS="${MIN_CDC_INVALID_ROWS:-4}"
+MIN_CDC_RAW_ROWS="${MIN_CDC_RAW_ROWS:-4}"
 
 MAX_CONTENT_INVALID_RATE="${MAX_CONTENT_INVALID_RATE:-0.20}"
 MAX_CDC_INVALID_RATE="${MAX_CDC_INVALID_RATE:-0.20}"
@@ -124,6 +125,7 @@ ARTIFACT_DIR="${RT_SIGNOFF_ARTIFACT_DIR:-artifacts/realtime_signoff/${RT_SIGNOFF
 CONTENT_METRICS_LOG="${ARTIFACT_DIR}/content_metrics.log"
 CONTENT_CONTRACT_LOG="${ARTIFACT_DIR}/content_contract.log"
 CDC_UPSERT_LOG="${ARTIFACT_DIR}/cdc_upsert.log"
+CDC_RAW_LOG="${ARTIFACT_DIR}/cdc_raw.log"
 CDC_INVALID_LOG="${ARTIFACT_DIR}/cdc_invalid.log"
 CDC_HEALTH_LOG="${ARTIFACT_DIR}/cdc_health.log"
 RUNTIME_START_JSON="${ARTIFACT_DIR}/runtime_start.json"
@@ -211,6 +213,7 @@ reset_checkpoints() {
     /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 \
     /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 \
     /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
     /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
 }
 
@@ -341,6 +344,7 @@ checkpoint_snapshot() {
   local content_gold_count
   local content_invalid_count
   local cdc_dim_count
+  local cdc_raw_count
   local cdc_invalid_count
 
   sample_at_ms="$(now_ms)"
@@ -348,10 +352,11 @@ checkpoint_snapshot() {
   content_gold_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1)"
   content_invalid_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1)"
   cdc_dim_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1)"
+  cdc_raw_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1)"
   cdc_invalid_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1)"
 
   cat > "${outfile}" <<EOF
-{"sample_at_ms":${sample_at_ms},"paths":{"content_raw":{"file_count":${content_raw_count}},"content_gold":{"file_count":${content_gold_count}},"content_invalid":{"file_count":${content_invalid_count}},"cdc_dim":{"file_count":${cdc_dim_count}},"cdc_invalid":{"file_count":${cdc_invalid_count}}}}
+{"sample_at_ms":${sample_at_ms},"paths":{"content_raw":{"file_count":${content_raw_count}},"content_gold":{"file_count":${content_gold_count}},"content_invalid":{"file_count":${content_invalid_count}},"cdc_dim":{"file_count":${cdc_dim_count}},"cdc_raw":{"file_count":${cdc_raw_count}},"cdc_invalid":{"file_count":${cdc_invalid_count}}}}
 EOF
 }
 
@@ -514,6 +519,15 @@ docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_vid
   --expect-source-ts-ms "$EXPECTED_CDC_SOURCE_TS_MS" \
   --now-ms "$RUNTIME_END_SAMPLE_MS" | tee "$CDC_UPSERT_LOG"
 
+printf '[RT-SIGNOFF] Verifying CDC raw bronze path...\n'
+docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_raw_bronze.py \
+  --video-id "$RT_SIGNOFF_VIDEO_ID" \
+  --table lakehouse.bronze.raw_cdc_videos \
+  --min-row-count "$MIN_CDC_RAW_ROWS" \
+  --expect-status "$EXPECTED_CDC_STATUS" \
+  --expect-latest-ts-ms "$EXPECTED_CDC_SOURCE_TS_MS" \
+  --min-source-ts-ms "$BASE_TS_MS" | tee "$CDC_RAW_LOG"
+
 printf '[RT-SIGNOFF] Verifying CDC invalid path (CDC-CONTRACT style gate)...\n'
 docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_invalid_cdc_quarantine.py \
   --table lakehouse.bronze.invalid_events_cdc_videos \
@@ -538,6 +552,7 @@ printf '[RT-SIGNOFF] Running unified RT-SIGNOFF sign-off verifier...\n'
   --content-metrics-log "$CONTENT_METRICS_LOG" \
   --content-contract-log "$CONTENT_CONTRACT_LOG" \
   --cdc-upsert-log "$CDC_UPSERT_LOG" \
+  --cdc-raw-log "$CDC_RAW_LOG" \
   --cdc-invalid-log "$CDC_INVALID_LOG" \
   --cdc-health-log "$CDC_HEALTH_LOG" \
   --runtime-start-json "$RUNTIME_START_JSON" \

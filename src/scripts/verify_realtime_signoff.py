@@ -16,6 +16,7 @@ CHECKPOINT_KEYS = [
     "content_gold",
     "content_invalid",
     "cdc_dim",
+    "cdc_raw",
     "cdc_invalid",
 ]
 
@@ -146,6 +147,7 @@ def build_signoff_report(
     content_metrics: Mapping[str, Any],
     content_contract: Mapping[str, Any],
     cdc_upsert: Mapping[str, Any],
+    cdc_raw: Mapping[str, Any],
     cdc_invalid: Mapping[str, Any],
     cdc_health: Mapping[str, Any],
     runtime_start: Mapping[str, Any],
@@ -183,6 +185,7 @@ def build_signoff_report(
         "content_metrics",
         "content_contract",
         "cdc_upsert",
+        "cdc_raw",
         "cdc_invalid",
         "cdc_health",
     ]
@@ -210,6 +213,7 @@ def build_signoff_report(
         "content_invalid_rows_present": content_invalid_count > 0,
         "cdc_invalid_rows_present": cdc_invalid_count > 0,
         "dim_video_row_present": bool(cdc_upsert.get("video_id")),
+        "cdc_raw_rows_present": _as_int(cdc_raw.get("row_count")) > 0,
         "gold_processed_after_run_start": _as_int(content_max_processed_at_ms, default=-1) >= run_start_ms,
         "content_invalid_after_run_start": _as_int(
             content_max_invalid_ingested_at_ms, default=-1
@@ -228,6 +232,7 @@ def build_signoff_report(
             "raw_count": content_raw_count,
             "gold_count": content_gold_count,
             "content_invalid_count": content_invalid_count,
+            "cdc_raw_count": _as_int(cdc_raw.get("row_count")),
             "cdc_invalid_count": cdc_invalid_count,
         },
     )
@@ -489,6 +494,7 @@ def build_signoff_report(
             "content_raw_count": content_raw_count,
             "content_gold_count": content_gold_count,
             "content_invalid_count": content_invalid_count,
+            "cdc_raw_count": _as_int(cdc_raw.get("row_count")),
             "cdc_invalid_count": cdc_invalid_count,
             "content_invalid_rate": content_invalid_rate,
             "cdc_invalid_rate_per_minute": cdc_invalid_rate_per_minute,
@@ -561,6 +567,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--content-metrics-log", required=True)
     parser.add_argument("--content-contract-log", required=True)
     parser.add_argument("--cdc-upsert-log", required=True)
+    parser.add_argument("--cdc-raw-log", required=True)
     parser.add_argument("--cdc-invalid-log", required=True)
     parser.add_argument("--cdc-health-log", required=True)
 
@@ -589,6 +596,7 @@ def main(argv: list[str] | None = None) -> int:
         "content_metrics": Path(args.content_metrics_log),
         "content_contract": Path(args.content_contract_log),
         "cdc_upsert": Path(args.cdc_upsert_log),
+        "cdc_raw": Path(args.cdc_raw_log),
         "cdc_invalid": Path(args.cdc_invalid_log),
         "cdc_health": Path(args.cdc_health_log),
     }
@@ -622,6 +630,7 @@ def main(argv: list[str] | None = None) -> int:
         content_metrics=log_results["content_metrics"]["payload"],
         content_contract=log_results["content_contract"]["payload"],
         cdc_upsert=log_results["cdc_upsert"]["payload"],
+        cdc_raw=log_results["cdc_raw"]["payload"],
         cdc_invalid=log_results["cdc_invalid"]["payload"],
         cdc_health=log_results["cdc_health"]["payload"],
         runtime_start=json_payloads["runtime_start"],
