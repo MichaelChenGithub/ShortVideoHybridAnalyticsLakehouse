@@ -12,6 +12,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from spark.bt_events_conformed import (  # noqa: E402
     ENV_APP_NAME,
+    ENV_DATA_DATE,
     ENV_SOURCE_TABLE,
     ENV_TARGET_TABLE,
     JobSettings,
@@ -55,6 +56,7 @@ class BtEventsConformedTransformTests(unittest.TestCase):
         self.assertEqual(settings.app_name, "spark_bt_events_conformed")
         self.assertEqual(settings.source_table, RAW_EVENTS_TABLE)
         self.assertEqual(settings.target_table, EVENTS_CONFORMED_TABLE)
+        self.assertIsNone(settings.data_date_sql)
 
     def test_load_job_settings_overrides(self) -> None:
         settings = load_job_settings(
@@ -62,11 +64,13 @@ class BtEventsConformedTransformTests(unittest.TestCase):
                 ENV_APP_NAME: "custom_bt_events_conformed",
                 ENV_SOURCE_TABLE: "lakehouse.bronze.raw_events_canary",
                 ENV_TARGET_TABLE: "lakehouse.silver.events_conformed_canary",
+                ENV_DATA_DATE: "2026-03-04",
             }
         )
         self.assertEqual(settings.app_name, "custom_bt_events_conformed")
         self.assertEqual(settings.source_table, "lakehouse.bronze.raw_events_canary")
         self.assertEqual(settings.target_table, "lakehouse.silver.events_conformed_canary")
+        self.assertEqual(settings.data_date_sql, "DATE '2026-03-04'")
 
     @patch("spark.bt_events_conformed.run_batch")
     @patch("spark.bt_events_conformed.load_job_settings")
@@ -85,6 +89,7 @@ class BtEventsConformedTransformTests(unittest.TestCase):
             app_name="spark_bt_events_conformed_test",
             source_table="lakehouse.bronze.raw_events_canary",
             target_table="lakehouse.silver.events_conformed_canary",
+            data_date_sql="DATE '2026-03-04'",
         )
         fake_spark = _FakeSpark()
         fake_builder = _FakeBuilder(fake_spark)
@@ -107,13 +112,17 @@ class BtEventsConformedTransformTests(unittest.TestCase):
         self.assertEqual(fake_spark.sql_calls[1], create_events_conformed_sql(settings.target_table))
         self.assertEqual(
             fake_spark.sql_calls[2],
-            delete_events_conformed_data_date_sql(target_table=settings.target_table),
+            delete_events_conformed_data_date_sql(
+                target_table=settings.target_table,
+                data_date_sql=settings.data_date_sql,
+            ),
         )
         self.assertEqual(
             fake_spark.sql_calls[3],
             insert_events_conformed_for_data_date_sql(
                 source_table=settings.source_table,
                 target_table=settings.target_table,
+                data_date_sql=settings.data_date_sql,
             ),
         )
 

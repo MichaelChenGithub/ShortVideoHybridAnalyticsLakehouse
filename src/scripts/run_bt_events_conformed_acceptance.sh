@@ -8,6 +8,7 @@ Usage: run_bt_events_conformed_acceptance.sh
 Environment overrides:
   BOOTSTRAP_SERVERS
   PYTHON_BIN
+  BOUNDED_RUN_CONFIG
   WAIT_AFTER_JOB_START_SECONDS
   WAIT_AFTER_BOUNDED_RUN_SECONDS
   WAIT_AFTER_BATCH_SECONDS
@@ -37,6 +38,7 @@ fi
 
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+BOUNDED_RUN_CONFIG="${BOUNDED_RUN_CONFIG:-docs/architecture/generator/examples/bounded_run_config.example.json}"
 WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_BOUNDED_RUN_SECONDS="${WAIT_AFTER_BOUNDED_RUN_SECONDS:-75}"
 WAIT_AFTER_BATCH_SECONDS="${WAIT_AFTER_BATCH_SECONDS:-10}"
@@ -47,6 +49,22 @@ MIN_EVENTS_CONFORMED_ROWS="${MIN_EVENTS_CONFORMED_ROWS:-1}"
 EVENTS_CONFORMED_DATA_DATE="${EVENTS_CONFORMED_DATA_DATE:-}"
 EVENTS_CONFORMED_RUN_ID="${EVENTS_CONFORMED_RUN_ID:-bt_events_conformed_$(date -u +%Y%m%dT%H%M%SZ)}"
 MIN_PROCESSED_AT_MS="${MIN_PROCESSED_AT_MS:-$(( $(date +%s) * 1000 ))}"
+
+if [ -z "$EVENTS_CONFORMED_DATA_DATE" ]; then
+  EVENTS_CONFORMED_DATA_DATE="$("$PYTHON_BIN" - <<PY
+import json
+from pathlib import Path
+
+config_path = Path("${BOUNDED_RUN_CONFIG}")
+if config_path.exists():
+    cfg = json.loads(config_path.read_text())
+    started_at = str(cfg.get("started_at", "")).strip()
+    print(started_at[:10] if started_at else "")
+else:
+    print("")
+PY
+)"
+fi
 
 printf '[BT-EVENTS-CONFORMED] Starting required services...\n'
 docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
@@ -95,7 +113,7 @@ sleep "$WAIT_AFTER_JOB_START_SECONDS"
 printf '[BT-EVENTS-CONFORMED] Running bounded generator...\n'
 printf '[BT-EVENTS-CONFORMED] Generator run id: %s\n' "$EVENTS_CONFORMED_RUN_ID"
 "$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config docs/architecture/generator/examples/bounded_run_config.example.json \
+  --config "$BOUNDED_RUN_CONFIG" \
   --run-id "$EVENTS_CONFORMED_RUN_ID" \
   --sink kafka \
   --bootstrap-servers "$BOOTSTRAP_SERVERS"
@@ -113,7 +131,11 @@ printf '[BT-EVENTS-CONFORMED] Running events_conformed batch transform...\n'
 docker cp src/spark/bt_events_conformed.py lakehouse-spark:/home/iceberg/local/src/spark/bt_events_conformed.py
 docker cp src/spark/bt_events_conformed_sql.py lakehouse-spark:/home/iceberg/local/src/spark/bt_events_conformed_sql.py
 docker cp src/scripts/verify_bt_events_conformed.py lakehouse-spark:/home/iceberg/local/src/scripts/verify_bt_events_conformed.py
-docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/bt_events_conformed.py"
+if [ -n "$EVENTS_CONFORMED_DATA_DATE" ]; then
+  docker exec lakehouse-spark bash -lc "BT_EVENTS_CONFORMED_DATA_DATE='${EVENTS_CONFORMED_DATA_DATE}' /opt/spark/bin/spark-submit /home/iceberg/local/src/spark/bt_events_conformed.py"
+else
+  docker exec lakehouse-spark bash -lc "/opt/spark/bin/spark-submit /home/iceberg/local/src/spark/bt_events_conformed.py"
+fi
 sleep "$WAIT_AFTER_BATCH_SECONDS"
 
 printf '[BT-EVENTS-CONFORMED] Verifying events_conformed output contract...\n'
