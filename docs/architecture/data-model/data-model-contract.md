@@ -373,6 +373,8 @@ Data contract notes:
 5. batch partitioning and `D-1` publish checks should align on `event_date_et` semantics.
 6. physical layout baseline: `partition by event_date_et`, `bucket(64, user_id)`.
 7. bucket count may be tuned by benchmark evidence in cloud/scale contract.
+8. `events_conformed` standardizes as-of join inputs (`user_id`, `video_id`, `event_timestamp`) and does not execute SCD2 attribution joins in this layer.
+9. downstream batch fact jobs must apply as-of attribution with left-closed/right-open windows: `event_timestamp >= valid_from AND event_timestamp < valid_to`.
 
 #### 5.10.2 `lakehouse.silver.user_activity_sessions_30m`
 
