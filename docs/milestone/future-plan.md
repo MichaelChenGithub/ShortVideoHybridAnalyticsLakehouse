@@ -16,6 +16,11 @@ When other docs mention deferred or conflicting scope, they should point here.
 5. Automated notification mechanisms for freshness, batch readiness, and quality breaches.
 6. Policy-driven release-guard automation replacing manual review workflows.
 7. Explicit late-data monitoring and watermark-drop observability instrumentation.
+8. Expanded Airflow operational automation beyond current scope:
+   - non-email notification channels
+   - multi-DAG decomposition
+   - autonomous remediation and recovery workflows
+   - broader historical rebuild policies
 
 ## 3. Future Expansion Candidates
 
