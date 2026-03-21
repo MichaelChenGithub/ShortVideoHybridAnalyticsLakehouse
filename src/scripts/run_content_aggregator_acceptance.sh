@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/acceptance_common.sh"
+
 usage() {
   cat <<'EOF'
 Usage: run_content_aggregator_acceptance.sh
 
 Environment overrides:
+  ACCEPTANCE_RESET_DOCKER
+  BOUNDED_RUN_TIME_MODE
+  BOUNDED_RUN_STARTED_AT
   BOOTSTRAP_SERVERS
   PYTHON_BIN
   WAIT_AFTER_JOB_START_SECONDS
@@ -41,16 +48,16 @@ MIN_GOLD_ROWS="${MIN_GOLD_ROWS:-1}"
 MAX_FRESHNESS_MINUTES="${MAX_FRESHNESS_MINUTES:-10}"
 CONTENT_AGGREGATOR_RUN_ID="${CONTENT_AGGREGATOR_RUN_ID:-content_aggregator_$(date -u +%Y%m%dT%H%M%SZ)}"
 
+resolve_bounded_run_started_at "CONTENT-AGGREGATOR"
+
+cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "CONTENT-AGGREGATOR"
+
 printf '[CONTENT-AGGREGATOR] Starting required services...\n'
 docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
 
 printf '[CONTENT-AGGREGATOR] Ensuring topic exists...\n'
-for _ in 1 2 3 4 5; do
-  if docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
+wait_for_kafka_ready "CONTENT-AGGREGATOR" 60 2
 
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
@@ -89,11 +96,20 @@ sleep "$WAIT_AFTER_JOB_START_SECONDS"
 printf '[CONTENT-AGGREGATOR] Running bounded generator...\n'
 MIN_PROCESSED_AT_MS="${MIN_PROCESSED_AT_MS:-$(( $(date +%s) * 1000 ))}"
 printf '[CONTENT-AGGREGATOR] Generator run id: %s\n' "$CONTENT_AGGREGATOR_RUN_ID"
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config docs/architecture/generator/examples/bounded_run_config.example.json \
-  --run-id "$CONTENT_AGGREGATOR_RUN_ID" \
-  --sink kafka \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --run-id "$CONTENT_AGGREGATOR_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --run-id "$CONTENT_AGGREGATOR_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 sleep "$WAIT_AFTER_BOUNDED_RUN_SECONDS"
 

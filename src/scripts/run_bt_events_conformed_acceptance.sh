@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/acceptance_common.sh"
+
 usage() {
   cat <<'EOF'
 Usage: run_bt_events_conformed_acceptance.sh
 
 Environment overrides:
+  ACCEPTANCE_RESET_DOCKER
+  BOUNDED_RUN_TIME_MODE
+  BOUNDED_RUN_STARTED_AT
   BOOTSTRAP_SERVERS
   PYTHON_BIN
   BOUNDED_RUN_CONFIG
@@ -50,8 +57,13 @@ EVENTS_CONFORMED_DATA_DATE="${EVENTS_CONFORMED_DATA_DATE:-}"
 EVENTS_CONFORMED_RUN_ID="${EVENTS_CONFORMED_RUN_ID:-bt_events_conformed_$(date -u +%Y%m%dT%H%M%SZ)}"
 MIN_PROCESSED_AT_MS="${MIN_PROCESSED_AT_MS:-$(( $(date +%s) * 1000 ))}"
 
+resolve_bounded_run_started_at "BT-EVENTS-CONFORMED"
+
 if [ -z "$EVENTS_CONFORMED_DATA_DATE" ]; then
-  EVENTS_CONFORMED_DATA_DATE="$("$PYTHON_BIN" - <<PY
+  if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+    EVENTS_CONFORMED_DATA_DATE="${BOUNDED_RUN_EFFECTIVE_STARTED_AT:0:10}"
+  else
+    EVENTS_CONFORMED_DATA_DATE="$("$PYTHON_BIN" - <<PY
 import json
 from pathlib import Path
 
@@ -64,18 +76,17 @@ else:
     print("")
 PY
 )"
+  fi
 fi
+
+cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "BT-EVENTS-CONFORMED"
 
 printf '[BT-EVENTS-CONFORMED] Starting required services...\n'
 docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
 
 printf '[BT-EVENTS-CONFORMED] Ensuring required topics exist...\n'
-for _ in 1 2 3 4 5; do
-  if docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
+wait_for_kafka_ready "BT-EVENTS-CONFORMED" 60 2
 
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
@@ -112,11 +123,20 @@ sleep "$WAIT_AFTER_JOB_START_SECONDS"
 
 printf '[BT-EVENTS-CONFORMED] Running bounded generator...\n'
 printf '[BT-EVENTS-CONFORMED] Generator run id: %s\n' "$EVENTS_CONFORMED_RUN_ID"
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config "$BOUNDED_RUN_CONFIG" \
-  --run-id "$EVENTS_CONFORMED_RUN_ID" \
-  --sink kafka \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config "$BOUNDED_RUN_CONFIG" \
+    --run-id "$EVENTS_CONFORMED_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config "$BOUNDED_RUN_CONFIG" \
+    --run-id "$EVENTS_CONFORMED_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 sleep "$WAIT_AFTER_BOUNDED_RUN_SECONDS"
 

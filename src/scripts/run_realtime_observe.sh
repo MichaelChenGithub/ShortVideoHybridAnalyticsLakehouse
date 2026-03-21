@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/acceptance_common.sh"
 
 RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
 PRINT_MAINTENANCE_HINT="${PRINT_MAINTENANCE_HINT:-0}"
@@ -19,6 +20,9 @@ Options:
 Equivalent env flags:
   RESET_CHECKPOINTS=1
   PRINT_MAINTENANCE_HINT=1
+  ACCEPTANCE_RESET_DOCKER=1
+  BOUNDED_RUN_TIME_MODE=dynamic
+  BOUNDED_RUN_STARTED_AT=2026-03-20T14:00:00Z
 
 Resource-bound env flags (optional overrides):
   RT_SIGNOFF_SPARK_DRIVER_CORES
@@ -111,6 +115,8 @@ case "$RT_SIGNOFF_WATERMARK_SCENARIO" in
     exit 1
     ;;
 esac
+
+resolve_bounded_run_started_at "RT-SIGNOFF-OBSERVE"
 
 wait_for_kafka_ready() {
   local retries="$1"
@@ -209,6 +215,7 @@ reset_checkpoints() {
 }
 
 cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "RT-SIGNOFF-OBSERVE"
 
 printf '[RT-SIGNOFF-OBSERVE] Starting manual-observe flow...\n'
 printf '[RT-SIGNOFF-OBSERVE] run_id=%s\n' "$RT_SIGNOFF_RUN_ID"
@@ -253,11 +260,20 @@ wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB
 STARTED_SPARK_JOBS=1
 
 printf '[RT-SIGNOFF-OBSERVE] Emitting bounded generator traffic (RT-SIGNOFF shared run shape)...\n'
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config docs/architecture/generator/examples/bounded_run_config.example.json \
-  --run-id "$RT_SIGNOFF_RUN_ID" \
-  --sink kafka \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --run-id "$RT_SIGNOFF_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --run-id "$RT_SIGNOFF_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 sleep "$WAIT_AFTER_BOUNDED_RUN_SECONDS"
 

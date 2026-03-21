@@ -46,6 +46,13 @@ bash src/scripts/run_realtime_signoff_acceptance.sh --reset-checkpoints
 bash src/scripts/run_realtime_signoff_dual_acceptance.sh --reset-checkpoints
 ```
 
+Common acceptance env controls:
+```bash
+BOUNDED_RUN_TIME_MODE=dynamic
+BOUNDED_RUN_STARTED_AT=2026-03-20T14:00:00Z
+ACCEPTANCE_RESET_DOCKER=1
+```
+
 ## Maintenance Rules
 
 1. Add or update acceptance commands in script files under `src/scripts/` first.

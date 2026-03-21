@@ -85,6 +85,15 @@ Readiness and settle waits (tunable via env):
 3. `POST_RUN_BATCH_READY_RETRIES=60`
 4. `POST_RUN_BATCH_READY_SLEEP_SECONDS=5`
 
+Bounded-run timestamp mode defaults:
+1. `BOUNDED_RUN_TIME_MODE=deterministic`
+2. `BOUNDED_RUN_STARTED_AT` unset (uses config default `started_at`)
+3. `BOUNDED_RUN_TIME_MODE=dynamic` injects execution-time UTC `started_at`
+
+Isolation default:
+1. `ACCEPTANCE_RESET_DOCKER=0`
+2. Set `ACCEPTANCE_RESET_DOCKER=1` to run `docker compose down -v` before startup.
+
 ## 4. Static Tuning Workflow (No Dynamic Tuning)
 
 Use this flow when selecting between static watermark profiles.
@@ -101,6 +110,14 @@ RT_SIGNOFF_WATERMARK_SCENARIO=baseline bash src/scripts/run_realtime_signoff_acc
 2. Dual scenario:
 ```bash
 RT_SIGNOFF_RUN_ID=mic38_signoff_20260310 bash src/scripts/run_realtime_signoff_dual_acceptance.sh
+```
+3. Dynamic-time bounded-run:
+```bash
+BOUNDED_RUN_TIME_MODE=dynamic bash src/scripts/run_realtime_signoff_acceptance.sh
+```
+4. Isolated run from clean Docker state:
+```bash
+ACCEPTANCE_RESET_DOCKER=1 bash src/scripts/run_realtime_signoff_acceptance.sh
 ```
 
 Step 3: Review outputs

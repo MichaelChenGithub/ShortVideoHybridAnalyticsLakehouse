@@ -3,12 +3,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/acceptance_common.sh"
 
 usage() {
   cat <<'EOF'
 Usage: run_bt_dim_users_scd2_acceptance.sh
 
 Environment overrides:
+  ACCEPTANCE_RESET_DOCKER
+  BOUNDED_RUN_TIME_MODE
+  BOUNDED_RUN_STARTED_AT
   USER_ID
   BOOTSTRAP_SERVERS
   PYTHON_BIN
@@ -74,6 +78,8 @@ PROBE_OLD_TS_MS="${PROBE_OLD_TS_MS:-$((BASE_TS_MS + 1000))}"
 PROBE_NEW_TS_MS="${PROBE_NEW_TS_MS:-$((BASE_TS_MS + 2000))}"
 RECREATE_SERVICES="${RECREATE_SERVICES:-0}"
 RECREATE_WITH_VOLUMES="${RECREATE_WITH_VOLUMES:-0}"
+
+resolve_bounded_run_started_at "BT-DIM-USERS-SCD2"
 
 start_required_services() {
   if [ "$RECREATE_SERVICES" = "1" ]; then
@@ -161,6 +167,8 @@ wait_for_min_batch_id() {
 }
 
 printf '[BT-DIM-USERS-SCD2] Starting required services...\n'
+cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "BT-DIM-USERS-SCD2"
 start_required_services
 
 for container_name in \
@@ -189,12 +197,7 @@ done
 check_spark_src_mount
 
 printf '[BT-DIM-USERS-SCD2] Ensuring CDC topic exists...\n'
-for _ in 1 2 3 4 5; do
-  if docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
+wait_for_kafka_ready "BT-DIM-USERS-SCD2" 60 2
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
   --create \
@@ -217,10 +220,18 @@ if [[ ! "$batch_before_warmup" =~ ^-?[0-9]+$ ]]; then
 fi
 
 printf '[BT-DIM-USERS-SCD2] Running bounded generator...\n'
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config "$BOUNDED_RUN_CONFIG" \
-  --sink "$BOUNDED_RUN_SINK" \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config "$BOUNDED_RUN_CONFIG" \
+    --sink "$BOUNDED_RUN_SINK" \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config "$BOUNDED_RUN_CONFIG" \
+    --sink "$BOUNDED_RUN_SINK" \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 emit_warmup_user_cdc "$WARMUP_USER_ID" "$BASE_TS_MS"
 if ! wait_for_min_batch_id "$USER_CDC_JOB_LOG" "$((batch_before_warmup + 1))" "$WARMUP_WAIT_RETRIES" "$WARMUP_WAIT_SLEEP_SECONDS"; then
