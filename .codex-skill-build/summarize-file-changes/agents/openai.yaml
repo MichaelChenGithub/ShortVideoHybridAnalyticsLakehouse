@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summarize File Changes"
+  short_description: "Walk through changed files with logic-focused detail"
+  default_prompt: "Use $summarize-file-changes to explain the current file changes step by step, with emphasis on important logic."
