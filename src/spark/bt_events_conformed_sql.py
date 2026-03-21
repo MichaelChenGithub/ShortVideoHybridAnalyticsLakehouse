@@ -25,6 +25,7 @@ _REQUIRED_EVENTS_CONFORMED_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("video_id", "STRING"),
     ("user_id", "STRING"),
     ("event_type", "STRING"),
+    ("watch_time_ms", "BIGINT"),
     ("category", "STRING"),
     ("region", "STRING"),
 )
@@ -44,6 +45,7 @@ def create_events_conformed_sql(table_name: str = EVENTS_CONFORMED_TABLE) -> str
         video_id STRING,
         user_id STRING,
         event_type STRING,
+        watch_time_ms BIGINT,
         category STRING,
         region STRING
     ) USING iceberg
@@ -146,6 +148,7 @@ def insert_events_conformed_for_data_date_sql(
         video_id,
         user_id,
         event_type,
+        COALESCE(CAST(get_json_object(payload_json, '$.watch_time_ms') AS BIGINT), 0) AS watch_time_ms,
         COALESCE(NULLIF(TRIM(get_json_object(payload_json, '$.category')), ''), 'unknown') AS category,
         COALESCE(NULLIF(TRIM(get_json_object(payload_json, '$.region')), ''), 'unknown') AS region
     FROM deduped

@@ -22,6 +22,7 @@ class VerifyBtEventsConformedTests(unittest.TestCase):
                 "video_id": "v_001",
                 "user_id": "u_001",
                 "event_type": "play_start",
+                "watch_time_ms": 3000,
                 "category": "unknown",
                 "region": "unknown",
             },
@@ -33,6 +34,7 @@ class VerifyBtEventsConformedTests(unittest.TestCase):
                 "video_id": "v_002",
                 "user_id": "u_002",
                 "event_type": "like",
+                "watch_time_ms": 0,
                 "category": "unknown",
                 "region": "unknown",
             },
@@ -55,6 +57,7 @@ class VerifyBtEventsConformedTests(unittest.TestCase):
                 "video_id": "v_001",
                 "user_id": "u_001",
                 "event_type": "play_start",
+                "watch_time_ms": 1000,
                 "category": "unknown",
                 "region": "unknown",
             },
@@ -66,6 +69,7 @@ class VerifyBtEventsConformedTests(unittest.TestCase):
                 "video_id": "v_002",
                 "user_id": "u_002",
                 "event_type": "bad_type",
+                "watch_time_ms": -1,
                 "category": "unknown",
                 "region": "unknown",
             },
@@ -79,6 +83,7 @@ class VerifyBtEventsConformedTests(unittest.TestCase):
         self.assertTrue(any("Duplicate event_id rows found" in err for err in errors))
         self.assertTrue(any("event_date_et/data_date mismatch" in err for err in errors))
         self.assertTrue(any("event_type must be one of" in err for err in errors))
+        self.assertTrue(any("watch_time_ms must be non-negative" in err for err in errors))
 
     def test_validate_events_conformed_rows_enforces_min_count(self) -> None:
         errors = validate_events_conformed_rows(

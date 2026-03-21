@@ -28,6 +28,7 @@ class BtEventsConformedSqlTests(unittest.TestCase):
             ("video_id", "STRING"),
             ("user_id", "STRING"),
             ("event_type", "STRING"),
+            ("watch_time_ms", "BIGINT"),
             ("category", "STRING"),
             ("region", "STRING"),
         )
@@ -69,6 +70,7 @@ class BtEventsConformedSqlTests(unittest.TestCase):
         self.assertIn("source_offset DESC NULLS LAST,", sql)
         self.assertIn("ingested_at DESC NULLS LAST", sql)
         self.assertIn("event_date_et AS data_date", sql)
+        self.assertIn("COALESCE(CAST(get_json_object(payload_json, '$.watch_time_ms') AS BIGINT), 0) AS watch_time_ms", sql)
         self.assertIn("COALESCE(NULLIF(TRIM(get_json_object(payload_json, '$.category')), ''), 'unknown') AS category", sql)
         self.assertIn("COALESCE(NULLIF(TRIM(get_json_object(payload_json, '$.region')), ''), 'unknown') AS region", sql)
 

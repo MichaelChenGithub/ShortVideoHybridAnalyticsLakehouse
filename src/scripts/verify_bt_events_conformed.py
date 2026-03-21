@@ -45,6 +45,7 @@ def validate_events_conformed_rows(
         video_id = row.get("video_id")
         user_id = row.get("user_id")
         event_type = row.get("event_type")
+        watch_time_ms = row.get("watch_time_ms")
         category = row.get("category")
         region = row.get("region")
 
@@ -77,6 +78,11 @@ def validate_events_conformed_rows(
             normalized_event_type = str(event_type).strip().lower()
             if normalized_event_type not in ALLOWED_EVENT_TYPES:
                 errors.append(f"event_type must be one of {ALLOWED_EVENT_TYPES}, got={event_type}")
+
+        if watch_time_ms is None:
+            errors.append("watch_time_ms must be non-null")
+        elif int(watch_time_ms) < 0:
+            errors.append(f"watch_time_ms must be non-negative for event_id={event_id}, got={watch_time_ms}")
 
         if data_date is not None and str(data_date) != expected_data_date:
             errors.append(
