@@ -10,17 +10,19 @@ This module defines production-facing batch analytics contracts for the platform
 
 1. metric semantics: `batch-metrics-contract.md`
 2. orchestration and publish readiness: `batch-jobs-and-orchestration-contract.md`
-3. batch semantic serving interface: `../serving/trino-batch-semantic-serving-contract.md`
-4. dbt semantic quality and publish gates: `../quality/dbt-semantic-quality-contract.md`
-5. domain acceptance criteria: `acceptance-domain-batch.md`
-6. execution runbook and evidence capture: `reference/batch-acceptance-runbook.md`
+3. Airflow execution design on AWS: `airflow-batch-orchestration-spec.md`
+4. batch semantic serving interface: `../serving/trino-batch-semantic-serving-contract.md`
+5. dbt semantic quality and publish gates: `../quality/dbt-semantic-quality-contract.md`
+6. domain acceptance criteria: `acceptance-domain-batch.md`
+7. execution runbook and evidence capture: `reference/batch-acceptance-runbook.md`
 
 ## 3. Contract Boundaries
 
 1. Batch domains covered: retention (`D1`,`D7`), engagement KPI + lightweight funnel, and sessionization.
 2. Publish target: `D-1` outputs ready by `08:00` (`America/New_York`).
-3. Batch outputs are consumed via serving semantic views, not raw model re-derivation in BI.
-4. Alerts/notifications and fully automated remediation are deferred to future plan.
+3. Airflow-specific orchestration behavior is defined separately from the scheduler-agnostic publish contract.
+4. Batch outputs are consumed via serving semantic views, not raw model re-derivation in BI.
+5. Fully automated remediation remains deferred to future plan.
 
 ## 4. Canonical Outputs
 
