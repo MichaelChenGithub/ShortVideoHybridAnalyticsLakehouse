@@ -408,10 +408,11 @@ Data contract notes:
 1. session split rule uses 30-minute inactivity gap.
 2. `session_id` must be deterministic (for example hash of `user_id + session_start_ts`) to keep replay/backfill stable.
 3. event ordering inside a user stream is `event_timestamp ASC`, then `event_id ASC`.
-4. session attribution fields (`category`, `region`, `new_vs_returning_user`) are taken from the max event in the session under that governed ordering.
-5. `category` and `region` come from the max `events_conformed` row in the session.
-6. `new_vs_returning_user` comes from the `dim_users_scd2` as-of row matched at the max event timestamp; use `unknown` when no match exists.
-7. physical layout baseline: `partition by data_date`, `bucket(64, user_id)`.
+4. session attribution fields are deterministic and derived after sessionization under the governed event ordering.
+5. `category` and `region` are selected as the dominant `(category, region)` pair in the session using highest `SUM(watch_time_ms)`.
+6. ties for dominant `(category, region)` are broken by `COUNT(*)`, then max event timestamp, then max event id, all descending.
+7. `new_vs_returning_user` comes from the `dim_users_scd2` as-of row matched at the session max event timestamp; use `unknown` when no match exists.
+8. physical layout baseline: `partition by data_date`, `bucket(64, user_id)`.
 
 #### 5.10.3 `lakehouse.dims.dim_users_scd2`
 
