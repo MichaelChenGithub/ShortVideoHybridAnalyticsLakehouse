@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/acceptance_common.sh"
+
 usage() {
   cat <<'EOF'
 Usage: run_bt_dim_videos_scd2_acceptance.sh
 
 Environment overrides:
+  ACCEPTANCE_RESET_DOCKER
+  BOUNDED_RUN_TIME_MODE
+  BOUNDED_RUN_STARTED_AT
   VIDEO_ID
   BOOTSTRAP_SERVERS
   PYTHON_BIN
@@ -52,16 +59,16 @@ EXPECT_CATEGORY="${EXPECT_CATEGORY:-Comedy}"
 EXPECT_REGION="${EXPECT_REGION:-US}"
 EXPECT_STATUS="${EXPECT_STATUS:-copyright_strike}"
 
+resolve_bounded_run_started_at "BT-DIM-VIDEOS-SCD2"
+
+cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "BT-DIM-VIDEOS-SCD2"
+
 printf '[BT-DIM-VIDEOS-SCD2] Starting required services...\n'
 docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
 
 printf '[BT-DIM-VIDEOS-SCD2] Ensuring CDC topic exists...\n'
-for _ in 1 2 3 4 5; do
-  if docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; then
-    break
-  fi
-  sleep 2
-done
+wait_for_kafka_ready "BT-DIM-VIDEOS-SCD2" 60 2
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
   --create \
@@ -79,10 +86,18 @@ docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit \
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 
 printf '[BT-DIM-VIDEOS-SCD2] Running bounded generator...\n'
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config docs/architecture/generator/examples/bounded_run_config.example.json \
-  --sink kafka \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 printf '[BT-DIM-VIDEOS-SCD2] Emitting deterministic CDC fixture...\n'
 "$PYTHON_BIN" src/scripts/emit_cdc_videos_fixture.py \

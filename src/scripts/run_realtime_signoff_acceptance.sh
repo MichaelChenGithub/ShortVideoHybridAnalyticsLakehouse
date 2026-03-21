@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/acceptance_common.sh"
 
 RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
 KEEP_JOBS_RUNNING="${KEEP_JOBS_RUNNING:-0}"
@@ -19,6 +20,9 @@ Options:
 Equivalent env flags:
   RESET_CHECKPOINTS=1
   KEEP_JOBS_RUNNING=1
+  ACCEPTANCE_RESET_DOCKER=1
+  BOUNDED_RUN_TIME_MODE=dynamic
+  BOUNDED_RUN_STARTED_AT=2026-03-20T14:00:00Z
 
 Resource-bound env flags (optional overrides):
   RT_SIGNOFF_SPARK_DRIVER_CORES
@@ -151,6 +155,8 @@ case "$RT_SIGNOFF_WATERMARK_SCENARIO" in
     exit 1
     ;;
 esac
+
+resolve_bounded_run_started_at "RT-SIGNOFF"
 
 now_ms() {
   echo $(( $(date +%s) * 1000 ))
@@ -394,6 +400,7 @@ if [ -n "$MAX_WATERMARK_DROP_RATIO" ]; then
 fi
 
 cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "RT-SIGNOFF"
 mkdir -p "$ARTIFACT_DIR"
 
 printf '[RT-SIGNOFF] artifact_dir=%s\n' "$ARTIFACT_DIR"
@@ -444,11 +451,20 @@ runtime_snapshot "$RUNTIME_START_JSON"
 checkpoint_snapshot "$CHECKPOINT_START_JSON"
 
 printf '[RT-SIGNOFF] Running bounded generator once for shared integrated run...\n'
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config docs/architecture/generator/examples/bounded_run_config.example.json \
-  --run-id "$RT_SIGNOFF_RUN_ID" \
-  --sink kafka \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --run-id "$RT_SIGNOFF_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config docs/architecture/generator/examples/bounded_run_config.example.json \
+    --run-id "$RT_SIGNOFF_RUN_ID" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 sleep "$WAIT_AFTER_BOUNDED_RUN_SECONDS"
 
