@@ -360,8 +360,9 @@ Required fields (minimum):
 5. `video_id` STRING
 6. `user_id` STRING
 7. `event_type` STRING
-8. `category` STRING
-9. `region` STRING
+8. `watch_time_ms` BIGINT
+9. `category` STRING
+10. `region` STRING
 
 Data contract notes:
 
@@ -373,8 +374,9 @@ Data contract notes:
 5. batch partitioning and `D-1` publish checks should align on `event_date_et` semantics.
 6. physical layout baseline: `partition by event_date_et`, `bucket(64, user_id)`.
 7. bucket count may be tuned by benchmark evidence in cloud/scale contract.
-8. `events_conformed` standardizes as-of join inputs (`user_id`, `video_id`, `event_timestamp`) and does not execute SCD2 attribution joins in this layer.
-9. downstream batch fact jobs must apply as-of attribution with left-closed/right-open windows: `event_timestamp >= valid_from AND event_timestamp < valid_to`.
+8. `watch_time_ms` is parsed from `raw_events.payload_json.watch_time_ms` and defaults to `0` when missing/null.
+9. `events_conformed` standardizes as-of join inputs (`user_id`, `video_id`, `event_timestamp`) and does not execute SCD2 attribution joins in this layer.
+10. downstream batch fact jobs must apply as-of attribution with left-closed/right-open windows: `event_timestamp >= valid_from AND event_timestamp < valid_to`.
 
 #### 5.10.2 `lakehouse.silver.user_activity_sessions_30m`
 
@@ -393,16 +395,23 @@ Required fields (minimum):
 2. `user_id` STRING
 3. `session_start_ts` TIMESTAMP
 4. `session_end_ts` TIMESTAMP
-5. `session_duration_sec` BIGINT
-6. `event_count` BIGINT
-7. `watch_time_sum_ms` BIGINT
-8. `data_date` DATE
+5. `category` STRING
+6. `region` STRING
+7. `new_vs_returning_user` STRING
+8. `session_duration_sec` BIGINT
+9. `event_count` BIGINT
+10. `watch_time_sum_ms` BIGINT
+11. `data_date` DATE
 
 Data contract notes:
 
 1. session split rule uses 30-minute inactivity gap.
 2. `session_id` must be deterministic (for example hash of `user_id + session_start_ts`) to keep replay/backfill stable.
-3. physical layout baseline: `partition by data_date`, `bucket(64, user_id)`.
+3. event ordering inside a user stream is `event_timestamp ASC`, then `event_id ASC`.
+4. session attribution fields (`category`, `region`, `new_vs_returning_user`) are taken from the max event in the session under that governed ordering.
+5. `category` and `region` come from the max `events_conformed` row in the session.
+6. `new_vs_returning_user` comes from the `dim_users_scd2` as-of row matched at the max event timestamp; use `unknown` when no match exists.
+7. physical layout baseline: `partition by data_date`, `bucket(64, user_id)`.
 
 #### 5.10.3 `lakehouse.dims.dim_users_scd2`
 
