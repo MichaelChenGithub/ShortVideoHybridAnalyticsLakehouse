@@ -5,14 +5,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/acceptance_common.sh"
 
+RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
+
 usage() {
   cat <<'EOF'
-Usage: run_cdc_upsert_acceptance.sh
+Usage: run_cdc_upsert_acceptance.sh [--reset-checkpoints]
+
+Options:
+  --reset-checkpoints  Remove CDC checkpoint paths before starting the Spark job.
+  -h, --help           Show this help.
+
+Equivalent env flags:
+  RESET_CHECKPOINTS=1
+  ACCEPTANCE_RESET_DOCKER=1
 
 Environment overrides:
-  ACCEPTANCE_RESET_DOCKER
-  BOUNDED_RUN_TIME_MODE
-  BOUNDED_RUN_STARTED_AT
   VIDEO_ID
   BOOTSTRAP_SERVERS
   EXPECTED_STATUS
@@ -23,20 +30,24 @@ Environment overrides:
   KAFKA_READY_RETRIES
   KAFKA_READY_SLEEP_SECONDS
   KAFKA_START_RETRIES
-  CDC_JOB_START_RETRIES
-  CDC_JOB_START_SLEEP_SECONDS
-  TRINO_READY_RETRIES
-  TRINO_READY_SLEEP_SECONDS
-  TRINO_VERIFY_RETRIES
-  TRINO_VERIFY_SLEEP_SECONDS
+  CDC_JOB_READY_RETRIES
+  CDC_JOB_READY_SLEEP_SECONDS
+  VERIFY_RETRIES
+  VERIFY_SLEEP_SECONDS
   BASE_TS_MS
   EXPECTED_SOURCE_TS_MS
+  MAX_FRESHNESS_MINUTES
   MIN_RAW_ROWS
+  CDC_JOB_LOG
 EOF
 }
 
-if (($# > 0)); then
+while (($# > 0)); do
   case "$1" in
+    --reset-checkpoints)
+      RESET_CHECKPOINTS=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -47,32 +58,32 @@ if (($# > 0)); then
       exit 2
       ;;
   esac
-fi
+done
 
-VIDEO_ID="${VIDEO_ID:-cdc_upsert_vid_001}"
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
+DEFAULT_PYTHON_BIN="python3"
+if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+  DEFAULT_PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+fi
+PYTHON_BIN="${PYTHON_BIN:-$DEFAULT_PYTHON_BIN}"
+
+VIDEO_ID="${VIDEO_ID:-cdc_upsert_$(date -u +%Y%m%dT%H%M%SZ)_vid_001}"
 EXPECTED_STATUS="${EXPECTED_STATUS:-copyright_strike}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-RT_VIDEO_CDC_STARTING_OFFSETS="${RT_VIDEO_CDC_STARTING_OFFSETS:-earliest}"
+RT_VIDEO_CDC_STARTING_OFFSETS="${RT_VIDEO_CDC_STARTING_OFFSETS:-latest}"
 WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_FIXTURE_SECONDS="${WAIT_AFTER_FIXTURE_SECONDS:-75}"
 KAFKA_READY_RETRIES="${KAFKA_READY_RETRIES:-60}"
 KAFKA_READY_SLEEP_SECONDS="${KAFKA_READY_SLEEP_SECONDS:-2}"
 KAFKA_START_RETRIES="${KAFKA_START_RETRIES:-4}"
-CDC_JOB_START_RETRIES="${CDC_JOB_START_RETRIES:-24}"
-CDC_JOB_START_SLEEP_SECONDS="${CDC_JOB_START_SLEEP_SECONDS:-5}"
-TRINO_READY_RETRIES="${TRINO_READY_RETRIES:-45}"
-TRINO_READY_SLEEP_SECONDS="${TRINO_READY_SLEEP_SECONDS:-2}"
-TRINO_VERIFY_RETRIES="${TRINO_VERIFY_RETRIES:-30}"
-TRINO_VERIFY_SLEEP_SECONDS="${TRINO_VERIFY_SLEEP_SECONDS:-10}"
+CDC_JOB_READY_RETRIES="${CDC_JOB_READY_RETRIES:-24}"
+CDC_JOB_READY_SLEEP_SECONDS="${CDC_JOB_READY_SLEEP_SECONDS:-5}"
+VERIFY_RETRIES="${VERIFY_RETRIES:-30}"
+VERIFY_SLEEP_SECONDS="${VERIFY_SLEEP_SECONDS:-10}"
 BASE_TS_MS="${BASE_TS_MS:-$(( $(date +%s) * 1000 ))}"
 EXPECTED_SOURCE_TS_MS="${EXPECTED_SOURCE_TS_MS:-$((BASE_TS_MS + 2000))}"
+MAX_FRESHNESS_MINUTES="${MAX_FRESHNESS_MINUTES:-10}"
 MIN_RAW_ROWS="${MIN_RAW_ROWS:-4}"
-
-resolve_bounded_run_started_at "CDC-UPSERT"
-
-cd "$REPO_ROOT"
-acceptance_maybe_reset_docker "CDC-UPSERT"
+CDC_JOB_LOG="${CDC_JOB_LOG:-/tmp/cdc_upsert_acceptance.log}"
 
 is_kafka_container_up() {
   docker ps --format '{{.Names}} {{.Status}}' | grep -Eq '^lakehouse-kafka Up'
@@ -82,7 +93,7 @@ ensure_kafka_ready_and_running() {
   local attempt
   for ((attempt=1; attempt<=KAFKA_START_RETRIES; attempt++)); do
     if ! is_kafka_container_up; then
-      printf '[CDC-UPSERT] Kafka container not up (attempt %s/%s); restarting kafka...\n' "$attempt" "$KAFKA_START_RETRIES"
+      printf '[CDC-UPSERT] Kafka container not up (attempt %s/%s); starting kafka...\n' "$attempt" "$KAFKA_START_RETRIES"
       docker compose up -d kafka
       sleep 5
     fi
@@ -101,41 +112,120 @@ ensure_kafka_ready_and_running() {
 
 wait_for_cdc_upsert_job_alive() {
   local attempt
-  for ((attempt=1; attempt<=CDC_JOB_START_RETRIES; attempt++)); do
+  for ((attempt=1; attempt<=CDC_JOB_READY_RETRIES; attempt++)); do
     if docker exec lakehouse-spark bash -lc "pgrep -f rt_video_cdc_upsert.py" >/dev/null 2>&1; then
       return 0
     fi
-    sleep "$CDC_JOB_START_SLEEP_SECONDS"
+    sleep "$CDC_JOB_READY_SLEEP_SECONDS"
   done
+
+  echo "[CDC-UPSERT] ERROR: CDC upsert Spark job did not stay alive after startup." >&2
   return 1
 }
 
-wait_for_trino_ready() {
+stop_cdc_job_if_running() {
+  docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/[r]t_video_cdc_upsert.py/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
+}
+
+tail_cdc_job_log() {
+  docker exec lakehouse-spark bash -lc "tail -n 200 '$CDC_JOB_LOG'" || true
+}
+
+reset_cdc_checkpoints() {
+  printf '[CDC-UPSERT] Resetting CDC checkpoint directories...\n'
+  docker exec lakehouse-minio sh -lc "rm -rf \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
+    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
+}
+
+run_dim_verifier() {
+  local output=""
   local attempt
-  for ((attempt=1; attempt<=TRINO_READY_RETRIES; attempt++)); do
-    if docker exec lakehouse-trino trino --output-format CSV_UNQUOTED --execute "SELECT 1" >/dev/null 2>&1; then
+
+  for ((attempt=1; attempt<=VERIFY_RETRIES; attempt++)); do
+    if output="$(
+      docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_upsert.py \
+        --video-id "$VIDEO_ID" \
+        --max-freshness-minutes "$MAX_FRESHNESS_MINUTES" \
+        --expect-status "$EXPECTED_STATUS" \
+        --expect-source-ts-ms "$EXPECTED_SOURCE_TS_MS" \
+        2>&1
+    )"; then
+      printf '%s\n' "$output"
       return 0
     fi
-    sleep "$TRINO_READY_SLEEP_SECONDS"
+    sleep "$VERIFY_SLEEP_SECONDS"
   done
-  echo "[CDC-UPSERT] ERROR: Trino did not become ready after retries." >&2
+
+  echo "[CDC-UPSERT] ERROR: dim_videos verification did not pass after retries." >&2
+  printf '%s\n' "$output" >&2
   return 1
 }
 
-printf '[CDC-UPSERT] Starting base services (without kafka/spark)...\n'
+run_raw_verifier() {
+  local output=""
+  local attempt
+
+  for ((attempt=1; attempt<=VERIFY_RETRIES; attempt++)); do
+    if output="$(
+      docker exec lakehouse-spark python /home/iceberg/local/src/scripts/verify_rt_video_cdc_raw_bronze.py \
+        --video-id "$VIDEO_ID" \
+        --table lakehouse.bronze.raw_cdc_videos \
+        --min-row-count "$MIN_RAW_ROWS" \
+        --expect-status "$EXPECTED_STATUS" \
+        --expect-latest-ts-ms "$EXPECTED_SOURCE_TS_MS" \
+        --min-source-ts-ms "$BASE_TS_MS" \
+        2>&1
+    )"; then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    sleep "$VERIFY_SLEEP_SECONDS"
+  done
+
+  echo "[CDC-UPSERT] ERROR: raw CDC bronze verification did not pass after retries." >&2
+  printf '%s\n' "$output" >&2
+  return 1
+}
+
+assert_checkpoint_files_exist() {
+  local checkpoint_path="$1"
+  local label="$2"
+  local count
+  local listing
+
+  listing="$(docker exec lakehouse-minio sh -lc "ls -R '$checkpoint_path' 2>/dev/null" || true)"
+  count="$(printf '%s\n' "$listing" | awk 'NF && $0 !~ /:$/ {count++} END {print count + 0}')"
+  if [[ ! "$count" =~ ^[0-9]+$ ]] || [ "$count" -eq 0 ]; then
+    echo "[CDC-UPSERT] ERROR: no checkpoint entries found for $label at $checkpoint_path" >&2
+    printf '%s\n' "$listing" >&2
+    return 1
+  fi
+
+  printf '[CDC-UPSERT] PASS: %s checkpoint entries=%s (%s)\n' "$label" "$count" "$checkpoint_path"
+  printf '%s\n' "$listing" | awk 'NF {print}' | head -n 40
+}
+
+cd "$REPO_ROOT"
+acceptance_maybe_reset_docker "CDC-UPSERT"
+
+printf '[CDC-UPSERT] video_id=%s\n' "$VIDEO_ID"
+printf '[CDC-UPSERT] bootstrap_servers=%s\n' "$BOOTSTRAP_SERVERS"
+printf '[CDC-UPSERT] expected_status=%s\n' "$EXPECTED_STATUS"
+printf '[CDC-UPSERT] expected_source_ts_ms=%s\n' "$EXPECTED_SOURCE_TS_MS"
+printf '[CDC-UPSERT] starting_offsets=%s\n' "$RT_VIDEO_CDC_STARTING_OFFSETS"
+printf '[CDC-UPSERT] python_bin=%s\n' "$PYTHON_BIN"
+printf '[CDC-UPSERT] reset_checkpoints=%s\n' "$RESET_CHECKPOINTS"
+
+printf '[CDC-UPSERT] Starting required services...\n'
 docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper
 sleep 10
-printf '[CDC-UPSERT] Starting kafka...\n'
 docker compose up -d kafka
 ensure_kafka_ready_and_running
-printf '[CDC-UPSERT] Starting spark...\n'
 docker compose up -d spark
-printf '[CDC-UPSERT] Starting trino...\n'
-docker compose up -d trino
-wait_for_trino_ready
 
-printf '[CDC-UPSERT] Ensuring topic exists...\n'
-ensure_kafka_ready_and_running
+printf '[CDC-UPSERT] Ensuring CDC topic exists...\n'
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
   --create \
@@ -144,100 +234,49 @@ docker exec lakehouse-kafka kafka-topics \
   --partitions 3 \
   --replication-factor 1
 
+if [ "$RESET_CHECKPOINTS" = "1" ]; then
+  reset_cdc_checkpoints
+fi
+
 printf '[CDC-UPSERT] Starting Spark CDC upsert job...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/[r]t_video_cdc_upsert.py/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
-docker exec lakehouse-spark bash -lc "rm -rf /tmp/spark-* /tmp/blockmgr-* || true"
-docker exec lakehouse-spark bash -lc "rm -f /root/.ivy2/jars/com.amazonaws_aws-java-sdk-bundle-1.12.262.jar /root/.ivy2/jars/org.apache.iceberg_iceberg-spark-runtime-3.5_2.12-1.5.0.jar || true; rm -rf /root/.ivy2/cache/com.amazonaws/aws-java-sdk-bundle /root/.ivy2/cache/org.apache.iceberg/iceberg-spark-runtime-3.5_2.12 || true"
-docker exec lakehouse-spark bash -lc "mkdir -p /tmp/ivy/cdc_upsert && RT_VIDEO_CDC_STARTING_OFFSETS='${RT_VIDEO_CDC_STARTING_OFFSETS}' nohup /opt/spark/bin/spark-submit --conf spark.jars.ivy='/tmp/ivy/cdc_upsert' /home/iceberg/local/src/spark/rt_video_cdc_upsert.py > /tmp/cdc_upsert_cdc_upsert.log 2>&1 &"
+stop_cdc_job_if_running
+docker exec lakehouse-spark bash -lc "rm -f '$CDC_JOB_LOG' && rm -rf /tmp/spark-* /tmp/blockmgr-* && mkdir -p /tmp/ivy/cdc_upsert_acceptance"
+docker exec lakehouse-spark bash -lc "RT_VIDEO_CDC_STARTING_OFFSETS='$RT_VIDEO_CDC_STARTING_OFFSETS' nohup /opt/spark/bin/spark-submit \
+  --conf spark.jars.ivy='/tmp/ivy/cdc_upsert_acceptance' \
+  /home/iceberg/local/src/spark/rt_video_cdc_upsert.py > '$CDC_JOB_LOG' 2>&1 &"
+
 if ! wait_for_cdc_upsert_job_alive; then
-  echo "[CDC-UPSERT] ERROR: CDC upsert Spark job did not stay alive after startup." >&2
-  docker exec lakehouse-spark bash -lc "tail -n 200 /tmp/cdc_upsert_cdc_upsert.log" || true
+  tail_cdc_job_log
   exit 1
 fi
+
+# Give the streaming query time to subscribe before producing latest-offset test data.
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 
-printf '[CDC-UPSERT] Running bounded generator...\n'
-if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
-  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
-    --config docs/architecture/generator/examples/bounded_run_config.example.json \
-    --sink kafka \
-    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
-    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
-else
-  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
-    --config docs/architecture/generator/examples/bounded_run_config.example.json \
-    --sink kafka \
-    --bootstrap-servers "$BOOTSTRAP_SERVERS"
-fi
-
 printf '[CDC-UPSERT] Emitting deterministic CDC fixture...\n'
-ensure_kafka_ready_and_running
 "$PYTHON_BIN" src/scripts/emit_cdc_videos_fixture.py \
   --bootstrap-servers "$BOOTSTRAP_SERVERS" \
   --video-id "$VIDEO_ID" \
   --scenario full \
   --base-ts-ms "$BASE_TS_MS"
+
 sleep "$WAIT_AFTER_FIXTURE_SECONDS"
 
-printf '[CDC-UPSERT] Verifying upsert result via Trino...\n'
-upsert_ready=0
-for _ in $(seq 1 "$TRINO_VERIFY_RETRIES"); do
-  dim_row="$(docker exec lakehouse-trino trino --output-format CSV_UNQUOTED --execute \
-    "SELECT status, source_ts_ms \
-     FROM lakehouse.dims.dim_videos \
-     WHERE video_id='${VIDEO_ID}' \
-     ORDER BY source_ts_ms DESC \
-     LIMIT 1" 2>/dev/null | tail -n 1 || true)"
-  if [ -n "$dim_row" ]; then
-    dim_status="${dim_row%%,*}"
-    dim_source_ts="${dim_row##*,}"
-    if [ "$dim_status" = "$EXPECTED_STATUS" ] && [ "$dim_source_ts" = "$EXPECTED_SOURCE_TS_MS" ]; then
-      upsert_ready=1
-      break
-    fi
-  fi
-  sleep "$TRINO_VERIFY_SLEEP_SECONDS"
-done
-
-if [ "$upsert_ready" -ne 1 ]; then
-  echo "[CDC-UPSERT] ERROR: dim_videos upsert output not ready after retries." >&2
-  echo "[CDC-UPSERT] Last observed dim_videos row: ${dim_row:-<empty>}" >&2
-  docker exec lakehouse-spark bash -lc "tail -n 200 /tmp/cdc_upsert_cdc_upsert.log" || true
+printf '[CDC-UPSERT] Verifying dim_videos latest row...\n'
+if ! run_dim_verifier; then
+  tail_cdc_job_log
   exit 1
 fi
-printf '[CDC-UPSERT] PASS: dim_videos latest row status=%s source_ts_ms=%s\n' "$dim_status" "$dim_source_ts"
 
-printf '[CDC-UPSERT] Verifying raw CDC bronze landing via Trino...\n'
-raw_ready=0
-for _ in $(seq 1 "$TRINO_VERIFY_RETRIES"); do
-  raw_row="$(docker exec lakehouse-trino trino --output-format CSV_UNQUOTED --execute \
-    "SELECT CAST(COUNT(*) AS BIGINT), CAST(COALESCE(MAX(ts_ms), 0) AS BIGINT) \
-     FROM lakehouse.bronze.raw_cdc_videos \
-     WHERE video_id='${VIDEO_ID}' \
-       AND status='${EXPECTED_STATUS}' \
-       AND ts_ms >= ${BASE_TS_MS}" 2>/dev/null | tail -n 1 || true)"
-  if [ -n "$raw_row" ]; then
-    raw_count="${raw_row%%,*}"
-    raw_latest_ts="${raw_row##*,}"
-    if [ "${raw_count:-0}" -ge "$MIN_RAW_ROWS" ] && [ "${raw_latest_ts:-0}" = "$EXPECTED_SOURCE_TS_MS" ]; then
-      raw_ready=1
-      break
-    fi
-  fi
-  sleep "$TRINO_VERIFY_SLEEP_SECONDS"
-done
-
-if [ "$raw_ready" -ne 1 ]; then
-  echo "[CDC-UPSERT] ERROR: raw CDC bronze output not ready after retries." >&2
-  echo "[CDC-UPSERT] Last observed raw row metrics: ${raw_row:-<empty>}" >&2
-  docker exec lakehouse-spark bash -lc "tail -n 200 /tmp/cdc_upsert_cdc_upsert.log" || true
+printf '[CDC-UPSERT] Verifying raw CDC bronze landing...\n'
+if ! run_raw_verifier; then
+  tail_cdc_job_log
   exit 1
 fi
-printf '[CDC-UPSERT] PASS: raw_cdc_videos count=%s latest_ts_ms=%s\n' "$raw_count" "$raw_latest_ts"
 
-printf '[CDC-UPSERT] Checking checkpoint files...\n'
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 | head -n 40"
-docker exec lakehouse-minio sh -lc "ls -R /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 | head -n 40"
+printf '[CDC-UPSERT] Checking checkpoint evidence...\n'
+assert_checkpoint_files_exist "/data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1" "dim_videos"
+assert_checkpoint_files_exist "/data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1" "raw_cdc_videos"
 
 printf '[CDC-UPSERT] Confirming query process is alive...\n'
 docker exec lakehouse-spark bash -lc "pgrep -f rt_video_cdc_upsert.py"
