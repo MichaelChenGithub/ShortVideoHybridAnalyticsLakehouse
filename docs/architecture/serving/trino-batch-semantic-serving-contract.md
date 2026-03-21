@@ -113,6 +113,8 @@ Key required fields:
 Semantic notes:
 
 1. engagement rate formulas are governed by `docs/architecture/batch-analytics/batch-metrics-contract.md`.
+2. `category` is sourced from video attribution; `region` and `new_vs_returning_user` are sourced from user attribution.
+3. `region` in this view represents audience region rather than video region.
 
 ### 5.3 `lakehouse.serving.v_bt_sessionization_daily`
 

@@ -527,9 +527,11 @@ Data contract notes:
 
 1. `new_vs_returning_user` is a required segmentation dimension in batch gold outputs.
 2. when user-state attribution is unavailable, use explicit `unknown` value instead of dropping the dimension.
-3. downstream global views may aggregate over `new_vs_returning_user` when segment split is not needed.
-4. physical partition baseline: `partition by data_date`.
-5. engagement formula semantics are governed by `docs/architecture/batch-analytics/batch-metrics-contract.md`.
+3. `category` is attributed from `dim_videos_scd2.category`; `region` and `new_vs_returning_user` are attributed from `dim_users_scd2`.
+4. `region` in this table represents audience region rather than video region.
+5. downstream global views may aggregate over `new_vs_returning_user` when segment split is not needed.
+6. physical partition baseline: `partition by data_date`.
+7. engagement formula semantics are governed by `docs/architecture/batch-analytics/batch-metrics-contract.md`.
 
 #### 5.10.7 `lakehouse.gold.batch_sessionization_daily`
 
