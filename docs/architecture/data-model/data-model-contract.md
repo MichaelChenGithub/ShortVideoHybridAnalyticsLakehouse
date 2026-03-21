@@ -548,7 +548,7 @@ Data contract notes:
 Role:
 
 1. daily session behavior outputs for stickiness analysis
-2. derived from `lakehouse.silver.user_activity_sessions_30m` with user/video dimension attribution joins
+2. derived from attributed rows in `lakehouse.silver.user_activity_sessions_30m`; user/video attribution is applied in the silver session base build, and the gold table aggregates those governed session attributes
 
 Grain:
 
