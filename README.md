@@ -106,6 +106,7 @@ content_events + cdc.content.videos
 
 1. Local Iceberg REST catalog metadata backend uses PostgreSQL (`catalog-postgres` service in `docker-compose.yml`), not the image default SQLite backend.
 2. This avoids SQLite file-lock contention under concurrent streaming commits (for example CDC + content sinks writing during acceptance/signoff runs).
+3. Local Airflow batch runtime instructions live in `docs/architecture/batch-analytics/local-airflow-dev-runtime.md`.
 
 ## Deferred Scope (Future Plan Reference)
 
