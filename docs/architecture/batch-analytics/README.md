@@ -15,6 +15,7 @@ This module defines production-facing batch analytics contracts for the platform
 5. dbt semantic quality and publish gates: `../quality/dbt-semantic-quality-contract.md`
 6. domain acceptance criteria: `acceptance-domain-batch.md`
 7. execution runbook and evidence capture: `reference/batch-acceptance-runbook.md`
+8. local compose runtime for Airflow DAG loading: `local-airflow-dev-runtime.md`
 
 ## 3. Contract Boundaries
 
