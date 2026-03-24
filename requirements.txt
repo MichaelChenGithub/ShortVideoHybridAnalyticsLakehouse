@@ -1,4 +1,6 @@
 confluent-kafka>=2.6.0
+dbt-core>=1.8,<1.9
+dbt-trino>=1.8,<1.9
 faker==22.5.1
 numpy
 pyiceberg[s3fs]

@@ -1,0 +1,151 @@
+version: 2
+
+sources:
+  - name: gold
+    schema: gold
+    tables:
+      - name: batch_retention_daily
+      - name: batch_engagement_daily
+      - name: batch_sessionization_daily
+
+models:
+  - name: bt_retention_daily
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - cohort_date
+            - day_n
+            - category
+            - region
+            - new_vs_returning_user
+    columns:
+      - name: cohort_date
+        tests:
+          - not_null
+      - name: day_n
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 7]
+      - name: category
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: new_vs_returning_user
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['new', 'returning', 'unknown']
+      - name: cohort_users
+        tests:
+          - not_null
+      - name: retained_users
+        tests:
+          - not_null
+      - name: data_date
+        tests:
+          - not_null
+      - name: published_at
+        tests:
+          - not_null
+
+  - name: bt_engagement_daily
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - data_date
+            - category
+            - region
+            - new_vs_returning_user
+    columns:
+      - name: data_date
+        tests:
+          - not_null
+      - name: category
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: new_vs_returning_user
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['new', 'returning', 'unknown']
+      - name: impressions
+        tests:
+          - not_null
+      - name: play_start
+        tests:
+          - not_null
+      - name: play_finish
+        tests:
+          - not_null
+      - name: likes
+        tests:
+          - not_null
+      - name: shares
+        tests:
+          - not_null
+      - name: skips
+        tests:
+          - not_null
+      - name: play_start_rate
+        tests:
+          - not_null
+      - name: completion_rate
+        tests:
+          - not_null
+      - name: interaction_rate
+        tests:
+          - not_null
+      - name: skip_rate
+        tests:
+          - not_null
+      - name: published_at
+        tests:
+          - not_null
+
+  - name: bt_sessionization_daily
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - data_date
+            - category
+            - region
+            - new_vs_returning_user
+    columns:
+      - name: data_date
+        tests:
+          - not_null
+      - name: category
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
+      - name: new_vs_returning_user
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['new', 'returning', 'unknown']
+      - name: sessions
+        tests:
+          - not_null
+      - name: sessions_per_user
+        tests:
+          - not_null
+      - name: avg_session_duration_sec
+        tests:
+          - not_null
+      - name: events_per_session
+        tests:
+          - not_null
+      - name: watch_time_per_session_ms
+        tests:
+          - not_null
+      - name: published_at
+        tests:
+          - not_null
