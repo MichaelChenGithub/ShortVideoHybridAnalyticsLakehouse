@@ -1,0 +1,21 @@
+name: ShortVideoHybridAnalyticsLakehouse
+version: "1.0.0"
+config-version: 2
+
+profile: ShortVideoHybridAnalyticsLakehouse
+
+model-paths:
+  - models
+test-paths:
+  - tests_dbt
+macro-paths:
+  - macros
+
+models:
+  ShortVideoHybridAnalyticsLakehouse:
+    +materialized: view
+    +tags:
+      - batch_semantic_quality
+    batch:
+      semantic:
+        +schema: semantic_quality
