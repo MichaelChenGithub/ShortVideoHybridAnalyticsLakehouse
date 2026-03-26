@@ -108,7 +108,7 @@ services:
   spark:
     image: tabulario/spark-iceberg:latest
     container_name: lakehouse-spark
-    mem_limit: 6g
+    mem_limit: 8g
     mem_reservation: 4g
     depends_on:
       - minio
@@ -161,17 +161,10 @@ services:
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__SHOW_RECENT_STATS_FOR_DAG_RUNS=False
+      - PYTHONDONTWRITEBYTECODE=1
       - PATH=/home/airflow/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - PYTHONPATH=/opt/airflow/dags:/home/iceberg/local/src
-    command: >-
-      bash -lc "
-      airflow db init &&
-      (airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
-      {
-      airflow scheduler &
-      exec airflow webserver;
-      }
-      "
+    command: /opt/airflow/entrypoint.sh
     depends_on:
       - spark
   grafana:
