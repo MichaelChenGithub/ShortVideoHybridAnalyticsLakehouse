@@ -75,7 +75,7 @@ Due to scope exceeding the original `<= 5 files / <= 500 LOC` guardrail, work is
 | MIC-159 (baseline) | `main.tf`, `network.tf`, `storage.tf`, `iam.tf` | VPC, S3, Glue Catalog, IAM — foundation for all downstream |
 | MIC-196 (messaging) | `messaging.tf` | MSK Serverless cluster and security group rules |
 | MIC-197 (compute) | `compute.tf` | EMR Serverless application; ECS cluster for Airflow + Metabase; Airflow task def; Metabase Fargate service |
-| MIC-159-C (outputs) | `outputs.tf` | Stack outputs: MSK endpoint, S3 buckets, ECS cluster ARN, EMR app ID, Athena workgroup |
+| MIC-198 (outputs) | `outputs.tf` | Athena workgroup + all cross-stack outputs: MSK endpoint, S3 buckets, Glue DB, ECS cluster ARN, EMR app ID, Athena workgroup |
 
 ## 7. Benchmark Targets (from aws-deployment-and-scale-benchmark.md)
 
