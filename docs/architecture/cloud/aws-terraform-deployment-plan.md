@@ -14,10 +14,10 @@ This document is the implementation reference for MIC-159 and its sub-issues.
 |---|---|---|
 | MinIO | S3 | Direct replacement; endpoint config change only |
 | catalog-postgres + iceberg-rest | Glue Data Catalog | Replaces REST catalog + RDS entirely |
-| Zookeeper + Kafka | MSK | Managed Kafka; Zookeeper dropped |
-| Spark (realtime `rt_*.py`) | ECS Service (EC2-backed) | `tabulario/spark-iceberg` image; scripts unchanged |
-| Spark (batch `bt_*.py`) | Glue ETL Jobs | Thin GlueContext wrapper required |
-| Airflow | ECS Task | GlueJobOperator replaces `docker exec` pattern |
+| Zookeeper + Kafka | MSK Serverless | Managed Kafka; Zookeeper dropped; IAM auth only (port 9098) |
+| Spark (realtime `rt_*.py`) | EMR Serverless | One application; scripts submitted as long-running streaming job runs; no code changes required |
+| Spark (batch `bt_*.py`) | EMR Serverless | Same application as realtime; submitted as batch job runs by Airflow; no GlueContext wrapper required |
+| Airflow | ECS Task | boto3 EMR Serverless client replaces `docker exec` pattern; no GlueJobOperator needed |
 | Trino | Athena | Serverless; minor SQL syntax adjustments |
 | Metabase | ECS Task (Fargate) | Connects to Athena via JDBC driver |
 | Grafana | — | Skipped |
@@ -30,12 +30,13 @@ terraform/
   main.tf        — provider (aws), S3+DynamoDB state backend, shared variables
   network.tf     — VPC, public+private subnets, IGW, NAT gateway, route tables, security groups
   storage.tf     — S3 buckets (warehouse, checkpoints), Glue Data Catalog database
-  iam.tf         — IAM roles: ECS task execution, Glue job, MSK client, Airflow task
-  messaging.tf   — MSK cluster (1 broker, kafka.m5.large)
-  compute.tf     — ECS cluster; task definitions + services: Spark streaming, Airflow, Metabase
-  batch.tf       — Glue ETL job definitions (one per bt_*.py script)
-  outputs.tf     — MSK broker endpoints, S3 bucket names, ECS cluster ARN, Athena workgroup
+  iam.tf         — IAM roles: ECS task execution, EMR Serverless execution, MSK client, Airflow task
+  messaging.tf   — MSK Serverless cluster and security group rules
+  compute.tf     — EMR Serverless application (all Spark work: rt_*.py + bt_*.py); ECS cluster for Airflow and Metabase only; Airflow task definition; Metabase Fargate service
+  outputs.tf     — MSK broker endpoint, S3 bucket names, ECS cluster ARN, EMR Serverless app ID, Athena workgroup
 ```
+
+Note: `batch.tf` is eliminated. EMR Serverless replaces both EC2-backed ECS (Spark streaming) and Glue ETL (Spark batch) — all Spark work runs through the single EMR Serverless application in `compute.tf`. `bt_*.py` scripts require no GlueContext wrapper.
 
 ## 4. Application Code Changes
 
@@ -43,26 +44,26 @@ The following files require changes when moving from local to AWS. `rt_*.py` str
 
 | File | Change Required |
 |---|---|
-| `spark-defaults.conf` | Switch catalog impl to `org.apache.iceberg.aws.glue.GlueCatalog`; update S3 endpoint to real AWS |
-| `src/orchestration/airflow_batch_tasks.py` | Replace `docker exec spark ...` with `GlueJobOperator` calls |
-| `bt_*.py` batch scripts | Add `GlueContext` init wrapper per Glue ETL job requirements |
+| `spark-defaults.conf` | Switch catalog impl to `org.apache.iceberg.aws.glue.GlueCatalog`; remove MinIO S3A settings (IAM-based auth on AWS) |
+| `src/orchestration/airflow_batch_tasks.py` | Replace `docker exec spark ...` with boto3 EMR Serverless `start_job_run` + polling; `SPARK_BATCH_SPECS` maps job keys to S3 script paths |
+| `bt_*.py` batch scripts | No changes required — EMR Serverless runs native Spark; no GlueContext wrapper needed |
 | `src/trino/*.sql` (serving views) | Adjust Presto/Athena syntax differences from Trino |
-| `Dockerfile-airflow` | Add `dbt-core` + `dbt-athena-community` to image |
+| `Dockerfile-airflow` | Add `dbt-core` + `dbt-athena-community` + `boto3` to image |
 | `profiles.yml` (new) | Add Athena profile: S3 results bucket, Glue catalog DB, region — consumed by `dbt test` inside Airflow task |
 
 ## 5. Architecture Diagram
 
 ```
-MSK (Kafka)
-  → ECS Service (Spark Streaming, tabulario/spark-iceberg)  ─┐
-                                                              ├→ S3 (warehouse/)
-Airflow (ECS) → Glue ETL Jobs (bt_*.py)  ────────────────────┘
-                                                              ↓
-                                               Glue Data Catalog
-                                                              ↓
-                                                          Athena
-                                                              ↓
-                                               Metabase (ECS Fargate)
+MSK Serverless (Kafka, SASL/IAM)
+  → EMR Serverless (rt_*.py streaming job runs)  ─┐
+                                                   ├→ S3 (warehouse/)
+Airflow (ECS) → EMR Serverless (bt_*.py batch)  ──┘
+                                                   ↓
+                                      Glue Data Catalog (Iceberg metastore)
+                                                   ↓
+                                               Athena
+                                                   ↓
+                                    Metabase (ECS Fargate)
 ```
 
 ## 6. Terraform Issue Breakdown
@@ -72,9 +73,9 @@ Due to scope exceeding the original `<= 5 files / <= 500 LOC` guardrail, work is
 | Issue | Files | Scope |
 |---|---|---|
 | MIC-159 (baseline) | `main.tf`, `network.tf`, `storage.tf`, `iam.tf` | VPC, S3, Glue Catalog, IAM — foundation for all downstream |
-| MIC-159-A (messaging) | `messaging.tf` | MSK cluster and security group rules |
-| MIC-159-B (compute) | `compute.tf` | ECS cluster; Spark streaming service, Airflow task, Metabase task |
-| MIC-159-C (batch) | `batch.tf`, `outputs.tf` | Glue ETL job definitions and stack outputs |
+| MIC-196 (messaging) | `messaging.tf` | MSK Serverless cluster and security group rules |
+| MIC-197 (compute) | `compute.tf` | EMR Serverless application; ECS cluster for Airflow + Metabase; Airflow task def; Metabase Fargate service |
+| MIC-159-C (outputs) | `outputs.tf` | Stack outputs: MSK endpoint, S3 buckets, ECS cluster ARN, EMR app ID, Athena workgroup |
 
 ## 7. Benchmark Targets (from aws-deployment-and-scale-benchmark.md)
 
