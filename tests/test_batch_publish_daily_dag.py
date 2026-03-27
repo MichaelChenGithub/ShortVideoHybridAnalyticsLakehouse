@@ -136,6 +136,10 @@ class BatchPublishDailyDagTests(unittest.TestCase):
         self.assertFalse(dag.catchup)
         self.assertEqual(dag.max_active_runs, 1)
         self.assertEqual(str(dag.start_date.tzinfo), "America/New_York")
+        self.assertEqual(
+            dag.description,
+            "Local DAG for the daily bronze-to-silver through gold D-1 batch path.",
+        )
 
     def test_dag_contains_required_task_groups(self) -> None:
         module_globals = self._load_dag_module()
@@ -171,6 +175,54 @@ class BatchPublishDailyDagTests(unittest.TestCase):
         self.assertEqual(
             resolve_data_date.kwargs["op_kwargs"],
             {"logical_date": "{{ logical_date.isoformat() }}"},
+        )
+
+    def test_batch_tasks_use_shared_resolved_data_date(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        shared_template = {"data_date": "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"}
+        self.assertEqual(
+            dag.tasks["build_events_conformed"].kwargs["op_kwargs"],
+            {"job_key": "events_conformed", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_user_activity_sessions_30m"].kwargs["op_kwargs"],
+            {"job_key": "user_activity_sessions_30m", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_batch_retention_daily"].kwargs["op_kwargs"],
+            {"job_key": "batch_retention_daily", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_batch_engagement_daily"].kwargs["op_kwargs"],
+            {"job_key": "batch_engagement_daily", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_batch_sessionization_daily"].kwargs["op_kwargs"],
+            {"job_key": "batch_sessionization_daily", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["run_batch_gold_quality_gates"].kwargs["op_kwargs"],
+            shared_template,
+        )
+
+    def test_publish_tasks_remain_explicitly_deferred(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        shared_template = "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"
+        self.assertEqual(
+            dag.tasks["write_batch_publish_manifest"].kwargs["op_kwargs"],
+            {"task_name": "write_batch_publish_manifest", "data_date": shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["emit_publish_ready_signal"].kwargs["op_kwargs"],
+            {"task_name": "emit_publish_ready_signal", "data_date": shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["package_run_evidence"].kwargs["op_kwargs"],
+            {"task_name": "package_run_evidence", "data_date": shared_template},
         )
 
 
