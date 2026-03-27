@@ -4,6 +4,7 @@ import runpy
 import sys
 import types
 import unittest
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -136,6 +137,10 @@ class BatchPublishDailyDagTests(unittest.TestCase):
         self.assertFalse(dag.catchup)
         self.assertEqual(dag.max_active_runs, 1)
         self.assertEqual(str(dag.start_date.tzinfo), "America/New_York")
+        self.assertEqual(
+            dag.description,
+            "Local DAG for the daily bronze-to-silver through gold D-1 batch path.",
+        )
 
     def test_dag_contains_required_task_groups(self) -> None:
         module_globals = self._load_dag_module()
@@ -172,6 +177,109 @@ class BatchPublishDailyDagTests(unittest.TestCase):
             resolve_data_date.kwargs["op_kwargs"],
             {"logical_date": "{{ logical_date.isoformat() }}"},
         )
+        self.assertEqual(
+            resolve_data_date.kwargs["execution_timeout"],
+            timedelta(minutes=5),
+        )
+
+    def test_batch_tasks_use_shared_resolved_data_date(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        shared_template = {"data_date": "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"}
+        self.assertEqual(
+            dag.tasks["build_dim_users_scd2"].kwargs["op_kwargs"],
+            {"job_key": "dim_users_scd2", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_dim_videos_scd2"].kwargs["op_kwargs"],
+            {"job_key": "dim_videos_scd2", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_events_conformed"].kwargs["op_kwargs"],
+            {"job_key": "events_conformed", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_user_activity_sessions_30m"].kwargs["op_kwargs"],
+            {"job_key": "user_activity_sessions_30m", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_batch_retention_daily"].kwargs["op_kwargs"],
+            {"job_key": "batch_retention_daily", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_batch_engagement_daily"].kwargs["op_kwargs"],
+            {"job_key": "batch_engagement_daily", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["build_batch_sessionization_daily"].kwargs["op_kwargs"],
+            {"job_key": "batch_sessionization_daily", **shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["run_batch_gold_quality_gates"].kwargs["op_kwargs"],
+            shared_template,
+        )
+        for task_id in (
+            "build_dim_users_scd2",
+            "build_dim_videos_scd2",
+            "build_events_conformed",
+            "build_user_activity_sessions_30m",
+            "build_batch_retention_daily",
+            "build_batch_engagement_daily",
+            "build_batch_sessionization_daily",
+        ):
+            self.assertEqual(
+                dag.tasks[task_id].kwargs["execution_timeout"],
+                timedelta(minutes=30),
+            )
+        self.assertEqual(
+            dag.tasks["run_batch_gold_quality_gates"].kwargs["execution_timeout"],
+            timedelta(minutes=10),
+        )
+
+    def test_dimension_prerequisites_are_built_after_events_conformed(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        self.assertEqual(
+            dag.tasks["build_events_conformed"].downstream_node_ids,
+            {"build_dim_users_scd2", "build_dim_videos_scd2"},
+        )
+        self.assertIn(
+            "build_events_conformed",
+            dag.tasks["build_dim_users_scd2"].upstream_node_ids,
+        )
+        self.assertIn(
+            "build_events_conformed",
+            dag.tasks["build_dim_videos_scd2"].upstream_node_ids,
+        )
+
+    def test_publish_tasks_remain_explicitly_deferred(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        shared_template = "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"
+        self.assertEqual(
+            dag.tasks["write_batch_publish_manifest"].kwargs["op_kwargs"],
+            {"task_name": "write_batch_publish_manifest", "data_date": shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["emit_publish_ready_signal"].kwargs["op_kwargs"],
+            {"task_name": "emit_publish_ready_signal", "data_date": shared_template},
+        )
+        self.assertEqual(
+            dag.tasks["package_run_evidence"].kwargs["op_kwargs"],
+            {"task_name": "package_run_evidence", "data_date": shared_template},
+        )
+        for task_id in (
+            "write_batch_publish_manifest",
+            "emit_publish_ready_signal",
+            "package_run_evidence",
+        ):
+            self.assertEqual(
+                dag.tasks[task_id].kwargs["execution_timeout"],
+                timedelta(minutes=2),
+            )
 
 
 if __name__ == "__main__":
