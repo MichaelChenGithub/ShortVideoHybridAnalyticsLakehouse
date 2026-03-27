@@ -19,11 +19,12 @@ Provide execution steps and evidence requirements for batch analytics acceptance
 ## 3. Execution Steps
 
 1. execute batch orchestration for `data_date = D-1`
-2. run dbt semantic quality checks for batch models
-3. verify required batch gold outputs exist and are non-empty
-4. verify serving views are queryable with required fields
-5. verify manifest has success record for same `data_date`
-6. record publish readiness status versus `08:00` ET target
+2. verify one run-scoped branch is created and used across the batch run
+3. run dbt semantic quality checks for batch models on that branch
+4. verify required batch gold outputs exist and are non-empty
+5. verify serving views are queryable with required fields after branch promotion
+6. verify `merge_coordinator` succeeds for the same `data_date`
+7. record publish readiness status versus `08:00` ET target
 
 ## 4. Artifact Schema
 
@@ -37,7 +38,7 @@ Required files (minimum):
 2. `batch_table_counts.csv`
 3. `dbt_test_summary.json`
 4. `serving_contract_checks.csv`
-5. `publish_manifest_row.json`
+5. `branch_promotion_summary.json`
 6. `acceptance_summary.md`
 
 ## 5. Pass/Fail Gates
@@ -46,14 +47,14 @@ Pass conditions:
 
 1. all required quality checks pass
 2. required tables/views satisfy contract checks
-3. manifest success record exists for `data_date`
+3. branch promotion succeeds for `data_date`
 4. evidence package is complete and traceable
 
 Fail conditions:
 
 1. any quality gate failure
 2. missing/empty required output table or serving view contract violation
-3. missing manifest success record
+3. missing or failed branch promotion for `data_date`
 4. incomplete or non-traceable artifact package
 
 ## 6. Sign-off Template

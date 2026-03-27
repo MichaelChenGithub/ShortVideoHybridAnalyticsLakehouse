@@ -32,10 +32,9 @@ Out of scope:
 
 This document inherits and does not override the following documents:
 
-1. `batch-jobs-and-orchestration-contract.md` for publish-readiness, `D-1`, and manifest semantics
+1. `batch-jobs-and-orchestration-contract.md` for publish-readiness, `D-1`, and branch-promotion semantics
 2. `../quality/dbt-semantic-quality-contract.md` for quality-gate requirements
 3. `../serving/trino-batch-semantic-serving-contract.md` for serving handoff semantics
-4. `../data-model/data-model-contract.md` for `lakehouse.gold.batch_publish_manifest` schema
 
 If this document conflicts with those contracts, the upstream contract remains authoritative.
 
@@ -46,15 +45,16 @@ Current scope uses one Airflow DAG for the daily batch publish path.
 The canonical task sequence is:
 
 1. resolve `data_date` as `D-1` in `America/New_York`
-2. build `lakehouse.silver.events_conformed`
-3. build `lakehouse.silver.user_activity_sessions_30m`
-4. build `lakehouse.gold.batch_retention_daily`
-5. build `lakehouse.gold.batch_engagement_daily`
-6. build `lakehouse.gold.batch_sessionization_daily`
-7. run dbt/data quality gates
-8. write `lakehouse.gold.batch_publish_manifest`
-9. emit publish-ready signal for semantic serving and BI use
-10. package run evidence and close the Airflow run
+2. create one run-scoped Iceberg branch from `main`
+3. build `lakehouse.silver.events_conformed`
+4. build `lakehouse.silver.user_activity_sessions_30m`
+5. build `lakehouse.gold.batch_retention_daily`
+6. build `lakehouse.gold.batch_engagement_daily`
+7. build `lakehouse.gold.batch_sessionization_daily`
+8. run dbt/data quality gates on the run branch
+9. promote the run branch through `merge_coordinator`
+10. emit publish-ready signal for semantic serving and BI use
+11. clean up the run branch and close the Airflow run
 
 Airflow implementation should use `TaskGroup`s to keep operator boundaries readable:
 
@@ -81,13 +81,15 @@ Airflow implementation should use `TaskGroup`s to keep operator boundaries reada
 4. the DAG must restrict concurrent active runs to avoid overlapping publish for the same `data_date`
 5. the DAG must enforce idempotent behavior for rerun of the same `data_date`
 6. publish-ready emission is forbidden if any upstream task or quality gate fails
+7. all silver-to-gold writes for one DAG run must target one shared run branch rather than `main`
+8. branch promotion is coordinated by Airflow task dependencies; it is not described as strict multi-table storage atomicity beyond the underlying Iceberg procedure guarantees
 
 ## 7. Retry and Failure Handling
 
 1. retry policy is intended for transient infrastructure or dependency failures, not semantic contract violations
 2. semantic or quality-gate failures must leave the run in failed state and must not publish
-3. an `MWAA` run that completes after `08:00` (`America/New_York`) may still publish if contract gates pass, but the manifest must record the run as late
-4. failure handling must preserve enough traceability to map Airflow task failure to `publish_run_id`
+3. an `MWAA` run that completes after `08:00` (`America/New_York`) may still publish if contract gates pass, but the run artifacts/logs must record the late completion
+4. failure handling must preserve enough traceability to map Airflow task failure to `dag_run_id` and run branch name
 5. deferred scope does not include automatic remediation beyond configured retries
 
 ## 8. Alerts and Notifications
@@ -99,7 +101,7 @@ Email notifications must trigger for:
 1. DAG failure
 2. task failure after retries are exhausted
 3. SLA miss where publish completes after `08:00` (`America/New_York`)
-4. manifest write failure
+4. branch creation, promotion, or cleanup failure
 
 Paging, chat integrations, and workflow-driven escalation remain future extensions.
 
@@ -109,8 +111,8 @@ Paging, chat integrations, and workflow-driven escalation remain future extensio
 2. reruns and backfills are operator-triggered by the platform team
 3. backfill requires explicit `start_date`, `end_date`, and operator-entered reason
 4. current-scope backfill window is bounded to at most `30` calendar days per request
-5. each rerun or backfill execution must use a distinct `publish_run_id`
-6. rerun and backfill must remain idempotent at partition grain and must not create duplicate publish slices
+5. each rerun or backfill execution must use a distinct run branch name derived from the Airflow run ID
+6. rerun and backfill must remain idempotent at partition grain and must not create duplicate published slices
 7. backfill success does not change the standing `08:00` daily SLA for scheduled runs
 
 ## 10. AWS Deployment Boundary
@@ -126,13 +128,11 @@ Paging, chat integrations, and workflow-driven escalation remain future extensio
 Per Airflow run, the platform must preserve traceable evidence for:
 
 1. `dag_run_id`
-2. `publish_run_id`
+2. run branch name
 3. `data_date`
 4. task-level success/failure status
-5. publish status and on-time/late determination
+5. `merge_coordinator` promotion status and on-time/late determination
 6. links or references to execution logs and collected artifacts
-
-The canonical publish evidence table remains `lakehouse.gold.batch_publish_manifest`.
 
 Airflow evidence must be mappable to the acceptance artifact structure in `reference/batch-acceptance-runbook.md`.
 
@@ -141,12 +141,13 @@ Airflow evidence must be mappable to the acceptance artifact structure in `refer
 Airflow implementation is accepted only when it demonstrates:
 
 1. correct `D-1` date resolution in `America/New_York`
-2. correct execution order matching the orchestration contract
-3. blocked publish on any failed quality gate or missing required output
-4. successful manifest write with run traceability fields
-5. email notification behavior for failure and SLA miss paths
-6. operator-triggered rerun/backfill behavior within the `30`-day bound
-7. evidence package sufficient for batch acceptance sign-off
+2. branch creation and branch-targeted execution for one shared run workspace
+3. correct execution order matching the orchestration contract
+4. blocked publish on any failed quality gate or missing required output
+5. successful `merge_coordinator` promotion only after all upstream tasks succeed
+6. email notification behavior for failure and SLA miss paths
+7. operator-triggered rerun/backfill behavior within the `30`-day bound
+8. evidence package sufficient for batch acceptance sign-off
 
 ## 13. Future Extension
 

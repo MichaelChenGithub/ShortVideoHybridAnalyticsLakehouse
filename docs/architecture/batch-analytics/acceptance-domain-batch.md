@@ -26,15 +26,15 @@ Status: Final
    - `lakehouse.gold.batch_retention_daily`
    - `lakehouse.gold.batch_engagement_daily`
    - `lakehouse.gold.batch_sessionization_daily`
-3. `lakehouse.gold.batch_publish_manifest` must contain a successful publish record for the same `data_date`.
-4. Batch publish evidence includes `data_date`, `published_at`, and on-time status.
+3. a single Airflow `merge_coordinator` must promote the shared run branch only after all required tables and dbt quality gates succeed for the same `data_date`.
+4. Batch publish evidence includes `data_date`, `published_at`, run branch name, and on-time status.
 
 ## 4. Verification Coverage
 
 1. Acceptance checks validate grain uniqueness, required-field coverage, and publish readiness.
 2. Batch semantic quality evidence is captured alongside publish artifacts.
 3. Verification includes batch serving output checks for retention/engagement/sessionization domains.
-4. Verification artifacts are traceable by `data_date` and publish manifest record.
+4. Verification artifacts are traceable by `data_date`, Airflow run ID, and branch-promotion summary.
 
 ## 5. Future Plan (Deferred)
 

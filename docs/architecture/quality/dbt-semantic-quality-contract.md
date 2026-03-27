@@ -44,7 +44,7 @@ Out of scope:
 1. batch jobs complete successfully for required outputs
 2. dbt semantic quality tests pass for all required models
 3. required output tables are non-empty for `data_date`
-4. publish manifest records successful publish for same `data_date`
+4. Airflow promotes the shared run branch only after conditions 1-3 succeed for the same `data_date`
 
 If any gate fails, publish-ready signal must not be emitted.
 
@@ -60,8 +60,8 @@ Per publish date, retain:
 
 1. dbt run summary
 2. failing/passing test artifacts
-3. publish manifest record (`data_date`, `published_at`, status, on-time flag)
-4. traceable run identifier linked to orchestration logs
+3. branch-promotion summary (`data_date`, `published_at`, status, on-time flag, branch name)
+4. traceable Airflow run identifier linked to orchestration logs
 
 ## 7. Future Plan Pointer
 

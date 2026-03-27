@@ -91,17 +91,17 @@ To verify:
 
 The local DAG executes these batch tasks for one shared canonical `data_date`:
 
-1. `src/spark/bt_events_conformed.py`
-2. `src/spark/bt_dim_users_scd2.py`
-3. `src/spark/bt_dim_videos_scd2.py`
-4. `src/spark/bt_user_activity_sessions_30m.py`
-5. `src/spark/bt_retention_daily.py`
-6. `src/spark/bt_engagement_daily.py`
-7. `src/spark/bt_sessionization_daily.py`
-8. gold quality gates via:
-   - `src/scripts/verify_bt_retention_daily.py`
-   - `src/scripts/verify_bt_engagement_daily.py`
-   - `src/scripts/verify_bt_sessionization_daily.py`
+1. create one run-scoped Iceberg branch from `main`
+2. `src/spark/bt_events_conformed.py`
+3. `src/spark/bt_dim_users_scd2.py`
+4. `src/spark/bt_dim_videos_scd2.py`
+5. `src/spark/bt_user_activity_sessions_30m.py`
+6. `src/spark/bt_retention_daily.py`
+7. `src/spark/bt_engagement_daily.py`
+8. `src/spark/bt_sessionization_daily.py`
+9. gold quality gates via in-repo `dbt` models/tests on the shared run branch
+10. promote through `merge_coordinator`
+11. clean up the run branch
 
 The DAG starts at the batch bronze-to-silver normalization boundary (`bt_events_conformed.py`) and
 builds the required SCD2 dimension tables needed by downstream silver/gold jobs.
@@ -113,12 +113,12 @@ the underlying command path without changing the DAG dependency graph.
 
 Current local scope still does not implement:
 
-1. `lakehouse.gold.batch_publish_manifest` writes
-2. publish-ready signal emission
-3. evidence packaging beyond deferred placeholder tasks
-4. a real in-repo `dbt` project; local quality gates currently use verifier scripts instead
+1. external notification routing beyond Airflow-native failure handling
+2. strict cross-table storage atomicity beyond branch-promotion procedure guarantees
+3. evidence packaging beyond run metadata, dbt artifacts, and branch-promotion summaries
+4. downstream orchestration beyond the local DAG boundary
 
-Those publish/evidence behaviors are reserved for `MIC-165` and follow-on work.
+Those higher-order operational behaviors remain follow-on work.
 
 ## 8. Task Timeouts
 
@@ -127,4 +127,4 @@ The local DAG uses explicit Airflow `execution_timeout` values for external-proc
 1. `resolve_data_date`: `5` minutes
 2. Spark batch build tasks: `30` minutes
 3. gold quality gates: `10` minutes
-4. deferred publish/evidence placeholders: `2` minutes
+4. branch create / promote / cleanup tasks: `2` minutes
