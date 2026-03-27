@@ -11,6 +11,14 @@ SPARK_SRC_ROOT = "/home/iceberg/local/src/spark"
 SCRIPT_SRC_ROOT = "/home/iceberg/local/src/scripts"
 
 SPARK_BATCH_SPECS = {
+    "dim_users_scd2": {
+        "path": f"{SPARK_SRC_ROOT}/bt_dim_users_scd2.py",
+        "data_date_env": None,
+    },
+    "dim_videos_scd2": {
+        "path": f"{SPARK_SRC_ROOT}/bt_dim_videos_scd2.py",
+        "data_date_env": None,
+    },
     "events_conformed": {
         "path": f"{SPARK_SRC_ROOT}/bt_events_conformed.py",
         "data_date_env": "BT_EVENTS_CONFORMED_DATA_DATE",
@@ -40,17 +48,27 @@ GOLD_QUALITY_GATE_SCRIPTS = (
 )
 
 
-def build_spark_submit_command(module_path: str, *, data_date_env: str, data_date: str) -> list[str]:
+def build_spark_submit_command(
+    module_path: str,
+    *,
+    data_date_env: str | None,
+    data_date: str,
+) -> list[str]:
     """Build a docker-exec spark-submit command for one batch job."""
-    return [
+    command = [
         "docker",
         "exec",
         SPARK_CONTAINER,
-        "env",
-        f"{data_date_env}={data_date}",
-        SPARK_SUBMIT_BIN,
-        module_path,
     ]
+    if data_date_env is not None:
+        command.extend(
+            [
+                "env",
+                f"{data_date_env}={data_date}",
+            ]
+        )
+    command.extend([SPARK_SUBMIT_BIN, module_path])
+    return command
 
 
 def build_python_script_command(script_path: str, *, data_date: str) -> list[str]:

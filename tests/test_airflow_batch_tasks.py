@@ -59,6 +59,24 @@ class AirflowBatchTaskTests(unittest.TestCase):
             ],
         )
 
+    def test_build_spark_submit_command_skips_env_for_non_partitioned_dim_jobs(self) -> None:
+        command = build_spark_submit_command(
+            "/home/iceberg/local/src/spark/bt_dim_users_scd2.py",
+            data_date_env=None,
+            data_date="2026-03-20",
+        )
+
+        self.assertEqual(
+            command,
+            [
+                "docker",
+                "exec",
+                "lakehouse-spark",
+                "/opt/spark/bin/spark-submit",
+                "/home/iceberg/local/src/spark/bt_dim_users_scd2.py",
+            ],
+        )
+
     @patch("orchestration.airflow_batch_tasks.subprocess.run")
     def test_run_spark_batch_job_invokes_subprocess_with_expected_command(self, run_mock) -> None:
         run_spark_batch_job("events_conformed", data_date="2026-03-20")
@@ -72,6 +90,21 @@ class AirflowBatchTaskTests(unittest.TestCase):
                 "BT_EVENTS_CONFORMED_DATA_DATE=2026-03-20",
                 "/opt/spark/bin/spark-submit",
                 "/home/iceberg/local/src/spark/bt_events_conformed.py",
+            ],
+            check=True,
+        )
+
+    @patch("orchestration.airflow_batch_tasks.subprocess.run")
+    def test_run_spark_batch_job_skips_data_date_env_when_job_does_not_use_it(self, run_mock) -> None:
+        run_spark_batch_job("dim_users_scd2", data_date="2026-03-20")
+
+        run_mock.assert_called_once_with(
+            [
+                "docker",
+                "exec",
+                "lakehouse-spark",
+                "/opt/spark/bin/spark-submit",
+                "/home/iceberg/local/src/spark/bt_dim_users_scd2.py",
             ],
             check=True,
         )
