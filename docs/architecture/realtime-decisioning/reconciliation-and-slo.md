@@ -37,7 +37,7 @@ Recovery:
    - `lakehouse.gold.batch_engagement_daily`
    - `lakehouse.gold.batch_sessionization_daily`
 5. semantic/dbt quality checks must pass before publishing batch-derived outputs.
-6. publish manifest check: `lakehouse.gold.batch_publish_manifest` must contain a successful publish record for the same `data_date`.
+6. branch-promotion check: Airflow `merge_coordinator` must complete successfully for the same `data_date`.
 7. publish failures require manual operator review and rerun workflow before downstream use.
 
 ## 4. Realtime Baseline Reference (Historical)

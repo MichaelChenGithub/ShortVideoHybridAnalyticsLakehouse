@@ -33,7 +33,7 @@ Out of scope (deferred):
 4. build `lakehouse.gold.batch_engagement_daily`
 5. build `lakehouse.gold.batch_sessionization_daily`
 6. run dbt/data quality gates
-7. write `lakehouse.gold.batch_publish_manifest`
+7. promote the run branch through a single Airflow merge coordinator
 8. emit publish-ready signal for semantic serving/BI use
 
 ## 4. Schedule and Data-Date Contract
@@ -54,7 +54,7 @@ Out of scope (deferred):
    - `lakehouse.gold.batch_retention_daily`
    - `lakehouse.gold.batch_engagement_daily`
    - `lakehouse.gold.batch_sessionization_daily`
-4. `lakehouse.gold.batch_publish_manifest` has a `success` record for that `data_date`.
+4. the Airflow `merge_coordinator` promotes the run branch only after conditions 1-3 hold for the same `data_date`.
 
 If any condition fails, publish-ready signal must not be emitted.
 
@@ -63,7 +63,7 @@ If any condition fails, publish-ready signal must not be emitted.
 1. retries are allowed inside the same daily run window to recover transient failures.
 2. rerun for the same `data_date` must be idempotent at table-partition grain (no duplicate published slice).
 3. rerun/backfill is operator-triggered (manual in current scope).
-4. a rerun completed after `08:00` (`America/New_York`) can still publish but is marked late by manifest evidence.
+4. a rerun completed after `08:00` (`America/New_York`) can still publish, but the run artifacts/logs must preserve that late completion evidence.
 5. automated remediation workflows are deferred to future plan.
 
 ## 7. Runtime Evidence Requirements
@@ -75,8 +75,10 @@ Per publish date, orchestration must leave traceable evidence:
 3. publish status (`success`/`failed`)
 4. on-time status versus `08:00` (`America/New_York`) deadline
 5. run identifier for traceability to job logs/artifacts
+6. run branch name used for isolated writes
+7. `merge_coordinator` completion status
 
-The canonical publish evidence table is `lakehouse.gold.batch_publish_manifest`.
+Current scope preserves this evidence through Airflow run metadata plus collected artifacts rather than a warehouse publish manifest table.
 
 ## 8. Future Plan (Deferred)
 
