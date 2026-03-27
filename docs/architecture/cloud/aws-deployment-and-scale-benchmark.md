@@ -12,7 +12,7 @@ Cloud baseline stack:
 
 1. ingestion bus: Amazon MSK
 2. processing: Spark (stream + batch)
-3. orchestration: Amazon MWAA
+3. orchestration: Airflow on Amazon ECS
 4. storage: S3 + Iceberg catalog via Glue
 5. serving/query: Trino/Athena semantic layer
 6. quality layer: dbt Core
@@ -29,7 +29,7 @@ Cloud baseline stack:
 
 1. drive event generation at target throughput profile
 2. run realtime + batch flows on cloud baseline stack
-3. execute daily batch orchestration through `MWAA`
+3. execute daily batch orchestration through Airflow on ECS
 4. capture throughput, lag, freshness, and publish evidence
 5. validate semantic/dbt quality gates for batch publish
 

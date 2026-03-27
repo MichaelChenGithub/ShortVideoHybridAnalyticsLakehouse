@@ -6,13 +6,13 @@ Status: Draft
 
 Define the Airflow-specific orchestration design for current batch analytics delivery on AWS.
 
-This document operationalizes the scheduler-agnostic contract in `batch-jobs-and-orchestration-contract.md` for a production-operable `MWAA` deployment.
+This document operationalizes the scheduler-agnostic contract in `batch-jobs-and-orchestration-contract.md` for a production-operable Airflow on Amazon ECS deployment.
 
 ## 2. Scope
 
 In scope:
 
-1. `MWAA` as the orchestrator for current batch analytics delivery
+1. Airflow on Amazon ECS as the orchestrator for current batch analytics delivery
 2. one daily Airflow DAG for `D-1` batch publish readiness
 3. automated platform-team-owned execution flow
 4. retries, timeout, concurrency, and SLA handling policies
@@ -22,7 +22,7 @@ In scope:
 
 Out of scope:
 
-1. self-managed Airflow on `EKS` or `ECS`
+1. Amazon MWAA (replaced by self-managed Airflow on ECS)
 2. multi-DAG domain decomposition
 3. autonomous remediation or self-healing workflows
 4. non-email notification channels such as paging integrations
@@ -66,7 +66,7 @@ Airflow implementation should use `TaskGroup`s to keep operator boundaries reada
 
 ## 5. Schedule and Data-Date Mapping
 
-1. the DAG runs daily on `MWAA`
+1. the DAG runs daily on Airflow on ECS
 2. the business timezone is fixed to `America/New_York`
 3. the publish target remains `D-1` for the business date in `America/New_York`
 4. the Airflow run must compute and pass one canonical `data_date` across all tasks
@@ -86,7 +86,7 @@ Airflow implementation should use `TaskGroup`s to keep operator boundaries reada
 
 1. retry policy is intended for transient infrastructure or dependency failures, not semantic contract violations
 2. semantic or quality-gate failures must leave the run in failed state and must not publish
-3. an `MWAA` run that completes after `08:00` (`America/New_York`) may still publish if contract gates pass, but the manifest must record the run as late
+3. an Airflow run that completes after `08:00` (`America/New_York`) may still publish if contract gates pass, but the manifest must record the run as late
 4. failure handling must preserve enough traceability to map Airflow task failure to `publish_run_id`
 5. deferred scope does not include automatic remediation beyond configured retries
 
@@ -115,8 +115,8 @@ Paging, chat integrations, and workflow-driven escalation remain future extensio
 
 ## 10. AWS Deployment Boundary
 
-1. Airflow deployment target is `Amazon MWAA`
-2. Airflow is part of the current AWS baseline stack alongside `MSK + Spark + S3 + Glue + Trino/Athena + dbt Core`
+1. Airflow deployment target is Amazon ECS (self-managed, containerized)
+2. Airflow is part of the current AWS baseline stack alongside `MSK + Spark (ECS stream) + Glue (batch) + S3 + Glue Catalog + Athena + dbt Core`
 3. DAG code, runtime configuration, and environment references must be deployable through the AWS delivery path used by the platform team
 4. secrets and connection material must be managed through AWS-compatible secure configuration mechanisms rather than hardcoded DAG values
 5. this document defines orchestration behavior, not low-level infrastructure-as-code layout
