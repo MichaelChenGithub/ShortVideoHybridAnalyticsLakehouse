@@ -98,6 +98,9 @@ class _FakePythonOperator(_FakeOperator):
     pass
 
 
+_FAKE_TRIGGER_RULE = types.SimpleNamespace(ALL_DONE="all_done", ALL_SUCCESS="all_success")
+
+
 class BatchPublishDailyDagTests(unittest.TestCase):
     def _load_dag_module(self) -> dict[str, object]:
         airflow_module = types.ModuleType("airflow")
@@ -114,6 +117,8 @@ class BatchPublishDailyDagTests(unittest.TestCase):
         utils_module = types.ModuleType("airflow.utils")
         task_group_module = types.ModuleType("airflow.utils.task_group")
         task_group_module.TaskGroup = _FakeTaskGroup
+        trigger_rule_module = types.ModuleType("airflow.utils.trigger_rule")
+        trigger_rule_module.TriggerRule = _FAKE_TRIGGER_RULE
 
         with patch.dict(
             sys.modules,
@@ -124,6 +129,7 @@ class BatchPublishDailyDagTests(unittest.TestCase):
                 "airflow.operators.python": python_module,
                 "airflow.utils": utils_module,
                 "airflow.utils.task_group": task_group_module,
+                "airflow.utils.trigger_rule": trigger_rule_module,
             },
         ):
             return runpy.run_path(str(DAG_PATH))
@@ -157,16 +163,52 @@ class BatchPublishDailyDagTests(unittest.TestCase):
             ],
         )
 
-    def test_dag_chains_resolution_and_group_order(self) -> None:
+    def test_resolve_feeds_create_branch_then_conformed_events(self) -> None:
         module_globals = self._load_dag_module()
 
         dag = module_globals["dag"]
-        resolve_data_date = dag.tasks["resolve_data_date"]
-        self.assertEqual(resolve_data_date.downstream_node_ids, {"conformed-events"})
-        self.assertEqual(dag.task_groups["conformed-events"].downstream_node_ids, {"sessionization"})
-        self.assertEqual(dag.task_groups["sessionization"].downstream_node_ids, {"batch-gold-metrics"})
-        self.assertEqual(dag.task_groups["batch-gold-metrics"].downstream_node_ids, {"quality-gates"})
-        self.assertEqual(dag.task_groups["quality-gates"].downstream_node_ids, {"publish-and-evidence"})
+        self.assertEqual(dag.tasks["resolve_data_date"].downstream_node_ids, {"create_branch"})
+        self.assertEqual(dag.tasks["create_branch"].downstream_node_ids, {"conformed-events"})
+
+    def test_sessionization_and_batch_gold_metrics_run_in_parallel(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        # Both groups start after conformed-events
+        self.assertEqual(
+            dag.task_groups["conformed-events"].downstream_node_ids,
+            {"sessionization", "batch-gold-metrics"},
+        )
+        # Both groups feed into quality-gates
+        self.assertEqual(
+            dag.task_groups["sessionization"].downstream_node_ids, {"quality-gates"}
+        )
+        self.assertEqual(
+            dag.task_groups["batch-gold-metrics"].downstream_node_ids, {"quality-gates"}
+        )
+
+    def test_merge_coordinator_follows_quality_gates(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        self.assertEqual(
+            dag.task_groups["quality-gates"].downstream_node_ids, {"merge_coordinator"}
+        )
+
+    def test_merge_coordinator_fans_out_to_publish_and_cleanup(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        self.assertEqual(
+            dag.tasks["merge_coordinator"].downstream_node_ids,
+            {"publish-and-evidence", "cleanup_branch"},
+        )
+
+    def test_cleanup_branch_uses_all_done_trigger_rule(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        self.assertEqual(dag.tasks["cleanup_branch"].kwargs["trigger_rule"], "all_done")
 
     def test_resolve_task_uses_logical_date_template(self) -> None:
         module_globals = self._load_dag_module()
@@ -177,65 +219,59 @@ class BatchPublishDailyDagTests(unittest.TestCase):
             resolve_data_date.kwargs["op_kwargs"],
             {"logical_date": "{{ logical_date.isoformat() }}"},
         )
-        self.assertEqual(
-            resolve_data_date.kwargs["execution_timeout"],
-            timedelta(minutes=5),
-        )
+        self.assertEqual(resolve_data_date.kwargs["execution_timeout"], timedelta(minutes=5))
 
-    def test_batch_tasks_use_shared_resolved_data_date(self) -> None:
+    def test_create_branch_uses_run_id_template(self) -> None:
         module_globals = self._load_dag_module()
 
         dag = module_globals["dag"]
-        shared_template = {"data_date": "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"}
         self.assertEqual(
-            dag.tasks["build_dim_users_scd2"].kwargs["op_kwargs"],
-            {"job_key": "dim_users_scd2", **shared_template},
+            dag.tasks["create_branch"].kwargs["op_kwargs"],
+            {"run_id": "{{ run_id }}"},
         )
         self.assertEqual(
-            dag.tasks["build_dim_videos_scd2"].kwargs["op_kwargs"],
-            {"job_key": "dim_videos_scd2", **shared_template},
+            dag.tasks["create_branch"].kwargs["execution_timeout"], timedelta(minutes=10)
         )
+
+    def test_batch_tasks_carry_both_data_date_and_wap_branch_templates(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        wap_base = {
+            "data_date": "{{ ti.xcom_pull(task_ids='resolve_data_date') }}",
+            "wap_branch": "{{ ti.xcom_pull(task_ids='create_branch') }}",
+        }
+        for task_id, job_key in [
+            ("build_events_conformed", "events_conformed"),
+            ("build_dim_users_scd2", "dim_users_scd2"),
+            ("build_dim_videos_scd2", "dim_videos_scd2"),
+            ("build_user_activity_sessions_30m", "user_activity_sessions_30m"),
+            ("build_batch_sessionization_daily", "batch_sessionization_daily"),
+            ("build_batch_retention_daily", "batch_retention_daily"),
+            ("build_batch_engagement_daily", "batch_engagement_daily"),
+        ]:
+            with self.subTest(task_id=task_id):
+                self.assertEqual(
+                    dag.tasks[task_id].kwargs["op_kwargs"],
+                    {"job_key": job_key, **wap_base},
+                )
+                self.assertEqual(
+                    dag.tasks[task_id].kwargs["execution_timeout"], timedelta(minutes=30)
+                )
+
+    def test_quality_gate_uses_dbt_callable_with_wap_branch(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        task = dag.tasks["run_dbt_semantic_quality_tests"]
         self.assertEqual(
-            dag.tasks["build_events_conformed"].kwargs["op_kwargs"],
-            {"job_key": "events_conformed", **shared_template},
+            task.kwargs["op_kwargs"],
+            {
+                "data_date": "{{ ti.xcom_pull(task_ids='resolve_data_date') }}",
+                "wap_branch": "{{ ti.xcom_pull(task_ids='create_branch') }}",
+            },
         )
-        self.assertEqual(
-            dag.tasks["build_user_activity_sessions_30m"].kwargs["op_kwargs"],
-            {"job_key": "user_activity_sessions_30m", **shared_template},
-        )
-        self.assertEqual(
-            dag.tasks["build_batch_retention_daily"].kwargs["op_kwargs"],
-            {"job_key": "batch_retention_daily", **shared_template},
-        )
-        self.assertEqual(
-            dag.tasks["build_batch_engagement_daily"].kwargs["op_kwargs"],
-            {"job_key": "batch_engagement_daily", **shared_template},
-        )
-        self.assertEqual(
-            dag.tasks["build_batch_sessionization_daily"].kwargs["op_kwargs"],
-            {"job_key": "batch_sessionization_daily", **shared_template},
-        )
-        self.assertEqual(
-            dag.tasks["run_batch_gold_quality_gates"].kwargs["op_kwargs"],
-            shared_template,
-        )
-        for task_id in (
-            "build_dim_users_scd2",
-            "build_dim_videos_scd2",
-            "build_events_conformed",
-            "build_user_activity_sessions_30m",
-            "build_batch_retention_daily",
-            "build_batch_engagement_daily",
-            "build_batch_sessionization_daily",
-        ):
-            self.assertEqual(
-                dag.tasks[task_id].kwargs["execution_timeout"],
-                timedelta(minutes=30),
-            )
-        self.assertEqual(
-            dag.tasks["run_batch_gold_quality_gates"].kwargs["execution_timeout"],
-            timedelta(minutes=10),
-        )
+        self.assertEqual(task.kwargs["execution_timeout"], timedelta(minutes=10))
 
     def test_dimension_prerequisites_are_built_after_events_conformed(self) -> None:
         module_globals = self._load_dag_module()
@@ -245,40 +281,20 @@ class BatchPublishDailyDagTests(unittest.TestCase):
             dag.tasks["build_events_conformed"].downstream_node_ids,
             {"build_dim_users_scd2", "build_dim_videos_scd2"},
         )
-        self.assertIn(
-            "build_events_conformed",
-            dag.tasks["build_dim_users_scd2"].upstream_node_ids,
-        )
-        self.assertIn(
-            "build_events_conformed",
-            dag.tasks["build_dim_videos_scd2"].upstream_node_ids,
-        )
 
-    def test_publish_tasks_remain_explicitly_deferred(self) -> None:
+    def test_publish_tasks_are_gated_on_merge_coordinator(self) -> None:
         module_globals = self._load_dag_module()
 
         dag = module_globals["dag"]
-        shared_template = "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"
-        self.assertEqual(
-            dag.tasks["write_batch_publish_manifest"].kwargs["op_kwargs"],
-            {"task_name": "write_batch_publish_manifest", "data_date": shared_template},
-        )
-        self.assertEqual(
-            dag.tasks["emit_publish_ready_signal"].kwargs["op_kwargs"],
-            {"task_name": "emit_publish_ready_signal", "data_date": shared_template},
-        )
-        self.assertEqual(
-            dag.tasks["package_run_evidence"].kwargs["op_kwargs"],
-            {"task_name": "package_run_evidence", "data_date": shared_template},
-        )
-        for task_id in (
-            "write_batch_publish_manifest",
-            "emit_publish_ready_signal",
-            "package_run_evidence",
-        ):
+        wap_base = {
+            "data_date": "{{ ti.xcom_pull(task_ids='resolve_data_date') }}",
+            "branch_name": "{{ ti.xcom_pull(task_ids='create_branch') }}",
+        }
+        self.assertEqual(dag.tasks["emit_publish_ready_signal"].kwargs["op_kwargs"], wap_base)
+        self.assertEqual(dag.tasks["package_run_evidence"].kwargs["op_kwargs"], wap_base)
+        for task_id in ("emit_publish_ready_signal", "package_run_evidence"):
             self.assertEqual(
-                dag.tasks[task_id].kwargs["execution_timeout"],
-                timedelta(minutes=2),
+                dag.tasks[task_id].kwargs["execution_timeout"], timedelta(minutes=5)
             )
 
 
