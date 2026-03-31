@@ -218,13 +218,10 @@ def run_dbt_quality_gates(*, data_date: str, wap_branch: str) -> None:
     ``error`` tests block promotion.
     """
     env = {**os.environ, "ICEBERG_WAP_BRANCH": wap_branch}
-    command = [
-        "dbt", "test",
-        "--profiles-dir", DBT_PROJECT_DIR,
-        "--project-dir", DBT_PROJECT_DIR,
-    ]
+    dbt_args = ["--profiles-dir", DBT_PROJECT_DIR, "--project-dir", DBT_PROJECT_DIR]
     print(
         f"[AIRFLOW-BATCH] task=dbt_quality_gates "
         f"data_date={data_date} wap_branch={wap_branch}"
     )
-    subprocess.run(command, check=True, env=env)
+    subprocess.run(["dbt", "run"] + dbt_args, check=True, env=env)
+    subprocess.run(["dbt", "test"] + dbt_args, check=True, env=env)

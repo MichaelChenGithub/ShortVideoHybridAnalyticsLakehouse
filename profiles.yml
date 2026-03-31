@@ -4,10 +4,9 @@ ShortVideoHybridAnalyticsLakehouse:
     local:
       type: trino
       method: none
+      user: airflow
       host: lakehouse-trino
       port: 8080
       database: lakehouse
       schema: semantic_quality
       threads: 1
-      session_properties:
-        iceberg.branch: "{{ env_var('ICEBERG_WAP_BRANCH', 'main') }}"
