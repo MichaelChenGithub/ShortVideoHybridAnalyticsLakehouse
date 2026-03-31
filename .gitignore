@@ -36,6 +36,11 @@ spark-events/
 # Maven/Ivy Cache
 ivy_cache/
 
+# dbt generated / machine-local
+dbt_packages/
+target/
+.user.yml
+
 # Agent task planning files (always at repo root, never committed)
 /plan.md
 /state.md
