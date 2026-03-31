@@ -77,7 +77,76 @@ Due to scope exceeding the original `<= 5 files / <= 500 LOC` guardrail, work is
 | MIC-197 (compute) | `compute.tf` | EMR Serverless application; ECS cluster for Airflow + Metabase; Airflow task def; Metabase Fargate service |
 | MIC-198 (outputs) | `outputs.tf` | Athena workgroup + all cross-stack outputs: MSK endpoint, S3 buckets, Glue DB, ECS cluster ARN, EMR app ID, Athena workgroup |
 
-## 7. Benchmark Targets (from aws-deployment-and-scale-benchmark.md)
+## 7. Operational Runbook
+
+### One-time bootstrap (do once per account)
+
+```bash
+# Create Terraform state backend resources
+aws s3 mb s3://short-video-lakehouse-tf-state --region us-east-1
+aws dynamodb create-table \
+  --table-name short-video-lakehouse-tf-locks \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST --region us-east-1
+
+# Create ECR repository
+aws ecr create-repository --repository-name short-video-lakehouse-airflow
+
+# Enable EMR Serverless on the account (one-time console action)
+# AWS Console → EMR → EMR Serverless → Get started
+```
+
+### Build and push Airflow image
+
+```bash
+# From repo root
+docker build -f short-video-lakehouse-airflow/Dockerfile \
+  -t short-video-lakehouse-airflow .
+
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin \
+    026177432704.dkr.ecr.us-east-1.amazonaws.com
+docker tag short-video-lakehouse-airflow:latest \
+  026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest
+docker push \
+  026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest
+```
+
+### Deploy stack (demo start)
+
+```bash
+cd terraform
+terraform init   # only needed on first run or after provider changes
+terraform apply \
+  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+terraform output  # verify all endpoints
+```
+
+### Shut down between demos (avoid idle cost)
+
+```bash
+cd terraform
+terraform destroy \
+  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+```
+
+NAT gateway and MSK Serverless connection hours are the primary idle costs.
+EMR Serverless and Athena are pay-per-use — no charge when not running jobs.
+
+### Stack outputs reference
+
+| Output | Value |
+|---|---|
+| `msk_bootstrap_brokers_sasl_iam` | MSK Serverless broker endpoint (port 9098) |
+| `emr_application_id` | EMR Serverless app ID — set as `EMR_APPLICATION_ID` in Airflow task |
+| `warehouse_bucket` | `lakehouse-warehouse-026177432704` |
+| `checkpoints_bucket` | `lakehouse-checkpoints-026177432704` |
+| `athena_workgroup_name` | `lakehouse` |
+| `glue_database_name` | `lakehouse` |
+| `ecs_cluster_arn` | ECS cluster for Airflow + Metabase |
+
+## 8. Benchmark Targets (from aws-deployment-and-scale-benchmark.md)
 
 These targets are unchanged and drive sizing decisions:
 
