@@ -178,9 +178,9 @@ def insert_user_activity_sessions_30m_for_data_date_sql(
     ),
     session_user_attr AS (
         SELECT
-            aggregated.user_id,
-            aggregated.data_date,
-            aggregated.session_seq,
+            ranked.user_id,
+            ranked.data_date,
+            ranked.session_seq,
             COALESCE(new_vs_returning_user, 'unknown') AS new_vs_returning_user
         FROM (
             SELECT
