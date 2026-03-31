@@ -1,0 +1,12 @@
+ShortVideoHybridAnalyticsLakehouse:
+  target: local
+  outputs:
+    local:
+      type: trino
+      method: none
+      user: airflow
+      host: lakehouse-trino
+      port: 8080
+      database: lakehouse
+      schema: semantic_quality
+      threads: 1

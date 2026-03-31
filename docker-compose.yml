@@ -153,6 +153,7 @@ services:
     ports:
       - "8082:8080"
     volumes:
+      - .:/home/iceberg/local/repo
       - ./dags:/opt/airflow/dags
       - ./src:/home/iceberg/local/src
       - /var/run/docker.sock:/var/run/docker.sock
@@ -164,7 +165,15 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - PATH=/home/airflow/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - PYTHONPATH=/opt/airflow/dags:/home/iceberg/local/src
-    command: /opt/airflow/entrypoint.sh
+    command: >-
+      bash -lc "
+      airflow db init &&
+      (airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
+      {
+      airflow scheduler &
+      exec airflow webserver;
+      }
+      "
     depends_on:
       - spark
   grafana:

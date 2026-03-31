@@ -27,6 +27,7 @@ models:
           - not_null
           - accepted_values:
               values: [1, 7]
+              quote: false
       - name: category
         tests:
           - not_null

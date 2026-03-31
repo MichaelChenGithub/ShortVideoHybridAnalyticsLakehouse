@@ -36,6 +36,10 @@ spark-events/
 # Maven/Ivy Cache
 ivy_cache/
 
+# dbt generated / machine-local
+dbt_packages/
+target/
+.user.yml
 # Terraform
 .terraform/
 *.tfvars

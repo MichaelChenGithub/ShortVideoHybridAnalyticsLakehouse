@@ -1,2 +1,2 @@
 select *
-from {{ source('gold', 'batch_sessionization_daily') }}
+from {{ wap_source('gold', 'batch_sessionization_daily') }} as _src
