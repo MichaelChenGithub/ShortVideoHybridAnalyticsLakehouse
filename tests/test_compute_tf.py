@@ -40,12 +40,11 @@ class ComputeTfEmrServerlessTests(unittest.TestCase):
         self.assertEqual(app["type"], "SPARK")
 
     def test_emr_zero_initial_capacity(self) -> None:
-        # Empty initial_capacity block = no pre-provisioned workers = no idle cost
+        # No initial_capacity block = zero pre-provisioned workers = no idle cost
         parsed = _load()
         app = _resource(parsed, "aws_emrserverless_application")
-        capacity = app.get("initial_capacity", [{}])
-        # hcl2 parses an empty block as [{}]; a populated block would have keys
-        self.assertEqual(capacity, [{}], "initial_capacity must be empty (pay-per-use)")
+        self.assertNotIn("initial_capacity", app,
+                         "initial_capacity must be absent to avoid pre-provisioned idle cost")
 
     def test_no_ec2_autoscaling_group(self) -> None:
         parsed = _load()

@@ -9,16 +9,14 @@ resource "aws_emrserverless_application" "spark" {
   release_label = "emr-7.1.0"
   type          = "SPARK"
 
-  # Start with zero capacity; scale on job submission
-  initial_capacity {}
-
+  # No initial_capacity block = zero pre-provisioned workers (pay-per-use)
   maximum_capacity {
-    cpu    = "20 vCPU"
-    memory = "40 GB"
+    cpu    = "4 vCPU"
+    memory = "16 GB"
   }
 
   network_configuration {
-    subnet_ids         = [aws_subnet.private_a.id]
+    subnet_ids         = [aws_subnet.private_a.id, aws_subnet.private_b.id]
     security_group_ids = [aws_security_group.ecs_tasks.id]
   }
 

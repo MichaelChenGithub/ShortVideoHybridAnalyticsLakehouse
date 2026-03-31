@@ -16,6 +16,18 @@ resource "aws_subnet" "private_a" {
   tags = { Name = "${var.project_name}-private-a", Project = var.project_name }
 }
 
+resource "aws_subnet" "private_b" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "${var.aws_region}b"
+  tags = { Name = "${var.project_name}-private-b", Project = var.project_name }
+}
+
+resource "aws_route_table_association" "private_b" {
+  subnet_id      = aws_subnet.private_b.id
+  route_table_id = aws_route_table.private.id
+}
+
 # Metabase Fargate service uses this subnet with assign_public_ip = true
 resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.main.id
@@ -89,7 +101,7 @@ resource "aws_security_group" "ecs_tasks" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Unrestricted outbound — AWS APIs, MSK (9098), S3, Glue"
+    description = "Unrestricted outbound - AWS APIs, MSK (9098), S3, Glue"
   }
 
   tags = { Name = "${var.project_name}-ecs-tasks-sg", Project = var.project_name }
