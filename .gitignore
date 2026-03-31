@@ -40,6 +40,10 @@ ivy_cache/
 dbt_packages/
 target/
 .user.yml
+# Terraform
+.terraform/
+*.tfvars
+*.tfplan
 
 # Agent task planning files (always at repo root, never committed)
 /plan.md
