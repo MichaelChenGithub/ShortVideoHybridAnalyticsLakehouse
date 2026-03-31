@@ -165,7 +165,15 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - PATH=/home/airflow/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - PYTHONPATH=/opt/airflow/dags:/home/iceberg/local/src
-    command: /opt/airflow/entrypoint.sh
+    command: >-
+      bash -lc "
+      airflow db init &&
+      (airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
+      {
+      airflow scheduler &
+      exec airflow webserver;
+      }
+      "
     depends_on:
       - spark
   grafana:
