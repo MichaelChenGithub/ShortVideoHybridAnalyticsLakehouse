@@ -14,7 +14,7 @@ This is the authoritative current-scope document for planning and documentation 
    - sessionization metrics (30-minute inactivity-gap session outputs)
    - minimum analysis cuts: `date x category x region x new_vs_returning_user`
 2. Batch orchestration operationalization on AWS:
-   - `MWAA` as the batch scheduler/orchestrator
+   - Airflow on Amazon ECS as the batch scheduler/orchestrator
    - one daily Airflow DAG for `D-1` publish readiness
    - automated platform-team-owned execution flow
    - retries, email alerts, runbook evidence, and bounded operator-approved backfill (`<= 30 days`)
@@ -24,7 +24,7 @@ This is the authoritative current-scope document for planning and documentation 
    - daily publish quality target for core semantic products: `>= 99%`
 4. Cloud deployment + scale benchmark:
    - cloud baseline stack fixed to AWS:
-     - `MSK + Spark + S3 + Glue + Trino/Athena + dbt Core + MWAA`
+     - `MSK + Spark (ECS stream) + Glue (batch) + S3 + Glue Catalog + Athena + dbt Core + Airflow on ECS`
    - benchmark-oriented evidence for data volume, throughput, and freshness behavior
    - scale targets:
      - sustained ingest `>= 5,000 events/sec`
@@ -42,7 +42,7 @@ This is the authoritative current-scope document for planning and documentation 
 1. Realtime preview and health metrics remain contract-valid with freshness `P95 <= 3 minutes`.
 2. Batch analytics outcomes are published daily by `08:00` (`America/New_York`) for `D-1` data.
 3. Batch metric outputs include `Retention (D1/D7)`, `Engagement (daily KPI + funnel)`, and `Sessionization (30-minute gap)`.
-4. `MWAA` batch orchestration is production-operable with retries, email alerts, runbook evidence, and bounded operator-approved backfill.
+4. Airflow on ECS batch orchestration is production-operable with retries, email alerts, runbook evidence, and bounded operator-approved backfill.
 5. Core semantic products meet daily publish quality target `>= 99%`.
 6. Cloud benchmark artifacts demonstrate ingest/volume targets (`>= 5,000 events/sec` sustained, `>= 10,000 events/sec` peak, `>= 432M rows/day`).
 7. Cross-document wording is aligned to this current scope without conflicting milestone claims.

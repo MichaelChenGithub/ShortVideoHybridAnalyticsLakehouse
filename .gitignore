@@ -36,6 +36,11 @@ spark-events/
 # Maven/Ivy Cache
 ivy_cache/
 
+# Terraform
+.terraform/
+*.tfvars
+*.tfplan
+
 # Agent task planning files (always at repo root, never committed)
 /plan.md
 /state.md
