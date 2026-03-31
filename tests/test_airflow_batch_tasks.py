@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import types
 import unittest
 from pathlib import Path
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 SRC_ROOT = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_ROOT) not in sys.path:
@@ -14,6 +15,7 @@ from orchestration.airflow_batch_tasks import (  # noqa: E402
     BRANCH_LIFECYCLE_SCRIPT,
     GOLD_QUALITY_GATE_SCRIPTS,
     SPARK_SUBMIT_BIN,
+    _run_emr_job,
     build_branch_lifecycle_command,
     build_python_script_command,
     build_spark_submit_command,
@@ -201,6 +203,74 @@ class RunSparkBatchJobTests(unittest.TestCase):
 
         with self.assertRaises(subprocess.CalledProcessError):
             run_spark_batch_job("batch_retention_daily", data_date="2026-03-20")
+
+    @patch("orchestration.airflow_batch_tasks._run_emr_job")
+    @patch("orchestration.airflow_batch_tasks.EMR_APPLICATION_ID", "app-123")
+    def test_routes_to_aws_and_forwards_wap_branch(self, emr_run_mock) -> None:
+        run_spark_batch_job(
+            "events_conformed",
+            data_date="2026-03-20",
+            wap_branch="run_abc123",
+        )
+
+        emr_run_mock.assert_called_once_with(
+            "events_conformed",
+            script_uri="s3://warehouse/scripts/spark/bt_events_conformed.py",
+            data_date="2026-03-20",
+            data_date_env="BT_EVENTS_CONFORMED_DATA_DATE",
+            wap_branch="run_abc123",
+        )
+
+
+class RunEmrJobTests(unittest.TestCase):
+    @patch("orchestration.airflow_batch_tasks.EMR_EXECUTION_ROLE_ARN", "arn:aws:iam::111111111111:role/emr")
+    @patch("orchestration.airflow_batch_tasks.EMR_APPLICATION_ID", "app-123")
+    def test_includes_wap_branch_conf_when_provided(self) -> None:
+        client = Mock()
+        client.start_job_run.return_value = {"jobRunId": "jr-123"}
+        client.get_job_run.return_value = {"jobRun": {"state": "SUCCESS"}}
+        fake_boto3 = types.SimpleNamespace(client=Mock(return_value=client))
+
+        with patch.dict(sys.modules, {"boto3": fake_boto3}):
+            _run_emr_job(
+                "events_conformed",
+                script_uri="s3://warehouse/scripts/spark/bt_events_conformed.py",
+                data_date="2026-03-20",
+                data_date_env="BT_EVENTS_CONFORMED_DATA_DATE",
+                wap_branch="run_abc123",
+            )
+
+        client.start_job_run.assert_called_once()
+        spark_submit = client.start_job_run.call_args.kwargs["jobDriver"]["sparkSubmit"]
+        self.assertEqual(spark_submit["entryPoint"], "s3://warehouse/scripts/spark/bt_events_conformed.py")
+        self.assertIn(
+            "--conf spark.emr-serverless.driverEnv.BT_EVENTS_CONFORMED_DATA_DATE=2026-03-20",
+            spark_submit["sparkSubmitParameters"],
+        )
+        self.assertIn(
+            "--conf spark.wap.branch=run_abc123",
+            spark_submit["sparkSubmitParameters"],
+        )
+
+    @patch("orchestration.airflow_batch_tasks.EMR_EXECUTION_ROLE_ARN", "arn:aws:iam::111111111111:role/emr")
+    @patch("orchestration.airflow_batch_tasks.EMR_APPLICATION_ID", "app-123")
+    def test_omits_wap_branch_conf_when_not_provided(self) -> None:
+        client = Mock()
+        client.start_job_run.return_value = {"jobRunId": "jr-123"}
+        client.get_job_run.return_value = {"jobRun": {"state": "SUCCESS"}}
+        fake_boto3 = types.SimpleNamespace(client=Mock(return_value=client))
+
+        with patch.dict(sys.modules, {"boto3": fake_boto3}):
+            _run_emr_job(
+                "events_conformed",
+                script_uri="s3://warehouse/scripts/spark/bt_events_conformed.py",
+                data_date="2026-03-20",
+                data_date_env="BT_EVENTS_CONFORMED_DATA_DATE",
+                wap_branch=None,
+            )
+
+        spark_submit = client.start_job_run.call_args.kwargs["jobDriver"]["sparkSubmit"]
+        self.assertNotIn("spark.wap.branch", spark_submit["sparkSubmitParameters"])
 
 
 class CreateIcebergBranchTests(unittest.TestCase):

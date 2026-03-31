@@ -111,7 +111,7 @@ def build_spark_submit_command(
     command.append(SPARK_SUBMIT_BIN)
     if wap_branch:
         command.extend(["--conf", f"spark.wap.branch={wap_branch}"])
-    command.extend([SPARK_SUBMIT_BIN, module_path])
+    command.append(module_path)
     return command
 
 
@@ -148,17 +148,27 @@ def _run_checked(command: Iterable[str], *, label: str, data_date: str = "") -> 
 
 # ── AWS helper ────────────────────────────────────────────────────────────────
 
-def _run_emr_job(job_key: str, *, script_uri: str, data_date: str, data_date_env: str | None) -> None:
+def _run_emr_job(
+    job_key: str,
+    *,
+    script_uri: str,
+    data_date: str,
+    data_date_env: str | None,
+    wap_branch: str | None = None,
+) -> None:
     """Submit one job run to EMR Serverless and poll until terminal state."""
     import boto3
     client = boto3.client("emr-serverless")
 
     spark_submit_params = (
         f"--conf spark.hadoop.fs.s3a.bucket.{WAREHOUSE_BUCKET}.endpoint=s3.amazonaws.com"
-        f" {script_uri}"
     )
     if data_date_env is not None:
-        spark_submit_params += f" --conf spark.executorEnv.{data_date_env}={data_date}"
+        spark_submit_params += (
+            f" --conf spark.emr-serverless.driverEnv.{data_date_env}={data_date}"
+        )
+    if wap_branch:
+        spark_submit_params += f" --conf spark.wap.branch={wap_branch}"
 
     response = client.start_job_run(
         applicationId=EMR_APPLICATION_ID,
@@ -166,7 +176,7 @@ def _run_emr_job(job_key: str, *, script_uri: str, data_date: str, data_date_env
         jobDriver={
             "sparkSubmit": {
                 "entryPoint": script_uri,
-                "sparkSubmitParameters": f"--conf spark.emr-serverless.driverEnv.{data_date_env}={data_date}" if data_date_env else "",
+                "sparkSubmitParameters": spark_submit_params,
             }
         },
         configurationOverrides={
@@ -209,6 +219,7 @@ def run_spark_batch_job(job_key: str, *, data_date: str, wap_branch: str | None 
             script_uri=spec["s3_path"],
             data_date=data_date,
             data_date_env=spec["data_date_env"],
+            wap_branch=wap_branch,
         )
     else:
         _run_checked(
@@ -216,14 +227,11 @@ def run_spark_batch_job(job_key: str, *, data_date: str, wap_branch: str | None 
                 spec["path"],
                 data_date_env=spec["data_date_env"],
                 data_date=data_date,
+                wap_branch=wap_branch,
             ),
             label=job_key,
             data_date=data_date,
-            wap_branch=wap_branch,
-        ),
-        label=job_key,
-        data_date=data_date,
-    )
+        )
 
 
 def run_branch_op(op: str, *, branch_name: str) -> None:
