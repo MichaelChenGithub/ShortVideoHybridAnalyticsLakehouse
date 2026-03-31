@@ -16,7 +16,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest                                            # full suite
 .venv/bin/python -m pytest tests/test_rt_action_decisioning.py       # single file
 
-# Infrastructure
+# Local infrastructure (docker-compose)
 docker compose up -d                                                  # full stack
 docker compose up -d spark                                            # single service
 
@@ -25,6 +25,29 @@ bash src/scripts/run_realtime_signoff_acceptance.sh
 bash src/scripts/run_content_aggregator_acceptance.sh
 bash src/scripts/run_cdc_upsert_acceptance.sh
 bash src/scripts/prepare_airflow_batch_demo_env.sh
+
+# Airflow Docker image (build from repo root)
+docker build -f short-video-lakehouse-airflow/Dockerfile \
+  -t short-video-lakehouse-airflow .
+
+# AWS — push Airflow image to ECR
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin \
+    026177432704.dkr.ecr.us-east-1.amazonaws.com
+docker tag short-video-lakehouse-airflow:latest \
+  026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest
+docker push \
+  026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest
+
+# AWS — deploy stack (run from terraform/)
+cd terraform
+terraform init
+terraform apply \
+  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+
+# AWS — shut down (between demos to avoid idle cost)
+terraform destroy \
+  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
 ```
 
 Before any PR: run `pytest` and the relevant acceptance script for the touched domain.
@@ -54,7 +77,7 @@ Bronze Iceberg tables
 ### Key modules
 
 - **`dags/batch_publish_daily.py`** — Airflow DAG (daily 8 AM ET). Task groups: resolve data date → conformed-events → sessionization → batch-gold-metrics → quality-gates → publish-and-evidence.
-- **`src/orchestration/airflow_batch_tasks.py`** — `SPARK_BATCH_SPECS` registry mapping job names to Spark scripts; helpers that build `docker exec` commands from Airflow.
+- **`src/orchestration/airflow_batch_tasks.py`** — `SPARK_BATCH_SPECS` registry mapping job names to Spark scripts. Local dev: `docker exec` into Spark container. AWS: boto3 EMR Serverless `start_job_run` when `EMR_APPLICATION_ID` env var is set.
 - **`src/spark/`** — Realtime Spark jobs (prefix `rt_`) and batch Spark jobs (prefix `bt_`). Each file is scoped to one contract surface.
 - **`src/generator/bounded_run/`** — Synthetic event/CDC generator used in acceptance testing.
 - **`src/scripts/`** — Acceptance runners (`run_*.sh`) and contract verifiers (`verify_*.py`).
