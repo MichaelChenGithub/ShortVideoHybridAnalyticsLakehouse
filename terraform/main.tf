@@ -12,11 +12,10 @@ terraform {
 
   # Bootstrap: create this S3 bucket and DynamoDB table before `terraform init`
   backend "s3" {
-    bucket         = "REPLACE_WITH_TF_STATE_BUCKET"
-    key            = "lakehouse/terraform.tfstate"
+    bucket         = "short-video-lakehouse-tf-state"
+    key            = "terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "REPLACE_WITH_TF_LOCK_TABLE"
-    encrypt        = true
+    dynamodb_table = "short-video-lakehouse-tf-locks"
   }
 }
 
