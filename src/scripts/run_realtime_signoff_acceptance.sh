@@ -3,7 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$SCRIPT_DIR/acceptance_common.sh"
+source "$SCRIPT_DIR/common.sh"
+MINIO_CHECKPOINT_ROOT="${MINIO_CHECKPOINT_ROOT:-/data/checkpoints}"
 
 RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
 KEEP_JOBS_RUNNING="${KEEP_JOBS_RUNNING:-0}"
@@ -20,7 +21,6 @@ Options:
 Equivalent env flags:
   RESET_CHECKPOINTS=1
   KEEP_JOBS_RUNNING=1
-  ACCEPTANCE_RESET_DOCKER=1
   BOUNDED_RUN_TIME_MODE=dynamic
   BOUNDED_RUN_STARTED_AT=2026-03-20T14:00:00Z
 
@@ -172,19 +172,6 @@ now_ms_spark_container() {
   now_ms
 }
 
-wait_for_kafka_ready() {
-  local retries="$1"
-  local sleep_seconds="$2"
-  for ((attempt=1; attempt<=retries; attempt++)); do
-    if docker exec lakehouse-kafka kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep "$sleep_seconds"
-  done
-  echo "[RT-SIGNOFF] ERROR: Kafka did not become ready after ${retries} attempts." >&2
-  return 1
-}
-
 ensure_topic() {
   local topic="$1"
   local partitions="$2"
@@ -204,7 +191,7 @@ ensure_topic() {
 
 stop_spark_job_if_running() {
   local pattern="$1"
-  docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/${pattern}/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
+  docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '${pattern}' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
 }
 
 stop_realtime_signoff_spark_jobs() {
@@ -215,12 +202,12 @@ stop_realtime_signoff_spark_jobs() {
 reset_checkpoints() {
   printf '[RT-SIGNOFF] Resetting checkpoint directories...\n'
   docker exec lakehouse-minio sh -lc "rm -rf \
-    /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1 \
-    /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 \
-    /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 \
-    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
-    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
-    /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
+    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/raw_events/v1 \
+    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 \
+    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 \
+    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
+    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
+    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
 }
 
 cleanup_on_exit() {
@@ -354,12 +341,12 @@ checkpoint_snapshot() {
   local cdc_invalid_count
 
   sample_at_ms="$(now_ms)"
-  content_raw_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1)"
-  content_gold_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1)"
-  content_invalid_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1)"
-  cdc_dim_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1)"
-  cdc_raw_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1)"
-  cdc_invalid_count="$(checkpoint_file_count /data/checkpoints/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1)"
+  content_raw_count="$(checkpoint_file_count ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/raw_events/v1)"
+  content_gold_count="$(checkpoint_file_count ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1)"
+  content_invalid_count="$(checkpoint_file_count ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1)"
+  cdc_dim_count="$(checkpoint_file_count ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/dim_videos/v1)"
+  cdc_raw_count="$(checkpoint_file_count ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1)"
+  cdc_invalid_count="$(checkpoint_file_count ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1)"
 
   cat > "${outfile}" <<EOF
 {"sample_at_ms":${sample_at_ms},"paths":{"content_raw":{"file_count":${content_raw_count}},"content_gold":{"file_count":${content_gold_count}},"content_invalid":{"file_count":${content_invalid_count}},"cdc_dim":{"file_count":${cdc_dim_count}},"cdc_raw":{"file_count":${cdc_raw_count}},"cdc_invalid":{"file_count":${cdc_invalid_count}}}}
@@ -400,18 +387,15 @@ if [ -n "$MAX_WATERMARK_DROP_RATIO" ]; then
 fi
 
 cd "$REPO_ROOT"
-acceptance_maybe_reset_docker "RT-SIGNOFF"
 mkdir -p "$ARTIFACT_DIR"
 
 printf '[RT-SIGNOFF] artifact_dir=%s\n' "$ARTIFACT_DIR"
 printf '[RT-SIGNOFF] content_job_log=%s\n' "$CONTENT_JOB_LOG"
 printf '[RT-SIGNOFF] cdc_job_log=%s\n' "$CDC_JOB_LOG"
 
-printf '[RT-SIGNOFF] Starting required services...\n'
-docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
+printf '[RT-SIGNOFF] Assuming infrastructure is up. Run: make reset-infra\n'
 
 printf '[RT-SIGNOFF] Ensuring required topics exist with Sprint-1 partitions...\n'
-wait_for_kafka_ready "$KAFKA_READY_RETRIES" "$KAFKA_READY_SLEEP_SECONDS"
 ensure_topic content_events 6
 ensure_topic cdc.content.videos 3
 

@@ -7,10 +7,10 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HELPER = REPO_ROOT / "src" / "scripts" / "acceptance_common.sh"
+HELPER = REPO_ROOT / "src" / "scripts" / "common.sh"
 
 
-class AcceptanceCommonShellTests(unittest.TestCase):
+class CommonShellTests(unittest.TestCase):
     def _run(self, script: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["/bin/bash", "-lc", script],
@@ -83,35 +83,6 @@ class AcceptanceCommonShellTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("BOUNDED_RUN_STARTED_AT must be valid ISO-8601 timestamp", result.stderr)
-
-    def test_acceptance_should_reset_docker_flag_values(self) -> None:
-        off = self._run(
-            f"""
-            source "{HELPER}"
-            export ACCEPTANCE_RESET_DOCKER=0
-            acceptance_should_reset_docker
-            """
-        )
-        self.assertEqual(off.returncode, 1)
-
-        on = self._run(
-            f"""
-            source "{HELPER}"
-            export ACCEPTANCE_RESET_DOCKER=1
-            acceptance_should_reset_docker
-            """
-        )
-        self.assertEqual(on.returncode, 0)
-
-        invalid = self._run(
-            f"""
-            source "{HELPER}"
-            export ACCEPTANCE_RESET_DOCKER=2
-            acceptance_should_reset_docker
-            """
-        )
-        self.assertEqual(invalid.returncode, 2)
-        self.assertIn("ACCEPTANCE_RESET_DOCKER must be 0 or 1", invalid.stderr)
 
 
 if __name__ == "__main__":

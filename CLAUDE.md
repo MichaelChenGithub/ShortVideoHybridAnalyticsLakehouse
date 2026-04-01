@@ -16,15 +16,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest                                            # full suite
 .venv/bin/python -m pytest tests/test_rt_action_decisioning.py       # single file
 
-# Local infrastructure (docker-compose)
-docker compose up -d                                                  # full stack
-docker compose up -d spark                                            # single service
-
-# Acceptance runners (require docker stack)
-bash src/scripts/run_realtime_signoff_acceptance.sh
-bash src/scripts/run_content_aggregator_acceptance.sh
-bash src/scripts/run_cdc_upsert_acceptance.sh
-bash src/scripts/prepare_airflow_batch_demo_env.sh
+# Local infrastructure — use the Makefile targets (source of truth)
+make up                 # Full reset + seed in one shot (reset-infra then seed-bronze)
+make reset-infra        # Tear down, clean state, and rebuild the core pipeline stack
+make seed-bronze        # Start streaming jobs, run generator, drain, and verify MinIO
+make integration-test   # make up + run all 6 acceptance scripts end-to-end
+make down               # Stop all containers and remove named volumes
+make clean              # reset-infra + wipe ivy_cache (use when deps are corrupted)
+make help               # List all available targets
 
 # Airflow Docker image (build from repo root)
 docker build -f short-video-lakehouse-airflow/Dockerfile \
@@ -50,7 +49,7 @@ terraform destroy \
   -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
 ```
 
-Before any PR: run `pytest` and the relevant acceptance script for the touched domain.
+Before any PR: build `.venv` first (`python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`), then run `pytest`. For changes touching acceptance scripts or Spark jobs, run `make integration-test`.
 
 ## Architecture
 
@@ -80,7 +79,7 @@ Bronze Iceberg tables
 - **`src/orchestration/airflow_batch_tasks.py`** — `SPARK_BATCH_SPECS` registry mapping job names to Spark scripts. Local dev: `docker exec` into Spark container. AWS: boto3 EMR Serverless `start_job_run` when `EMR_APPLICATION_ID` env var is set.
 - **`src/spark/`** — Realtime Spark jobs (prefix `rt_`) and batch Spark jobs (prefix `bt_`). Each file is scoped to one contract surface.
 - **`src/generator/bounded_run/`** — Synthetic event/CDC generator used in acceptance testing.
-- **`src/scripts/`** — Acceptance runners (`run_*.sh`) and contract verifiers (`verify_*.py`).
+- **`src/scripts/`** — 6 integration acceptance scripts (`run_*_acceptance.sh`), contract verifiers (`verify_*.py`), and `common.sh` (shared `resolve_bounded_run_started_at` utility). Scripts assume infra is up (`make reset-infra`); use `make integration-test` to run them all.
 - **`src/trino/`** — Semantic serving SQL for both realtime (`rt_video_metrics_serving.sql`) and batch (`bt_semantic_serving.sql`).
 - **`tests/`** — Mirrors `src/` structure; uses `pytest` with `unittest`-style classes. Deterministic (fixed seeds, explicit timestamps).
 - **`docs/architecture/`** — Contracts for each domain (realtime-decisioning, data-model, messaging, streaming, serving). Read before changing behavior.
@@ -93,7 +92,7 @@ Bronze Iceberg tables
 | MinIO | 9000/9001 | S3-compatible storage (`warehouse/`, `checkpoints/`) |
 | iceberg-rest | 8181 | Iceberg REST catalog (PostgreSQL backend) |
 | Kafka | 9092 | Event streaming |
-| Spark | 4040/8080 | Processing engine |
+| Spark | 9090/8080 | Processing engine |
 | Trino | 8081 | SQL query layer over Iceberg |
 | Airflow | 8082 | Batch DAG orchestration (SQLite, SequentialExecutor) |
 | Metabase | 3001 | BI dashboard |

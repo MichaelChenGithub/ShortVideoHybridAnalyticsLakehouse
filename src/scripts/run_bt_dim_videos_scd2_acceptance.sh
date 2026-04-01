@@ -3,14 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$SCRIPT_DIR/acceptance_common.sh"
+source "$SCRIPT_DIR/common.sh"
 
 usage() {
   cat <<'EOF'
 Usage: run_bt_dim_videos_scd2_acceptance.sh
 
 Environment overrides:
-  ACCEPTANCE_RESET_DOCKER
   BOUNDED_RUN_TIME_MODE
   BOUNDED_RUN_STARTED_AT
   VIDEO_ID
@@ -62,13 +61,9 @@ EXPECT_STATUS="${EXPECT_STATUS:-copyright_strike}"
 resolve_bounded_run_started_at "BT-DIM-VIDEOS-SCD2"
 
 cd "$REPO_ROOT"
-acceptance_maybe_reset_docker "BT-DIM-VIDEOS-SCD2"
-
-printf '[BT-DIM-VIDEOS-SCD2] Starting required services...\n'
-docker compose up -d minio minio-mc iceberg-rest zookeeper kafka spark
+printf '[BT-DIM-VIDEOS-SCD2] Assuming infrastructure is up. Run: make reset-infra\n'
 
 printf '[BT-DIM-VIDEOS-SCD2] Ensuring CDC topic exists...\n'
-wait_for_kafka_ready "BT-DIM-VIDEOS-SCD2" 60 2
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
   --create \
@@ -78,7 +73,7 @@ docker exec lakehouse-kafka kafka-topics \
   --replication-factor 1
 
 printf '[BT-DIM-VIDEOS-SCD2] Starting Spark CDC upsert job (raw bronze source)...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/[r]t_video_cdc_upsert.py/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
+docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '[r]t_video_cdc_upsert.py' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
 docker exec lakehouse-spark bash -lc "aws_jar='/root/.ivy2/jars/com.amazonaws_aws-java-sdk-bundle-1.12.262.jar'; if [ -f \"\$aws_jar\" ] && ! jar tf \"\$aws_jar\" >/dev/null 2>&1; then echo '[BT-DIM-VIDEOS-SCD2] WARN: removing corrupted aws sdk bundle from ivy cache'; rm -f \"\$aws_jar\"; rm -rf /root/.ivy2/cache/com.amazonaws/aws-java-sdk-bundle; fi"
 docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit \
   --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 \
