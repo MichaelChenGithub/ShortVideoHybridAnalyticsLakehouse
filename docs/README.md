@@ -77,3 +77,5 @@ This documentation set covers end-to-end platform capabilities and impact:
    - `docs/architecture/generator/mock-event-generator-contract-and-scenario-matrix.md`
 11. Deferred queue scope reference:
    - `docs/architecture/realtime-decisioning/action-queue-future-plan.md`
+12. Portfolio case study draft:
+   - `docs/portfolio-case-study.md`

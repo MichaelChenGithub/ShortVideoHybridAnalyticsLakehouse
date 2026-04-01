@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/common.sh"
+
 usage() {
   cat <<'EOF'
 Usage: run_rule_baseline_publish_acceptance.sh
@@ -30,8 +34,7 @@ SPARK_CONTAINER="${SPARK_CONTAINER:-lakehouse-spark}"
 TABLE_NAME="${TABLE_NAME:-lakehouse.dims.rt_rule_quantile_baselines}"
 RESET_TABLE="${RESET_TABLE:-1}"
 
-printf '[RULE-BASELINE] Starting required services...\n'
-docker compose up -d minio minio-mc catalog-postgres iceberg-rest spark
+printf '[RULE-BASELINE] Assuming infrastructure is up. Run: make reset-infra\n'
 
 if [ "$RESET_TABLE" = "1" ]; then
   printf '[RULE-BASELINE] Resetting table for deterministic local acceptance...\n'

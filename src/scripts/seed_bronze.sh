@@ -10,18 +10,21 @@
 #   bash src/scripts/seed_bronze.sh
 #
 # Environment overrides:
-#   BOOTSTRAP_SERVERS     Kafka bootstrap address (default: localhost:9092)
-#   BOUNDED_RUN_CONFIG    path to generator config JSON
-#   WAIT_SECONDS          seconds to let streaming jobs drain after generator (default: 60)
-#   PYTHON_BIN            Python interpreter (default: .venv/bin/python or python3)
+#   BOOTSTRAP_SERVERS       Kafka bootstrap address (default: localhost:9092)
+#   BOUNDED_RUN_CONFIG      path to generator config JSON
+#   BOUNDED_RUN_TIME_MODE   deterministic (default) or dynamic
+#   BOUNDED_RUN_STARTED_AT  explicit ISO-8601 override for generator started_at
+#   WAIT_SECONDS            seconds to let streaming jobs drain after generator (default: 60)
+#   PYTHON_BIN              Python interpreter (default: .venv/bin/python or python3)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/common.sh"
 LOG_PREFIX="SEED-BRONZE"
 
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
-BOUNDED_RUN_CONFIG="${BOUNDED_RUN_CONFIG:-docs/architecture/generator/examples/bounded_run_config.airflow_demo.json}"
+BOUNDED_RUN_CONFIG="${BOUNDED_RUN_CONFIG:-docs/architecture/generator/examples/bounded_run_config.example.json}"
 WAIT_SECONDS="${WAIT_SECONDS:-60}"
 
 DEFAULT_PYTHON_BIN="python3"
@@ -48,6 +51,8 @@ poll_until() {
   err "$label not ready after $retries attempts"
   return 1
 }
+
+resolve_bounded_run_started_at "SEED-BRONZE"
 
 cd "$REPO_ROOT"
 
@@ -177,10 +182,18 @@ log "All three streaming jobs are running."
 # 7. Run the bounded generator (Kafka sink)
 # ---------------------------------------------------------------------------
 log "Running bounded generator (sink=kafka, config=$BOUNDED_RUN_CONFIG)..."
-"$PYTHON_BIN" src/generator/bounded_run_cli.py \
-  --config "$BOUNDED_RUN_CONFIG" \
-  --sink kafka \
-  --bootstrap-servers "$BOOTSTRAP_SERVERS"
+if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config "$BOUNDED_RUN_CONFIG" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS" \
+    --started-at "$BOUNDED_RUN_EFFECTIVE_STARTED_AT"
+else
+  "$PYTHON_BIN" src/generator/bounded_run_cli.py \
+    --config "$BOUNDED_RUN_CONFIG" \
+    --sink kafka \
+    --bootstrap-servers "$BOOTSTRAP_SERVERS"
+fi
 
 # ---------------------------------------------------------------------------
 # 8. Wait for streaming jobs to drain Kafka into Iceberg

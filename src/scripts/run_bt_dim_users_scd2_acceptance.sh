@@ -3,14 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$SCRIPT_DIR/acceptance_common.sh"
+source "$SCRIPT_DIR/common.sh"
 
 usage() {
   cat <<'EOF'
 Usage: run_bt_dim_users_scd2_acceptance.sh
 
 Environment overrides:
-  ACCEPTANCE_RESET_DOCKER
   BOUNDED_RUN_TIME_MODE
   BOUNDED_RUN_STARTED_AT
   USER_ID
@@ -35,8 +34,6 @@ Environment overrides:
   EXPECTED_LATEST_TS_MS
   PROBE_OLD_TS_MS
   PROBE_NEW_TS_MS
-  RECREATE_SERVICES
-  RECREATE_WITH_VOLUMES
 EOF
 }
 
@@ -76,50 +73,7 @@ EXPECTED_LATEST_REGION="${EXPECTED_LATEST_REGION:-LATAM}"
 EXPECTED_LATEST_TS_MS="${EXPECTED_LATEST_TS_MS:-$((BASE_TS_MS + 2000))}"
 PROBE_OLD_TS_MS="${PROBE_OLD_TS_MS:-$((BASE_TS_MS + 1000))}"
 PROBE_NEW_TS_MS="${PROBE_NEW_TS_MS:-$((BASE_TS_MS + 2000))}"
-RECREATE_SERVICES="${RECREATE_SERVICES:-0}"
-RECREATE_WITH_VOLUMES="${RECREATE_WITH_VOLUMES:-0}"
-
 resolve_bounded_run_started_at "BT-DIM-USERS-SCD2"
-
-start_required_services() {
-  if [ "$RECREATE_SERVICES" = "1" ]; then
-    printf '[BT-DIM-USERS-SCD2] Recreate mode enabled. Rebuilding required services for current worktree mounts...\n'
-    if [ "$RECREATE_WITH_VOLUMES" = "1" ]; then
-      docker compose down -v || true
-    else
-      docker compose down || true
-    fi
-
-    for container_name in \
-      lakehouse-spark \
-      lakehouse-kafka \
-      lakehouse-zookeeper \
-      lakehouse-catalog \
-      lakehouse-catalog-postgres \
-      lakehouse-minio
-    do
-      docker rm -f "$container_name" >/dev/null 2>&1 || true
-    done
-
-    docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark --force-recreate
-    return
-  fi
-
-  if ! docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark; then
-    printf '[BT-DIM-USERS-SCD2] WARN: docker compose up failed; attempting to reuse existing lakehouse-* containers...\n'
-  fi
-}
-
-check_spark_src_mount() {
-  local expected_src="$REPO_ROOT/src"
-  local actual_src
-  actual_src="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/home/iceberg/local/src"}}{{.Source}}{{end}}{{end}}' lakehouse-spark 2>/dev/null || true)"
-  if [ -n "$actual_src" ] && [ "$actual_src" != "$expected_src" ]; then
-    printf '[BT-DIM-USERS-SCD2] WARN: lakehouse-spark src mount mismatch.\n'
-    printf '[BT-DIM-USERS-SCD2] WARN: expected=%s actual=%s\n' "$expected_src" "$actual_src"
-    printf '[BT-DIM-USERS-SCD2] WARN: Use RECREATE_SERVICES=1 to rebuild containers for this worktree.\n'
-  fi
-}
 
 emit_warmup_user_cdc() {
   local warmup_user_id="$1"
@@ -166,38 +120,10 @@ wait_for_min_batch_id() {
   return 1
 }
 
-printf '[BT-DIM-USERS-SCD2] Starting required services...\n'
 cd "$REPO_ROOT"
-acceptance_maybe_reset_docker "BT-DIM-USERS-SCD2"
-start_required_services
-
-for container_name in \
-  lakehouse-minio \
-  lakehouse-catalog-postgres \
-  lakehouse-catalog \
-  lakehouse-zookeeper \
-  lakehouse-kafka \
-  lakehouse-spark
-do
-  docker start "$container_name" >/dev/null 2>&1 || true
-done
-
-for container_name in \
-  lakehouse-minio \
-  lakehouse-catalog \
-  lakehouse-zookeeper \
-  lakehouse-kafka \
-  lakehouse-spark
-do
-  if ! docker ps --format '{{.Names}}' | grep -qx "$container_name"; then
-    echo "[BT-DIM-USERS-SCD2] ERROR: required container is not running: $container_name" >&2
-    exit 1
-  fi
-done
-check_spark_src_mount
+printf '[BT-DIM-USERS-SCD2] Assuming infrastructure is up. Run: make reset-infra\n'
 
 printf '[BT-DIM-USERS-SCD2] Ensuring CDC topic exists...\n'
-wait_for_kafka_ready "BT-DIM-USERS-SCD2" 60 2
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
   --create \
@@ -207,7 +133,7 @@ docker exec lakehouse-kafka kafka-topics \
   --replication-factor 1
 
 printf '[BT-DIM-USERS-SCD2] Starting Spark user CDC raw sink job...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/[r]t_user_cdc_raw.py/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
+docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '[r]t_user_cdc_raw.py' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
 docker exec lakehouse-spark bash -lc "rm -rf /tmp/spark-* /tmp/blockmgr-* || true"
 docker exec lakehouse-spark bash -lc "aws_jar='/root/.ivy2/jars/com.amazonaws_aws-java-sdk-bundle-1.12.262.jar'; iceberg_jar='/root/.ivy2/jars/org.apache.iceberg_iceberg-spark-runtime-3.5_2.12-1.5.0.jar'; if [ -f \"\$aws_jar\" ] && ( [ ! -s \"\$aws_jar\" ] || ! jar tf \"\$aws_jar\" >/dev/null 2>&1 ); then echo '[BT-DIM-USERS-SCD2] WARN: removing corrupted aws sdk bundle from ivy cache'; rm -f \"\$aws_jar\"; rm -rf /root/.ivy2/cache/com.amazonaws/aws-java-sdk-bundle; fi; if [ -f \"\$iceberg_jar\" ] && ( [ ! -s \"\$iceberg_jar\" ] || ! jar tf \"\$iceberg_jar\" >/dev/null 2>&1 ); then echo '[BT-DIM-USERS-SCD2] WARN: removing corrupted iceberg runtime from ivy cache'; rm -f \"\$iceberg_jar\"; rm -rf /root/.ivy2/cache/org.apache.iceberg/iceberg-spark-runtime-3.5_2.12; fi"
 docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_user_cdc_raw.py > '${USER_CDC_JOB_LOG}' 2>&1 &"

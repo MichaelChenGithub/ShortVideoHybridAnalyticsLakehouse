@@ -3,14 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-source "$SCRIPT_DIR/acceptance_common.sh"
+source "$SCRIPT_DIR/common.sh"
 
 usage() {
   cat <<'EOF'
 Usage: run_bt_events_conformed_acceptance.sh
 
 Environment overrides:
-  ACCEPTANCE_RESET_DOCKER
   BOUNDED_RUN_TIME_MODE
   BOUNDED_RUN_STARTED_AT
   BOOTSTRAP_SERVERS
@@ -80,14 +79,9 @@ PY
 fi
 
 cd "$REPO_ROOT"
-acceptance_maybe_reset_docker "BT-EVENTS-CONFORMED"
-
-printf '[BT-EVENTS-CONFORMED] Starting required services...\n'
-docker compose up -d minio minio-mc catalog-postgres iceberg-rest zookeeper kafka spark
+printf '[BT-EVENTS-CONFORMED] Assuming infrastructure is up. Run: make reset-infra\n'
 
 printf '[BT-EVENTS-CONFORMED] Ensuring required topics exist...\n'
-wait_for_kafka_ready "BT-EVENTS-CONFORMED" 60 2
-
 docker exec lakehouse-kafka kafka-topics \
   --bootstrap-server kafka:29092 \
   --create \
@@ -117,7 +111,7 @@ docker exec lakehouse-kafka kafka-topics \
   --partitions 3 || true
 
 printf '[BT-EVENTS-CONFORMED] Starting Spark content aggregator job (raw_events producer)...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(ps -eo pid,args | awk '/[r]t_content_events_aggregator.py/ {print \$1}'); if [ -n \"\$pids\" ]; then kill \$pids || true; fi"
+docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '[r]t_content_events_aggregator.py' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
 docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_content_events_aggregator.py > /tmp/bt_events_conformed_content_agg.log 2>&1 &"
 sleep "$WAIT_AFTER_JOB_START_SECONDS"
 
