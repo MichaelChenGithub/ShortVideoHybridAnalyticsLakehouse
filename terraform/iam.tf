@@ -34,6 +34,21 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  name = "${var.project_name}-ecs-task-execution-secrets"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "SecretsManagerRead"
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = "arn:aws:secretsmanager:${var.aws_region}:*:secret:${var.project_name}/airflow/*"
+    }]
+  })
+}
+
 # ── ECS Task Role (Metabase) ──────────────────────────────────────────────────
 # Allows Metabase to query Athena and read results from S3.
 
@@ -112,6 +127,12 @@ resource "aws_iam_role_policy" "airflow_task" {
         Sid      = "GlueAccess"
         Effect   = "Allow"
         Action   = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetPartition", "glue:GetPartitions"]
+        Resource = "*"
+      },
+      {
+        Sid      = "SESSendEmail"
+        Effect   = "Allow"
+        Action   = "ses:SendRawEmail"
         Resource = "*"
       }
     ]

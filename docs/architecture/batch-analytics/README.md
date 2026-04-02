@@ -30,7 +30,6 @@ This module defines production-facing batch analytics contracts for the platform
 1. `lakehouse.gold.batch_retention_daily`
 2. `lakehouse.gold.batch_engagement_daily`
 3. `lakehouse.gold.batch_sessionization_daily`
-4. `lakehouse.gold.batch_publish_manifest`
 
 ## 5. Future Plan Pointer
 

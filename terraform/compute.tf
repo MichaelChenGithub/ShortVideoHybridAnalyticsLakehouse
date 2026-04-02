@@ -1,5 +1,14 @@
 # compute.tf — EMR Serverless (all Spark); ECS for Airflow and Metabase only
 
+# ── SES sender identity ───────────────────────────────────────────────────────
+# Verifies the From address used by Airflow alert emails.
+# After terraform apply, AWS sends a verification email to this address —
+# click the link before alerts will actually send.
+
+resource "aws_ses_email_identity" "airflow_alerts" {
+  email = "shen.nutrition.ai@gmail.com"
+}
+
 # ── EMR Serverless Application (rt_*.py streaming + bt_*.py batch) ────────────
 # Single application handles both workloads; job runs are submitted per script.
 # Pay-per-use: no idle cost between demo runs.
@@ -51,11 +60,27 @@ resource "aws_ecs_task_definition" "airflow" {
     image     = var.airflow_image
     essential = true
     environment = [
-      { name = "AWS_DEFAULT_REGION",       value = var.aws_region },
-      { name = "EMR_APPLICATION_ID",       value = aws_emrserverless_application.spark.id },
-      { name = "EMR_EXECUTION_ROLE_ARN",   value = aws_iam_role.emr_execution.arn },
-      { name = "GLUE_DATABASE",            value = aws_glue_catalog_database.main.name },
-      { name = "WAREHOUSE_BUCKET",         value = aws_s3_bucket.warehouse.bucket },
+      { name = "AWS_DEFAULT_REGION",              value = var.aws_region },
+      { name = "EMR_APPLICATION_ID",              value = aws_emrserverless_application.spark.id },
+      { name = "EMR_EXECUTION_ROLE_ARN",          value = aws_iam_role.emr_execution.arn },
+      { name = "GLUE_DATABASE",                   value = aws_glue_catalog_database.main.name },
+      { name = "WAREHOUSE_BUCKET",                value = aws_s3_bucket.warehouse.bucket },
+      { name = "AIRFLOW_ALERT_EMAIL",             value = "shen.nutrition.ai@gmail.com" },
+      { name = "AIRFLOW__SMTP__SMTP_HOST",        value = "email-smtp.${var.aws_region}.amazonaws.com" },
+      { name = "AIRFLOW__SMTP__SMTP_PORT",        value = "587" },
+      { name = "AIRFLOW__SMTP__SMTP_STARTTLS",    value = "True" },
+      { name = "AIRFLOW__SMTP__SMTP_SSL",         value = "False" },
+      { name = "AIRFLOW__SMTP__SMTP_MAIL_FROM",   value = "shen.nutrition.ai@gmail.com" },
+    ]
+    secrets = [
+      {
+        name      = "AIRFLOW__SMTP__SMTP_USER"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/airflow/smtp_user"
+      },
+      {
+        name      = "AIRFLOW__SMTP__SMTP_PASSWORD"
+        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/airflow/smtp_password"
+      },
     ]
     logConfiguration = {
       logDriver = "awslogs"

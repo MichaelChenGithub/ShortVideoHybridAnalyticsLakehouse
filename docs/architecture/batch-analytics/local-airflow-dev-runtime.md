@@ -113,12 +113,9 @@ the underlying command path without changing the DAG dependency graph.
 
 Current local scope still does not implement:
 
-1. `lakehouse.gold.batch_publish_manifest` writes
-2. publish-ready signal emission
-3. evidence packaging beyond deferred placeholder tasks
-4. a real in-repo `dbt` project; local quality gates currently use verifier scripts instead
-
-Those publish/evidence behaviors are reserved for `MIC-165` and follow-on work.
+1. publish-ready signal emission beyond a log statement
+2. evidence packaging beyond a log statement
+3. a real in-repo `dbt` project; local quality gates currently use verifier scripts instead
 
 ## 8. Task Timeouts
 
