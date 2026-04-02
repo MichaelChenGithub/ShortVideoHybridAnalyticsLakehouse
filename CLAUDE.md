@@ -69,18 +69,20 @@ Kafka (content_events + cdc.videos)
 ```
 Bronze Iceberg tables
   → Spark batch jobs (SCD2 dims, sessions, retention, engagement)
-  → Quality gates verification
+  → dbt quality gates (run + test against WAP branch via Trino)
   → Trino semantic serving views
 ```
 
 ### Key modules
 
+- **`dbt_project.yml` / `models/batch/semantic/`** — dbt project run by the `quality-gates` DAG task. Executes `dbt run` + `dbt test` against the current WAP branch via Trino (`ICEBERG_WAP_BRANCH` env var is injected at runtime so all queries target the run branch, not main). `warn`-severity tests are non-blocking; `error`-severity tests fail the DAG task.
 - **`dags/batch_publish_daily.py`** — Airflow DAG (daily 8 AM ET). Task groups: resolve data date → conformed-events → sessionization → batch-gold-metrics → quality-gates → publish-and-evidence.
 - **`src/orchestration/airflow_batch_tasks.py`** — `SPARK_BATCH_SPECS` registry mapping job names to Spark scripts. Local dev: `docker exec` into Spark container. AWS: boto3 EMR Serverless `start_job_run` when `EMR_APPLICATION_ID` env var is set.
 - **`src/spark/`** — Realtime Spark jobs (prefix `rt_`) and batch Spark jobs (prefix `bt_`). Each file is scoped to one contract surface.
 - **`src/generator/bounded_run/`** — Synthetic event/CDC generator used in acceptance testing.
 - **`src/scripts/`** — 6 integration acceptance scripts (`run_*_acceptance.sh`), contract verifiers (`verify_*.py`), and `common.sh` (shared `resolve_bounded_run_started_at` utility). Scripts assume infra is up (`make reset-infra`); use `make integration-test` to run them all.
 - **`src/trino/`** — Semantic serving SQL for both realtime (`rt_video_metrics_serving.sql`) and batch (`bt_semantic_serving.sql`).
+- **`src/metabase/realtime-metrics-sql-pack.sql`** — Pre-built SQL queries for the Metabase realtime metrics dashboard.
 - **`tests/`** — Mirrors `src/` structure; uses `pytest` with `unittest`-style classes. Deterministic (fixed seeds, explicit timestamps).
 - **`docs/architecture/`** — Contracts for each domain (realtime-decisioning, data-model, messaging, streaming, serving). Read before changing behavior.
 - **`artifacts/`** — Generated run evidence and acceptance outputs (not committed).
