@@ -58,8 +58,8 @@ SELECT
         ELSE NULL
     END AS avg_completion_rate,
     CASE
-        WHEN SUM(e.impressions) > 0
-        THEN CAST(SUM(e.likes + e.shares) AS DOUBLE) / SUM(e.impressions)
+        WHEN SUM(e.play_finish) > 0
+        THEN CAST(SUM(e.likes + e.shares) AS DOUBLE) / SUM(e.play_finish)
         ELSE NULL
     END AS avg_interaction_rate,
     CASE
@@ -85,9 +85,21 @@ SELECT
     s.region,
     SUM(s.sessions) AS sessions,
     AVG(s.sessions_per_user) AS avg_sessions_per_user,
-    AVG(s.avg_session_duration_sec) AS avg_session_duration_sec,
-    AVG(s.events_per_session) AS avg_events_per_session,
-    AVG(s.watch_time_per_session_ms) AS avg_watch_time_per_session_ms,
+    CASE
+        WHEN SUM(s.sessions) > 0
+        THEN CAST(SUM(s.avg_session_duration_sec * s.sessions) AS DOUBLE) / SUM(s.sessions)
+        ELSE NULL
+    END AS avg_session_duration_sec,
+    CASE
+        WHEN SUM(s.sessions) > 0
+        THEN CAST(SUM(s.events_per_session * s.sessions) AS DOUBLE) / SUM(s.sessions)
+        ELSE NULL
+    END AS avg_events_per_session,
+    CASE
+        WHEN SUM(s.sessions) > 0
+        THEN CAST(SUM(s.watch_time_per_session_ms * s.sessions) AS DOUBLE) / SUM(s.sessions)
+        ELSE NULL
+    END AS avg_watch_time_per_session_ms,
     MAX(s.published_at) AS published_at
 FROM lakehouse.serving.v_bt_sessionization_daily s
 CROSS JOIN target t
