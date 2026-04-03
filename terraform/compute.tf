@@ -1,5 +1,30 @@
 # compute.tf — EMR Serverless (all Spark); ECS for Airflow and Metabase only
 
+# ── Secrets Manager — Airflow SMTP credentials ───────────────────────────────
+# These resources create the secret containers only; values must be set manually
+# via the AWS CLI or console before starting the Airflow ECS task:
+#
+#   aws secretsmanager put-secret-value \
+#     --secret-id lakehouse/airflow/smtp_user --secret-string "YOUR_SES_SMTP_USER"
+#   aws secretsmanager put-secret-value \
+#     --secret-id lakehouse/airflow/smtp_password --secret-string "YOUR_SES_SMTP_PASSWORD"
+#
+# If the secrets already exist (created manually), import them before applying:
+#   terraform import aws_secretsmanager_secret.airflow_smtp_user <secret-arn>
+#   terraform import aws_secretsmanager_secret.airflow_smtp_password <secret-arn>
+
+resource "aws_secretsmanager_secret" "airflow_smtp_user" {
+  name        = "${var.project_name}/airflow/smtp_user"
+  description = "SES SMTP username for Airflow email alerts"
+  tags        = { Project = var.project_name }
+}
+
+resource "aws_secretsmanager_secret" "airflow_smtp_password" {
+  name        = "${var.project_name}/airflow/smtp_password"
+  description = "SES SMTP password for Airflow email alerts"
+  tags        = { Project = var.project_name }
+}
+
 # ── SES sender identity ───────────────────────────────────────────────────────
 # Verifies the From address used by Airflow alert emails.
 # After terraform apply, AWS sends a verification email to this address —
@@ -75,11 +100,11 @@ resource "aws_ecs_task_definition" "airflow" {
     secrets = [
       {
         name      = "AIRFLOW__SMTP__SMTP_USER"
-        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/airflow/smtp_user"
+        valueFrom = aws_secretsmanager_secret.airflow_smtp_user.arn
       },
       {
         name      = "AIRFLOW__SMTP__SMTP_PASSWORD"
-        valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/airflow/smtp_password"
+        valueFrom = aws_secretsmanager_secret.airflow_smtp_password.arn
       },
     ]
     logConfiguration = {
