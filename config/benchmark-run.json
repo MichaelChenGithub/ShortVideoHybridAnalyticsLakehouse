@@ -1,0 +1,16 @@
+{
+  "run_id": "benchmark-aws-01",
+  "seed": 42,
+  "duration_minutes": 180,
+  "events_per_sec": 25000,
+  "late_event_ratio": 0.05,
+  "rule_version": "v1",
+  "started_at": "2026-04-03T00:00:00Z",
+  "scenario_mix": {
+    "normal_baseline": 0.60,
+    "viral_high_quality": 0.15,
+    "viral_low_quality": 0.10,
+    "cold_start_under_exposed": 0.10,
+    "invalid_payload_burst": 0.05
+  }
+}
