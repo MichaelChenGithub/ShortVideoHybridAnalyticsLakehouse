@@ -28,6 +28,12 @@ Core delivery path:
 
 ![Data Flow](docs/dataflow_diagram.png)
 
+### Batch Orchestration
+
+The batch processing path is orchestrated through the `batch_publish_daily` Airflow DAG, which coordinates conformed events, sessionization, batch gold metrics, quality gates, and publish/evidence steps.
+
+![Airflow Batch DAG](docs/airflow_dag.png)
+
 ## Local Runbook
 
 Prerequisites:
