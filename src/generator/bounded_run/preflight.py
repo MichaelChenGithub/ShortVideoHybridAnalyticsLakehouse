@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Mapping, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .constants import TOPIC_CDC_USERS, TOPIC_CDC_VIDEOS, TOPIC_CONTENT_EVENTS
 
@@ -198,19 +199,39 @@ def _is_topic_already_exists_error(exc: Exception) -> bool:
     return False
 
 
+def _build_iam_sasl_config(aws_region: str) -> dict:
+    try:
+        from aws_msk_iam_sasl_signer import MSKAuthTokenProvider  # type: ignore
+    except ImportError as exc:
+        raise KafkaPreflightError(
+            "aws-msk-iam-sasl-signer-python is required for MSK IAM auth. "
+            "Install with `pip install aws-msk-iam-sasl-signer-python`."
+        ) from exc
+
+    def _oauth_cb(config: dict) -> tuple:
+        token, expiry_ms = MSKAuthTokenProvider.generate_auth_token(aws_region)
+        return token, expiry_ms / 1000.0
+
+    return {
+        "security.protocol": "SASL_SSL",
+        "sasl.mechanisms": "OAUTHBEARER",
+        "oauth_cb": _oauth_cb,
+        "ssl.ca.location": "/etc/ssl/certs/ca-certificates.crt",
+    }
+
+
 def load_topic_metadata(
     *,
     bootstrap_servers: str,
     timeout_seconds: float = 10.0,
+    extra_config: Optional[dict] = None,
 ) -> Tuple[Dict[str, int], Dict[str, int], Dict[str, str]]:
     """Load topic partition, replication-factor, and topic-level metadata errors."""
     admin_client_cls = _resolve_admin_client_class()
-    client = admin_client_cls(
-        {
-            "bootstrap.servers": bootstrap_servers,
-            "client.id": "m1-kafka-preflight",
-        }
-    )
+    config: dict = {"bootstrap.servers": bootstrap_servers, "client.id": "m1-kafka-preflight"}
+    if extra_config:
+        config.update(extra_config)
+    client = admin_client_cls(config)
     try:
         metadata = client.list_topics(timeout=timeout_seconds)
     except Exception as exc:  # pragma: no cover - integration path
@@ -254,18 +275,17 @@ def create_missing_topics(
     bootstrap_servers: str,
     expectations: Sequence[TopicExpectation],
     timeout_seconds: float = 10.0,
+    extra_config: Optional[dict] = None,
 ) -> List[str]:
     """Create missing Kafka topics and return the topic names created in this attempt."""
     if not expectations:
         return []
 
     admin_client_cls, new_topic_cls = _resolve_admin_types()
-    client = admin_client_cls(
-        {
-            "bootstrap.servers": bootstrap_servers,
-            "client.id": "m1-kafka-topic-bootstrap",
-        }
-    )
+    config: dict = {"bootstrap.servers": bootstrap_servers, "client.id": "m1-kafka-topic-bootstrap"}
+    if extra_config:
+        config.update(extra_config)
+    client = admin_client_cls(config)
     new_topics = [
         new_topic_cls(
             expected.topic,
@@ -305,10 +325,17 @@ def bootstrap_kafka_topics(
         ..., Tuple[Dict[str, int], Dict[str, int], Dict[str, str]]
     ] = load_topic_metadata,
     topic_creator: Callable[..., List[str]] = create_missing_topics,
+    use_iam_auth: bool = False,
+    aws_region: str = "us-east-1",
 ) -> Dict[str, List[str]]:
     """Create missing topics, reload metadata, and return bootstrap status."""
     if not expectations:
         raise KafkaPreflightError("no topic expectations configured")
+
+    if use_iam_auth:
+        extra_config = _build_iam_sasl_config(aws_region)
+        metadata_loader = functools.partial(metadata_loader, extra_config=extra_config)
+        topic_creator = functools.partial(topic_creator, extra_config=extra_config)
 
     logger(f"[preflight] bootstrapping Kafka topics at '{bootstrap_servers}'")
     topic_partitions, _, topic_errors = metadata_loader(bootstrap_servers=bootstrap_servers)
@@ -372,10 +399,16 @@ def run_kafka_preflight(
     metadata_loader: Callable[
         ..., Tuple[Dict[str, int], Dict[str, int], Dict[str, str]]
     ] = load_topic_metadata,
+    use_iam_auth: bool = False,
+    aws_region: str = "us-east-1",
 ) -> None:
     """Run Kafka preflight and fail fast when any contract check fails."""
     if not expectations:
         raise KafkaPreflightError("no topic expectations configured")
+
+    if use_iam_auth:
+        extra_config = _build_iam_sasl_config(aws_region)
+        metadata_loader = functools.partial(metadata_loader, extra_config=extra_config)
 
     logger(f"[preflight] checking Kafka topic readiness at '{bootstrap_servers}'")
     topic_partitions, topic_replication_factors, topic_errors = metadata_loader(
