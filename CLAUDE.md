@@ -41,12 +41,10 @@ docker push \
 # AWS — deploy stack (run from terraform/)
 cd terraform
 terraform init
-terraform apply \
-  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+terraform apply
 
 # AWS — shut down (between demos to avoid idle cost)
-terraform destroy \
-  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+terraform destroy
 ```
 
 Before any PR: build `.venv` first (`python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`), then run `pytest`. For changes touching acceptance scripts or Spark jobs, run `make integration-test`.

@@ -161,13 +161,21 @@ def _payload_json_schema() -> StructType:
 
 
 def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> DataFrame:
-    raw_stream = (
+    reader = (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", settings.bootstrap_servers)
         .option("subscribe", settings.topic)
         .option("startingOffsets", settings.starting_offsets)
-        .load()
     )
+    if settings.use_msk_iam:
+        reader = (
+            reader
+            .option("kafka.security.protocol", "SASL_SSL")
+            .option("kafka.sasl.mechanism", "AWS_MSK_IAM")
+            .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
+            .option("kafka.sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler")
+        )
+    raw_stream = reader.load()
 
     parsed = (
         raw_stream.select(

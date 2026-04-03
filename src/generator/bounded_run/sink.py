@@ -64,6 +64,8 @@ class KafkaEventSink(EventSink):
         content_topic: str = TOPIC_CONTENT_EVENTS,
         video_cdc_topic: str = TOPIC_CDC_VIDEOS,
         user_cdc_topic: str = TOPIC_CDC_USERS,
+        use_iam_auth: bool = False,
+        aws_region: str = "us-east-1",
     ) -> None:
         try:
             from confluent_kafka import Producer  # type: ignore
@@ -73,14 +75,38 @@ class KafkaEventSink(EventSink):
                 "Install with `pip install confluent-kafka`."
             ) from exc
 
-        self._producer = Producer(
-            {
-                "bootstrap.servers": bootstrap_servers,
-                "client.id": "m1-bounded-run-generator",
-                "linger.ms": 10,
-                "compression.type": "lz4",
-            }
-        )
+        producer_config: dict = {
+            "bootstrap.servers": bootstrap_servers,
+            "client.id": "benchmark-generator",
+            "linger.ms": 10,
+            "compression.type": "lz4",
+        }
+
+        if use_iam_auth:
+            try:
+                from aws_msk_iam_sasl_signer import MSKAuthTokenProvider  # type: ignore
+            except ImportError as exc:
+                raise RuntimeError(
+                    "aws-msk-iam-sasl-signer-python is required for MSK IAM auth. "
+                    "Install with `pip install aws-msk-iam-sasl-signer-python`."
+                ) from exc
+
+            _region = aws_region
+
+            def _oauth_cb(config: dict) -> tuple:
+                token, expiry_ms = MSKAuthTokenProvider.generate_auth_token(_region)
+                return token, expiry_ms / 1000.0
+
+            producer_config.update(
+                {
+                    "security.protocol": "SASL_SSL",
+                    "sasl.mechanisms": "OAUTHBEARER",
+                    "oauth_cb": _oauth_cb,
+                    "ssl.ca.location": "/etc/ssl/certs/ca-certificates.crt",
+                }
+            )
+
+        self._producer = Producer(producer_config)
         self._content_topic = content_topic
         self._video_cdc_topic = video_cdc_topic
         self._user_cdc_topic = user_cdc_topic

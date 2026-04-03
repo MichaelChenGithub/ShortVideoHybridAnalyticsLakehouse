@@ -43,10 +43,9 @@ resource "aws_emrserverless_application" "spark" {
   release_label = "emr-7.1.0"
   type          = "SPARK"
 
-  # No initial_capacity block = zero pre-provisioned workers (pay-per-use)
   maximum_capacity {
-    cpu    = "4 vCPU"
-    memory = "16 GB"
+    cpu    = "192 vCPU"
+    memory = "768 GB"
   }
 
   network_configuration {
@@ -116,6 +115,62 @@ resource "aws_ecs_task_definition" "airflow" {
       }
     }
   }])
+}
+
+# ── Benchmark Generator (Fargate, on-demand via run-task) ─────────────────────
+# Each benchmark run launches N tasks with different --seed values via:
+#   aws ecs run-task --overrides '{"containerOverrides":[{"name":"generator","command":["--seed","2"]}]}'
+#
+# Run 4 tasks in parallel (seeds 1-4) to reach ~100K events/sec total.
+
+resource "aws_ecr_repository" "generator" {
+  name                 = "benchmark-generator"
+  image_tag_mutability = "MUTABLE"
+  tags                 = { Project = var.project_name }
+}
+
+resource "aws_cloudwatch_log_group" "generator" {
+  name              = "/ecs/${var.project_name}/generator"
+  retention_in_days = 7
+}
+
+resource "aws_ecs_task_definition" "generator" {
+  family                   = "${var.project_name}-generator"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  task_role_arn            = aws_iam_role.generator_task.arn
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  # 4 vCPU / 8 GB per generator task; run 4 tasks in parallel for ~100K events/sec
+  cpu    = "4096"
+  memory = "8192"
+
+  container_definitions = jsonencode([{
+    name      = "generator"
+    image     = "${aws_ecr_repository.generator.repository_url}:latest"
+    essential = true
+    environment = [
+      { name = "MSK_BOOTSTRAP_SERVERS", value = aws_msk_serverless_cluster.main.bootstrap_brokers_sasl_iam },
+      { name = "AWS_DEFAULT_REGION",    value = var.aws_region },
+    ]
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.generator.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "generator"
+      }
+    }
+  }])
+}
+
+output "generator_task_definition" {
+  description = "Generator ECS task definition ARN — use with aws ecs run-task"
+  value       = aws_ecs_task_definition.generator.arn
+}
+
+output "generator_ecr_url" {
+  description = "ECR URL for the benchmark generator image"
+  value       = aws_ecr_repository.generator.repository_url
 }
 
 # ── Metabase (Fargate, public-facing on port 3000) ────────────────────────────

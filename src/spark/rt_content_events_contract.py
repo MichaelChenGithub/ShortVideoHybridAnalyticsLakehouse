@@ -38,6 +38,7 @@ ENV_CONSUMER_GROUP = "RT_CONTENT_EVENTS_CONSUMER_GROUP"
 ENV_RAW_TABLE = "RT_CONTENT_EVENTS_RAW_TABLE"
 ENV_GOLD_TABLE = "RT_CONTENT_EVENTS_GOLD_TABLE"
 ENV_INVALID_TABLE = "RT_CONTENT_EVENTS_INVALID_TABLE"
+ENV_MSK_IAM_AUTH = "RT_CONTENT_EVENTS_MSK_IAM_AUTH"
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class JobSettings:
     raw_table: str
     gold_table: str
     invalid_table: str
+    use_msk_iam: bool = False
 
 
 def checkpoint_for_sink(sink_name: str, version: str = "v1") -> str:
@@ -82,4 +84,5 @@ def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
         raw_table=values.get(ENV_RAW_TABLE, RAW_EVENTS_TABLE),
         gold_table=values.get(ENV_GOLD_TABLE, RT_VIDEO_STATS_1MIN_TABLE),
         invalid_table=values.get(ENV_INVALID_TABLE, INVALID_EVENTS_CONTENT_TABLE),
+        use_msk_iam=values.get(ENV_MSK_IAM_AUTH, "").lower() in ("1", "true", "yes"),
     )

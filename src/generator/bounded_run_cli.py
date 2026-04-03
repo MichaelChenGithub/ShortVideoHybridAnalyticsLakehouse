@@ -56,6 +56,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Kafka bootstrap servers when --sink kafka",
     )
     parser.add_argument(
+        "--msk-iam",
+        action="store_true",
+        help="Use AWS MSK IAM (SASL/OAUTHBEARER) auth. Required for MSK Serverless.",
+    )
+    parser.add_argument(
+        "--aws-region",
+        default="us-east-1",
+        help="AWS region for MSK IAM token signing (default: us-east-1)",
+    )
+    parser.add_argument(
         "--content-events-min-partitions",
         type=int,
         default=6,
@@ -114,12 +124,20 @@ def main(argv: list[str] | None = None) -> int:
             bootstrap_kafka_topics(
                 bootstrap_servers=args.bootstrap_servers,
                 expectations=topic_expectations,
+                use_iam_auth=args.msk_iam,
+                aws_region=args.aws_region,
             )
             run_kafka_preflight(
                 bootstrap_servers=args.bootstrap_servers,
                 expectations=topic_expectations,
+                use_iam_auth=args.msk_iam,
+                aws_region=args.aws_region,
             )
-            sink = KafkaEventSink(bootstrap_servers=args.bootstrap_servers)
+            sink = KafkaEventSink(
+                bootstrap_servers=args.bootstrap_servers,
+                use_iam_auth=args.msk_iam,
+                aws_region=args.aws_region,
+            )
         else:
             sink = InMemoryEventSink()
 

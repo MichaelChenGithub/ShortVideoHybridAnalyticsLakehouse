@@ -139,6 +139,38 @@ resource "aws_iam_role_policy" "airflow_task" {
   })
 }
 
+# ── Generator Task Role ───────────────────────────────────────────────────────
+# Allows benchmark generator ECS tasks to produce to MSK Serverless via IAM auth.
+
+resource "aws_iam_role" "generator_task" {
+  name               = "${var.project_name}-generator-task"
+  assume_role_policy = local.ecs_trust_policy
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy" "generator_task" {
+  name = "${var.project_name}-generator-task-policy"
+  role = aws_iam_role.generator_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "MSKServerlessWrite"
+      Effect = "Allow"
+      Action = [
+        "kafka-cluster:Connect",
+        "kafka-cluster:DescribeCluster",
+        "kafka-cluster:DescribeTopic",
+        "kafka-cluster:CreateTopic",
+        "kafka-cluster:WriteData",
+        "kafka-cluster:AlterGroup",
+        "kafka-cluster:DescribeGroup",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 # ── EMR Serverless Execution Role ─────────────────────────────────────────────
 # Assumed by EMR Serverless workers; needs S3 + Glue + MSK Serverless access.
 
@@ -165,7 +197,8 @@ resource "aws_iam_role_policy" "emr_execution" {
       {
         Sid      = "GlueCatalog"
         Effect   = "Allow"
-        Action   = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables",
+        Action   = ["glue:GetDatabase", "glue:GetDatabases", "glue:CreateDatabase",
+                    "glue:GetTable", "glue:GetTables",
                     "glue:CreateTable", "glue:UpdateTable", "glue:DeleteTable",
                     "glue:GetPartition", "glue:GetPartitions", "glue:CreatePartition",
                     "glue:UpdatePartition", "glue:DeletePartition", "glue:BatchCreatePartition"]

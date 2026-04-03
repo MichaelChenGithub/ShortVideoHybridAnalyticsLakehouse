@@ -36,6 +36,7 @@ variable "aws_region" {
 }
 
 variable "airflow_image" {
-  description = "ECR image URI for the Airflow ECS task, e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/lakehouse-airflow:latest"
+  description = "ECR image URI for the Airflow ECS task"
   type        = string
+  default     = "026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest"
 }

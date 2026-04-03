@@ -57,6 +57,10 @@ class JobSettings:
     dim_videos_table: str
     raw_cdc_table: str
     invalid_cdc_table: str
+    use_msk_iam: bool = False
+
+
+ENV_MSK_IAM_AUTH = "RT_VIDEO_CDC_MSK_IAM_AUTH"
 
 
 def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
@@ -80,4 +84,5 @@ def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
         dim_videos_table=values.get(ENV_DIM_VIDEOS_TABLE, DIM_VIDEOS_TABLE),
         raw_cdc_table=values.get(ENV_RAW_CDC_TABLE, RAW_CDC_TABLE),
         invalid_cdc_table=values.get(ENV_INVALID_CDC_TABLE, INVALID_CDC_TABLE),
+        use_msk_iam=values.get(ENV_MSK_IAM_AUTH, "").lower() in ("1", "true", "yes"),
     )
