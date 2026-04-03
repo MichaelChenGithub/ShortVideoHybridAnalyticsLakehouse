@@ -29,9 +29,8 @@ In scope tables:
 11. `lakehouse.gold.batch_retention_daily`
 12. `lakehouse.gold.batch_engagement_daily`
 13. `lakehouse.gold.batch_sessionization_daily`
-14. `lakehouse.gold.batch_publish_manifest`
-15. `lakehouse.qa.run_manifest`
-16. `lakehouse.qa.expected_actions`
+14. `lakehouse.qa.run_manifest`
+15. `lakehouse.qa.expected_actions`
 
 Out of scope (deferred):
 
@@ -574,41 +573,6 @@ Data contract notes:
 3. downstream global views may aggregate over `new_vs_returning_user` when segment split is not needed.
 4. physical partition baseline: `partition by data_date`.
 5. sessionization formula semantics are governed by `docs/architecture/batch-analytics/batch-metrics-contract.md`.
-
-#### 5.10.8 `lakehouse.gold.batch_publish_manifest`
-
-Role:
-
-1. publish-level audit contract for batch SLA and quality-gate traceability in current scope
-
-Grain:
-
-1. `data_date + publish_run_id`
-
-Required fields (minimum):
-
-1. `publish_run_id` STRING
-2. `data_date` DATE
-3. `target_ready_by_et` TIMESTAMP
-4. `published_at` TIMESTAMP
-5. `is_on_time` BOOLEAN
-6. `quality_gate_passed` BOOLEAN
-7. `quality_summary_json` STRING
-8. `status` STRING
-
-Data contract notes:
-
-1. `quality_gate_passed = true` only when all current batch gold outputs pass required quality gates:
-   - `lakehouse.gold.batch_retention_daily`
-   - `lakehouse.gold.batch_engagement_daily`
-   - `lakehouse.gold.batch_sessionization_daily`
-2. manifest rows are append-only by `publish_run_id` for publish traceability.
-3. `target_ready_by_et` is fixed to `08:00` (`America/New_York`) for the corresponding `data_date` publish window.
-4. `is_on_time = true` when `published_at <= target_ready_by_et`.
-5. current scope does not introduce per-table batch metric version columns; metric-logic notes are captured in `quality_summary_json`.
-6. explicit batch metric versioning contract is deferred to future plan.
-
----
 
 ## 6. Join Contract (Baseline)
 

@@ -52,9 +52,8 @@ The canonical task sequence is:
 5. build `lakehouse.gold.batch_engagement_daily`
 6. build `lakehouse.gold.batch_sessionization_daily`
 7. run dbt/data quality gates
-8. write `lakehouse.gold.batch_publish_manifest`
-9. emit publish-ready signal for semantic serving and BI use
-10. package run evidence and close the Airflow run
+8. emit publish-ready signal for semantic serving and BI use
+9. package run evidence and close the Airflow run
 
 Airflow implementation should use `TaskGroup`s to keep operator boundaries readable:
 
@@ -66,7 +65,7 @@ Airflow implementation should use `TaskGroup`s to keep operator boundaries reada
 
 ## 5. Schedule and Data-Date Mapping
 
-1. the DAG runs daily on Airflow on ECS
+1. the DAG runs daily on Airflow on ECS at `04:00` (`America/New_York`)
 2. the business timezone is fixed to `America/New_York`
 3. the publish target remains `D-1` for the business date in `America/New_York`
 4. the Airflow run must compute and pass one canonical `data_date` across all tasks
@@ -98,8 +97,7 @@ Email notifications must trigger for:
 
 1. DAG failure
 2. task failure after retries are exhausted
-3. SLA miss where publish completes after `08:00` (`America/New_York`)
-4. manifest write failure
+3. SLA miss where pipeline does not complete within 3 hours of the `04:00` (`America/New_York`) schedule
 
 Paging, chat integrations, and workflow-driven escalation remain future extensions.
 
@@ -143,10 +141,9 @@ Airflow implementation is accepted only when it demonstrates:
 1. correct `D-1` date resolution in `America/New_York`
 2. correct execution order matching the orchestration contract
 3. blocked publish on any failed quality gate or missing required output
-4. successful manifest write with run traceability fields
-5. email notification behavior for failure and SLA miss paths
-6. operator-triggered rerun/backfill behavior within the `30`-day bound
-7. evidence package sufficient for batch acceptance sign-off
+4. email notification behavior for failure and SLA miss paths
+5. operator-triggered rerun/backfill behavior within the `30`-day bound
+6. evidence package sufficient for batch acceptance sign-off
 
 ## 13. Future Extension
 

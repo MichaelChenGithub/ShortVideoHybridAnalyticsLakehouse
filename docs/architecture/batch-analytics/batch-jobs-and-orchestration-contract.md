@@ -33,8 +33,7 @@ Out of scope (deferred):
 4. build `lakehouse.gold.batch_engagement_daily`
 5. build `lakehouse.gold.batch_sessionization_daily`
 6. run dbt/data quality gates
-7. write `lakehouse.gold.batch_publish_manifest`
-8. emit publish-ready signal for semantic serving/BI use
+7. emit publish-ready signal for semantic serving/BI use
 
 ## 4. Schedule and Data-Date Contract
 
@@ -54,7 +53,6 @@ Out of scope (deferred):
    - `lakehouse.gold.batch_retention_daily`
    - `lakehouse.gold.batch_engagement_daily`
    - `lakehouse.gold.batch_sessionization_daily`
-4. `lakehouse.gold.batch_publish_manifest` has a `success` record for that `data_date`.
 
 If any condition fails, publish-ready signal must not be emitted.
 
@@ -75,8 +73,6 @@ Per publish date, orchestration must leave traceable evidence:
 3. publish status (`success`/`failed`)
 4. on-time status versus `08:00` (`America/New_York`) deadline
 5. run identifier for traceability to job logs/artifacts
-
-The canonical publish evidence table is `lakehouse.gold.batch_publish_manifest`.
 
 ## 8. Future Plan (Deferred)
 

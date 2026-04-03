@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 
 from airflow import DAG
@@ -24,7 +25,7 @@ from orchestration.airflow_batch_dates import (
 )
 
 DAG_ID = "batch_publish_daily"
-DAG_SCHEDULE = "0 8 * * *"
+DAG_SCHEDULE = "0 4 * * *"
 DAG_START_DATE = et_datetime(2026, 3, 1)
 DATA_DATE_TEMPLATE = "{{ ti.xcom_pull(task_ids='resolve_data_date') }}"
 BRANCH_NAME_TEMPLATE = "{{ ti.xcom_pull(task_ids='create_branch') }}"
@@ -34,6 +35,17 @@ SPARK_TASK_TIMEOUT = timedelta(minutes=30)
 QUALITY_GATE_TIMEOUT = timedelta(minutes=10)
 MERGE_TIMEOUT = timedelta(minutes=10)
 EVIDENCE_TIMEOUT = timedelta(minutes=5)
+PIPELINE_SLA = timedelta(hours=3)
+
+ALERT_EMAIL = os.environ.get("AIRFLOW_ALERT_EMAIL", "ops@example.com")
+
+default_args = {
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+    "email": [ALERT_EMAIL],
+    "email_on_failure": True,
+    "email_on_retry": False,
+}
 
 
 def resolve_and_log_data_date(logical_date: str) -> str:
@@ -50,6 +62,7 @@ with DAG(
     start_date=DAG_START_DATE,
     catchup=False,
     max_active_runs=1,
+    default_args=default_args,
     tags=["batch", "local-dev", "airflow"],
 ) as dag:
 
@@ -163,6 +176,7 @@ with DAG(
                 "wap_branch": BRANCH_NAME_TEMPLATE,
             },
             execution_timeout=QUALITY_GATE_TIMEOUT,
+            retries=0,  # quality gate failures must not retry
         )
 
     # ── Step 6: promote WAP branch → main (ALL_SUCCESS gate) ─────────────────
@@ -192,6 +206,7 @@ with DAG(
                 "branch_name": BRANCH_NAME_TEMPLATE,
             },
             execution_timeout=EVIDENCE_TIMEOUT,
+            sla=PIPELINE_SLA,
         )
         emit_publish_ready >> package_evidence
 
