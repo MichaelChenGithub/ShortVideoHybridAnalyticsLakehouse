@@ -40,6 +40,7 @@ class _FakeDAG:
         start_date,
         catchup: bool,
         max_active_runs: int,
+        default_args: dict | None = None,
         tags: list[str],
     ) -> None:
         self.dag_id = dag_id
@@ -48,6 +49,7 @@ class _FakeDAG:
         self.start_date = start_date
         self.catchup = catchup
         self.max_active_runs = max_active_runs
+        self.default_args = default_args or {}
         self.tags = tags
         self.tasks: dict[str, _BaseNode] = {}
         self.task_groups: dict[str, _FakeTaskGroup] = {}
@@ -139,7 +141,7 @@ class BatchPublishDailyDagTests(unittest.TestCase):
 
         dag = module_globals["dag"]
         self.assertEqual(dag.dag_id, "batch_publish_daily")
-        self.assertEqual(dag.schedule, "0 8 * * *")
+        self.assertEqual(dag.schedule, "0 4 * * *")
         self.assertFalse(dag.catchup)
         self.assertEqual(dag.max_active_runs, 1)
         self.assertEqual(str(dag.start_date.tzinfo), "America/New_York")
@@ -258,6 +260,20 @@ class BatchPublishDailyDagTests(unittest.TestCase):
                 self.assertEqual(
                     dag.tasks[task_id].kwargs["execution_timeout"], timedelta(minutes=30)
                 )
+
+    def test_dag_default_args_configure_email_alerts(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        self.assertTrue(dag.default_args.get("email_on_failure"))
+        self.assertFalse(dag.default_args.get("email_on_retry"))
+        self.assertEqual(dag.default_args.get("retries"), 2)
+
+    def test_quality_gate_overrides_retries_to_zero(self) -> None:
+        module_globals = self._load_dag_module()
+
+        dag = module_globals["dag"]
+        self.assertEqual(dag.tasks["run_dbt_semantic_quality_tests"].kwargs.get("retries"), 0)
 
     def test_quality_gate_uses_dbt_callable_with_wap_branch(self) -> None:
         module_globals = self._load_dag_module()
