@@ -168,9 +168,17 @@ aws logs tail /ecs/lakehouse/airflow --region us-east-1 --follow
 
 > Run between demos to avoid idle cost. Validate destroy completes cleanly before relying on this.
 
-Cancel all running EMR streaming jobs first:
+**Only the NAT Gateway has meaningful idle cost (~$32/month).** MSK Serverless, EMR
+Serverless, and ECS tasks are pay-per-use and cost ~$0 when not running. S3 and Glue
+are free to keep. Use targeted destroy to kill only the NAT Gateway — S3 data and
+Glue metadata survive intact.
+
+### Between demos (targeted — preserves all data)
+
+Cancel running EMR jobs and stop the application first, then destroy only the NAT Gateway:
 
 ```bash
+# 1. Cancel all running streaming jobs
 aws emr-serverless list-job-runs --region us-east-1 \
   --application-id $(cd terraform && terraform output -raw emr_application_id) \
   --states RUNNING \
@@ -180,14 +188,32 @@ aws emr-serverless list-job-runs --region us-east-1 \
     --application-id $(cd terraform && terraform output -raw emr_application_id) \
     --job-run-id {}
 
+# 2. Stop the EMR Serverless application
 aws emr-serverless stop-application --region us-east-1 \
   --application-id $(cd terraform && terraform output -raw emr_application_id)
 
+# 3. Destroy only the NAT Gateway (the only resource with idle cost)
+cd terraform && terraform destroy \
+  -target=aws_nat_gateway.main \
+  -target=aws_eip.nat
+```
+
+To resume: `terraform apply` restores the NAT Gateway and all other resources reconnect
+automatically. Then `make submit-all-streaming` to restart the streaming jobs.
+
+### Full destroy (wipes everything except S3 data)
+
+S3 buckets have `force_destroy = false` — Terraform will refuse to delete non-empty
+buckets, so your Iceberg data and checkpoints are safe. Everything else (VPC, MSK,
+EMR application, ECS, Glue, IAM) will be destroyed.
+
+```bash
 cd terraform && terraform destroy
 ```
 
-> S3 buckets (`warehouse` and `checkpoints`) have `force_destroy = true` in Terraform,
-> so `terraform destroy` will delete all data. Export any artifacts you need first.
+> If you want to wipe S3 data too, manually empty the buckets first:
+> `aws s3 rm s3://lakehouse-warehouse-026177432704 --recursive`
+> `aws s3 rm s3://lakehouse-checkpoints-026177432704 --recursive`
 
 ---
 
