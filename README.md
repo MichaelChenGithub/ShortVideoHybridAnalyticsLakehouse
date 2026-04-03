@@ -1,179 +1,144 @@
-# Real-time Transactional Data Lakehouse
+# Short Video Analytics Lakehouse
 
 ![Python](https://img.shields.io/static/v1?label=Python&message=3.10&color=3776AB&logo=python&logoColor=white)
 ![Spark](https://img.shields.io/badge/Apache%20Spark-Structured%20Streaming-orange)
 ![Iceberg](https://img.shields.io/badge/Apache%20Iceberg-Lakehouse-green)
 ![Kafka](https://img.shields.io/badge/Kafka-Event%20Streaming-black)
-![Trino](https://img.shields.io/badge/Trino-Serving%20Layer-blueviolet)
+![Trino](https://img.shields.io/badge/Trino-Serving%20Layer-0F62FE)
 
-Contract-driven data platform for short-video operations across realtime and batch analytics layers.  
-This README is aligned to `docs/` contracts and milestone scope docs (source of truth for scope, KPI, and governance).
+Short Video Analytics Lakehouse is a contract-driven analytics platform for short-video operations. It combines realtime decision previewing with daily batch analytics on a governed lakehouse stack built with Kafka, Spark, Iceberg, Trino, dbt, and Airflow.
 
-## Business Problem
+> [!IMPORTANT]
+> Read my detailed design decisions for this project:
+> [Short Video Analytics: Closing the Gap Between Signals and Truth](https://medium.com/@0429shen/short-video-analytics-closing-the-gap-between-signals-and-truth-2d11005344b6)
 
-Short-video operations need decision-ready signals quickly after upload to:
+## Overview
 
-1. Amplify high-potential, high-quality videos.
-2. Flag high-momentum but risky/low-quality videos for review.
-3. Rescue high-quality new uploads that are under-exposed.
+The platform is designed to support two operational needs in one system:
 
-At the same time, analytics stakeholders need trustworthy batch metrics to evaluate retention, engagement, and session behavior over longer horizons.
+1. Realtime decision support for content operations (`BOOST`, `REVIEW`, `RESCUE`).
+2. Daily analytics products for retention, engagement, and session behavior.
 
-Without a governed realtime + batch platform, actions are delayed, analytics are fragmented, and decisions are hard to audit end-to-end.
+Core delivery path:
 
-## Project Goal
+- Realtime: `Kafka -> Spark Structured Streaming -> Iceberg -> Trino semantic serving -> dashboard preview`
+- Batch: `Iceberg bronze -> Spark batch jobs -> dbt quality gates -> semantic serving outputs`
 
-Deliver a portfolio-ready analytics platform narrative that includes:
-
-1. Realtime decision preview path (`BOOST`, `REVIEW`, `RESCUE`) with auditable contracts.
-2. Batch analytics expansion (`retention`, `engagement`, `sessionization`).
-3. Semantic + dbt quality layer suitable for analytics consumers.
-4. Cloud deployment and scale benchmark evidence.
-
-Realtime delivery path baseline:
-
-`generator -> Kafka -> Spark RT -> Iceberg Gold -> Trino semantic views -> BI dashboard`
-
-## Decision Consumers and Cadence
-
-1. `Content Ops`: consume `BOOST` candidates every minute.
-2. `Trust & Safety Ops`: consume `REVIEW` actions every minute.
-3. `Creator Ops`: consume `RESCUE` actions every 5 minutes.
-4. `Analytics and BI`: consume retention/engagement/sessionization metrics on daily batch cadence.
-5. `Product and Strategy`: review semantic KPI outputs for planning, prioritization, and performance analysis.
-
-## Expected Business Impact
-
-1. Reduce time-to-distribution for high-potential content via faster `BOOST` decisions.
-2. Reduce unsafe amplification by routing risky high-momentum content to `REVIEW` earlier.
-3. Improve creator-side fairness by rescuing high-quality but under-exposed new uploads.
-4. Reduce decision variance across ops teams with one governed realtime decision-preview interface.
-5. Improve cross-team analytics consistency with standardized batch metric definitions and semantic fields.
-6. Speed up analysis cycles by providing trusted, testable data products for operational and business reporting.
-
-## Platform Capabilities
-
-1. Realtime decision preview path:
-   - executable and auditable flow from generator/Kafka/Spark to Gold/Trino/BI
-   - deterministic recommendation preview for `BOOST`, `REVIEW`, `RESCUE`
-2. Batch analytics expansion:
-   - retention, engagement, and sessionization metric coverage
-   - analytics-ready metric serving for business and ops analysis
-3. Semantic + dbt quality layer:
-   - stable semantic fields for BI consumers
-   - dbt-based quality controls for model integrity and trust
-4. Cloud deployment and scale validation:
-   - AWS baseline stack (`MSK + Spark + S3 + Glue + Trino/Athena + dbt Core`)
-   - benchmark evidence for data volume, throughput, and freshness behavior
-
-## Business Impact Model (KPI Tree)
-
-North star:
-
-`Decision-ready operations with analytics-grade trust`
-
-Driver KPIs:
-
-1. `Decision Latency (P95) < 3 minutes`
-2. `Boost Precision (simulation-backed) >= 0.75`
-3. `Rescue Success Rate (simulation-backed) >= 0.70`
-4. `Batch Metric Coverage`: retention/engagement/sessionization are available in governed semantic outputs.
-5. `Semantic Quality Coverage`: dbt tests cover core model constraints and business-critical fields.
-6. `Cloud Scale Evidence`: benchmark artifacts report supported throughput/volume profile.
-
-Guardrails:
-
-1. Realtime freshness breaches trigger degraded-status handling and manual review.
-2. Batch outputs must pass completeness and freshness checks for scheduled deliveries.
-3. Data quality gates are enforced through semantic/dbt test coverage.
-4. Cloud benchmark artifacts report throughput, volume, and freshness behavior under scale tests.
-5. False Suppression Rate (simulation-backed) target `<= 0.10`.
-
-## High-Level Architecture
+## Architecture
 
 ![Data Flow](docs/dataflow_diagram.png)
 
-```text
-content_events + cdc.content.videos
-        -> Kafka contracts
-        -> Spark Structured Streaming
-        -> Iceberg tables (bronze / dims / gold)
-        -> Trino semantic serving
-        -> Metabase operations dashboard (health metrics + recommendation preview)
+### Batch Orchestration
+
+The batch processing path is orchestrated through the `batch_publish_daily` Airflow DAG, which coordinates conformed events, sessionization, batch gold metrics, quality gates, and publish/evidence steps.
+
+![Airflow Batch DAG](docs/airflow_dag.png)
+
+## Local Runbook
+
+Prerequisites:
+
+- Docker + Docker Compose
+- Python 3.10+
+- GNU Make
+
+Set up the Python environment:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-## Local Integration Infra Notes
+Run the full local bootstrap in one command:
 
-1. Local Iceberg REST catalog metadata backend uses PostgreSQL (`catalog-postgres` service in `docker-compose.yml`), not the image default SQLite backend.
-2. This avoids SQLite file-lock contention under concurrent streaming commits (for example CDC + content sinks writing during acceptance/signoff runs).
-3. Local Airflow batch runtime instructions live in `docs/architecture/batch-analytics/local-airflow-dev-runtime.md`.
+```bash
+make up
+```
 
-## Deferred Scope (Future Plan Reference)
+`make up` is the local entrypoint. It:
 
-1. Operational action-queue execution is deferred to future plan.
-2. T+1 reconciliation implementation is deferred to future plan.
-3. Canonical future plan:
-   - `docs/milestone/future-plan.md`
+- Tears down existing containers and named volumes.
+- Rebuilds the core pipeline stack in dependency order.
+- Starts `minio`, `catalog-postgres`, `zookeeper`, `kafka`, `iceberg-rest`, and `spark`.
+- Bootstraps Iceberg namespaces and tables.
+- Creates Kafka topics if they do not already exist.
+- Starts the three realtime Spark jobs in the `spark` container.
+- Runs the bounded generator into Kafka.
+- Waits for the jobs to drain and verifies bronze parquet files in MinIO.
 
-## Reliability Controls
+Start serving and UI services only when needed:
 
-1. SLA target: event-to-preview freshness latency `P95 < 3 minutes`.
-2. Freshness response:
-   - freshness `P95 > 3m` for 5 minutes: mark serving status as degraded and require manual review before operational use
-   - freshness `> 10m` or ingestion outage: mark serving status as stale and block sign-off until healthy again
-3. Batch reliability controls:
-   - scheduled batch runs must complete with published freshness/completeness expectations
-   - semantic/dbt quality checks must pass before publishing batch-derived outputs
-4. Recovery requires sustained healthy windows before promotion.
-5. Late-event impact is tracked via watermark/drop counters and quality monitoring outputs.
-6. Release guard:
-   - `WARN`: manual review required before promoting new `rule_version`
-   - `CRIT`: block promotion until freshness/quality checks return to healthy
-   - automated blocking workflow is deferred to future plan
+```bash
+docker compose up -d trino airflow metabase grafana
+```
 
-## Scope Boundaries
+Local service endpoints:
 
-In scope:
+- MinIO: `http://localhost:9001`
+- Iceberg REST: `http://localhost:8181`
+- Kafka: `localhost:9092`
+- Spark UI: `http://localhost:9090`
+- Trino: `http://localhost:8081`
+- Airflow: `http://localhost:8082`
+- Metabase: `http://localhost:3001`
+- Grafana: `http://localhost:3000`
 
-1. Realtime decision preview for `BOOST`, `REVIEW`, `RESCUE`
-2. Batch metrics expansion: `retention`, `engagement`, `sessionization`
-3. Semantic serving contracts and dbt quality layer
-4. AWS cloud deployment and scale benchmark artifacts (`MSK + Spark + S3 + Glue + Trino/Athena + dbt Core`)
-5. Rule version traceability and freshness-response observability
+Default local credentials:
 
-Out of scope:
+- MinIO: `admin` / `password`
+- Airflow: `admin` / `admin`
 
-1. T+1 reconciliation implementation and operationalization
-2. Operational `rt_action_queue` execution and queue-consumer automation
-3. Automated policy optimization loop in production
-4. Automated degraded-mode switching and automated rollout blocking workflow
+Stop and clean all local containers and named volumes:
 
-## Platform Completion Criteria
+```bash
+make down
+```
 
-Current scope is considered complete when:
+If Spark dependency state is corrupted, force a clean jar download:
 
-1. Semantic serving views, health metrics, and recommendation preview are generated and queryable on 1-minute cadence.
-2. Batch metrics for retention/engagement/sessionization are implemented and documented for analytics consumption.
-3. Semantic + dbt quality checks are documented and operationally testable.
-4. Cloud benchmark evidence is available for resume/interview storytelling.
-5. Realtime recommendations remain deterministic and auditable with explicit `rule_version` and threshold context.
+```bash
+make clean
+```
 
-## Documentation Map (Source of Truth)
+## Validation
 
-1. [Docs Overview](docs/README.md)
-2. [Current Scope (platform scope anchor)](docs/milestone/current-scope.md)
-3. [Future Plan (deferred scope anchor)](docs/milestone/future-plan.md)
-4. [Delivered Scope (reference)](docs/milestone/delivered-scope.md)
-5. [Business Decision PRD & KPI Tree](docs/product/business-decision-prd-kpi-tree.md)
-6. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
-7. [Metric Contract](docs/architecture/realtime-decisioning/metric-contract.md)
-8. [Acceptance Criteria](docs/architecture/realtime-decisioning/acceptance-domain-realtime.md)
-9. [Streaming Execution Contract](docs/architecture/streaming/spark-realtime-jobs-contract.md)
-10. [Kafka Contract](docs/architecture/messaging/kafka-topic-schema-retention-contract.md)
-11. [Data Model Contract](docs/architecture/data-model/data-model-contract.md)
-12. [Trino Semantic Layer and Serving Contract](docs/architecture/serving/trino-realtime-semantic-serving-contract.md)
-13. [Generator Contract and Scenario Matrix](docs/architecture/generator/mock-event-generator-contract-and-scenario-matrix.md)
+If you have not created the Python environment yet:
 
-Note:
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
 
-1. Simulation-backed KPIs are reported as simulation evidence, not causal proof of production lift.
+Run unit/integration tests:
+
+```bash
+.venv/bin/python -m pytest
+```
+
+Run full acceptance flow (reset + seed + six acceptance scripts):
+
+```bash
+make integration-test
+```
+
+Acceptance scripts are under `src/scripts/` and verify realtime and batch contract surfaces end to end.
+
+## Documentation
+
+For full architecture, contracts, and scope boundaries:
+
+1. [Documentation Overview](docs/README.md)
+2. [Current Scope](docs/milestone/current-scope.md)
+3. [Future Plan](docs/milestone/future-plan.md)
+4. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
+5. [Streaming Contract](docs/architecture/streaming/spark-realtime-jobs-contract.md)
+6. [Data Model Contract](docs/architecture/data-model/data-model-contract.md)
+7. [Serving Contract](docs/architecture/serving/trino-realtime-semantic-serving-contract.md)
+8. [Batch Analytics Contracts](docs/architecture/batch-analytics/README.md)
+
+## For Contributors
+
+- Treat `docs/` contracts as the source of truth before changing behavior.
+- Keep changes scoped to one contract surface when possible.
+- Before opening a PR, create `.venv`, install dependencies, and run `pytest`.
+- For Spark job or acceptance-script changes, run `make integration-test`.
