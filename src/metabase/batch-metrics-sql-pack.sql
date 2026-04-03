@@ -84,7 +84,23 @@ WITH target AS (
 SELECT
     s.region,
     SUM(s.sessions) AS sessions,
-    AVG(s.sessions_per_user) AS avg_sessions_per_user,
+    CASE
+        WHEN SUM(
+            CASE
+                WHEN s.sessions_per_user > 0
+                THEN CAST(s.sessions AS DOUBLE) / s.sessions_per_user
+                ELSE 0.0
+            END
+        ) > 0
+        THEN CAST(SUM(s.sessions) AS DOUBLE) / SUM(
+            CASE
+                WHEN s.sessions_per_user > 0
+                THEN CAST(s.sessions AS DOUBLE) / s.sessions_per_user
+                ELSE 0.0
+            END
+        )
+        ELSE NULL
+    END AS avg_sessions_per_user,
     CASE
         WHEN SUM(s.sessions) > 0
         THEN CAST(SUM(s.avg_session_duration_sec * s.sessions) AS DOUBLE) / SUM(s.sessions)
@@ -353,17 +369,44 @@ FROM sessionization_base;
 WITH target AS (
     SELECT date_add('day', -1, CAST(current_timestamp AT TIME ZONE 'America/New_York' AS date)) AS expected_data_date
 ),
-retention_freshness AS (
-    SELECT MAX(data_date) AS latest_data_date, MAX(published_at) AS latest_published_at
+retention_latest AS (
+    SELECT MAX(data_date) AS latest_data_date
     FROM lakehouse.serving.v_bt_retention_daily
 ),
-engagement_freshness AS (
-    SELECT MAX(data_date) AS latest_data_date, MAX(published_at) AS latest_published_at
+retention_freshness AS (
+    SELECT
+        l.latest_data_date,
+        MAX(r.published_at) AS latest_published_at
+    FROM retention_latest l
+    LEFT JOIN lakehouse.serving.v_bt_retention_daily r
+      ON r.data_date = l.latest_data_date
+    GROUP BY 1
+),
+engagement_latest AS (
+    SELECT MAX(data_date) AS latest_data_date
     FROM lakehouse.serving.v_bt_engagement_daily
 ),
-sessionization_freshness AS (
-    SELECT MAX(data_date) AS latest_data_date, MAX(published_at) AS latest_published_at
+engagement_freshness AS (
+    SELECT
+        l.latest_data_date,
+        MAX(e.published_at) AS latest_published_at
+    FROM engagement_latest l
+    LEFT JOIN lakehouse.serving.v_bt_engagement_daily e
+      ON e.data_date = l.latest_data_date
+    GROUP BY 1
+),
+sessionization_latest AS (
+    SELECT MAX(data_date) AS latest_data_date
     FROM lakehouse.serving.v_bt_sessionization_daily
+),
+sessionization_freshness AS (
+    SELECT
+        l.latest_data_date,
+        MAX(s.published_at) AS latest_published_at
+    FROM sessionization_latest l
+    LEFT JOIN lakehouse.serving.v_bt_sessionization_daily s
+      ON s.data_date = l.latest_data_date
+    GROUP BY 1
 )
 SELECT
     current_timestamp AS checked_at,
