@@ -28,17 +28,6 @@ Core delivery path:
 
 ![Data Flow](docs/dataflow_diagram.png)
 
-High-level processing model:
-
-```text
-content_events + cdc.videos
-  -> Kafka contracts
-  -> Spark (streaming + batch)
-  -> Iceberg tables (bronze / dims / gold)
-  -> Trino semantic layer
-  -> BI and operational decision preview
-```
-
 ## Local Runbook
 
 Prerequisites:
