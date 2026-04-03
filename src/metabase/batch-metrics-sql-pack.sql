@@ -19,9 +19,13 @@ WITH target AS (
 SELECT
     r.cohort_date,
     r.day_n,
-    AVG(r.retention_rate) AS avg_retention_rate,
     SUM(r.cohort_users) AS cohort_users,
     SUM(r.retained_users) AS retained_users,
+    CASE
+        WHEN SUM(r.cohort_users) > 0
+        THEN CAST(SUM(r.retained_users) AS DOUBLE) / SUM(r.cohort_users)
+        ELSE NULL
+    END AS avg_retention_rate,
     MAX(r.published_at) AS published_at
 FROM lakehouse.serving.v_bt_retention_daily r
 CROSS JOIN target t
@@ -43,10 +47,26 @@ SELECT
     SUM(e.likes) AS likes,
     SUM(e.shares) AS shares,
     SUM(e.skips) AS skips,
-    AVG(e.play_start_rate) AS avg_play_start_rate,
-    AVG(e.completion_rate) AS avg_completion_rate,
-    AVG(e.interaction_rate) AS avg_interaction_rate,
-    AVG(e.skip_rate) AS avg_skip_rate,
+    CASE
+        WHEN SUM(e.impressions) > 0
+        THEN CAST(SUM(e.play_start) AS DOUBLE) / SUM(e.impressions)
+        ELSE NULL
+    END AS avg_play_start_rate,
+    CASE
+        WHEN SUM(e.play_start) > 0
+        THEN CAST(SUM(e.play_finish) AS DOUBLE) / SUM(e.play_start)
+        ELSE NULL
+    END AS avg_completion_rate,
+    CASE
+        WHEN SUM(e.impressions) > 0
+        THEN CAST(SUM(e.likes + e.shares) AS DOUBLE) / SUM(e.impressions)
+        ELSE NULL
+    END AS avg_interaction_rate,
+    CASE
+        WHEN SUM(e.play_start) > 0
+        THEN CAST(SUM(e.skips) AS DOUBLE) / SUM(e.play_start)
+        ELSE NULL
+    END AS avg_skip_rate,
     MAX(e.published_at) AS published_at
 FROM lakehouse.serving.v_bt_engagement_daily e
 CROSS JOIN target t
