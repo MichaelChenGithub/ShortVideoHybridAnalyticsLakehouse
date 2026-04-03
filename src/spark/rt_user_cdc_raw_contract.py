@@ -51,6 +51,10 @@ class JobSettings:
     consumer_group: str
     raw_cdc_users_table: str
     invalid_cdc_users_table: str
+    use_msk_iam: bool = False
+
+
+ENV_MSK_IAM_AUTH = "RT_USER_CDC_MSK_IAM_AUTH"
 
 
 def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
@@ -72,4 +76,5 @@ def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
         consumer_group=values.get(ENV_CONSUMER_GROUP, DEFAULT_CONSUMER_GROUP),
         raw_cdc_users_table=values.get(ENV_RAW_CDC_USERS_TABLE, RAW_CDC_USERS_TABLE),
         invalid_cdc_users_table=values.get(ENV_INVALID_CDC_USERS_TABLE, INVALID_CDC_USERS_TABLE),
+        use_msk_iam=values.get(ENV_MSK_IAM_AUTH, "").lower() in ("1", "true", "yes"),
     )
