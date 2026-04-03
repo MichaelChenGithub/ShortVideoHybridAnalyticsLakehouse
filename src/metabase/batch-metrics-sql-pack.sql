@@ -47,26 +47,10 @@ SELECT
     SUM(e.likes) AS likes,
     SUM(e.shares) AS shares,
     SUM(e.skips) AS skips,
-    CASE
-        WHEN SUM(e.impressions) > 0
-        THEN CAST(SUM(e.play_start) AS DOUBLE) / SUM(e.impressions)
-        ELSE NULL
-    END AS avg_play_start_rate,
-    CASE
-        WHEN SUM(e.play_start) > 0
-        THEN CAST(SUM(e.play_finish) AS DOUBLE) / SUM(e.play_start)
-        ELSE NULL
-    END AS avg_completion_rate,
-    CASE
-        WHEN SUM(e.play_finish) > 0
-        THEN CAST(SUM(e.likes + e.shares) AS DOUBLE) / SUM(e.play_finish)
-        ELSE NULL
-    END AS avg_interaction_rate,
-    CASE
-        WHEN SUM(e.play_start) > 0
-        THEN CAST(SUM(e.skips) AS DOUBLE) / SUM(e.play_start)
-        ELSE NULL
-    END AS avg_skip_rate,
+    CAST(SUM(e.play_start) AS DOUBLE) / GREATEST(CAST(SUM(e.impressions) AS DOUBLE), 1.0) AS avg_play_start_rate,
+    CAST(SUM(e.play_finish) AS DOUBLE) / GREATEST(CAST(SUM(e.play_start) AS DOUBLE), 1.0) AS avg_completion_rate,
+    CAST(SUM(e.likes + e.shares) AS DOUBLE) / GREATEST(CAST(SUM(e.play_finish) AS DOUBLE), 1.0) AS avg_interaction_rate,
+    CAST(SUM(e.skips) AS DOUBLE) / GREATEST(CAST(SUM(e.play_start) AS DOUBLE), 1.0) AS avg_skip_rate,
     MAX(e.published_at) AS published_at
 FROM lakehouse.serving.v_bt_engagement_daily e
 CROSS JOIN target t
