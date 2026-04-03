@@ -13,6 +13,7 @@ Provide execution steps and evidence requirements for batch analytics acceptance
    - `../batch-jobs-and-orchestration-contract.md`
    - `../../serving/trino-batch-semantic-serving-contract.md`
    - `../../quality/dbt-semantic-quality-contract.md`
+   - `../../serving/reference/metabase-batch-dashboard-acceptance-runbook.md`
 2. batch pipelines and serving layer are queryable
 3. verification environment can run SQL/dbt checks and collect artifacts
 
@@ -23,7 +24,8 @@ Provide execution steps and evidence requirements for batch analytics acceptance
 3. verify required batch gold outputs exist and are non-empty
 4. verify serving views are queryable with required fields
 5. verify manifest has success record for same `data_date`
-6. record publish readiness status versus `08:00` ET target
+6. run Metabase batch dashboard acceptance SQL pack checks (`Section B`)
+7. record publish readiness status versus `08:00` ET target
 
 ## 4. Artifact Schema
 
@@ -38,7 +40,8 @@ Required files (minimum):
 3. `dbt_test_summary.json`
 4. `serving_contract_checks.csv`
 5. `publish_manifest_row.json`
-6. `acceptance_summary.md`
+6. `metabase_batch_section_b_results.csv`
+7. `acceptance_summary.md`
 
 ## 5. Pass/Fail Gates
 

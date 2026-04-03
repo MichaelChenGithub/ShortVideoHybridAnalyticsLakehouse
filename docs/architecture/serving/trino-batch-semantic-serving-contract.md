@@ -202,6 +202,9 @@ Formula governance:
    - covered by section 7
 4. BI consumption boundaries are explicit:
    - covered by section 8
+5. Metabase dashboard and acceptance query pack reference:
+   - `src/metabase/batch-metrics-sql-pack.sql`
+   - `docs/architecture/serving/reference/metabase-batch-dashboard-acceptance-runbook.md`
 
 ## 10. Future Plan (Deferred)
 
