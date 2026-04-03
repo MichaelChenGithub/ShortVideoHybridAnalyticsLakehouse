@@ -13,6 +13,7 @@ Provide execution steps and evidence requirements for batch analytics acceptance
    - `../batch-jobs-and-orchestration-contract.md`
    - `../../serving/trino-batch-semantic-serving-contract.md`
    - `../../quality/dbt-semantic-quality-contract.md`
+   - `../../serving/reference/metabase-batch-dashboard-acceptance-runbook.md`
 2. batch pipelines and serving layer are queryable
 3. verification environment can run SQL/dbt checks and collect artifacts
 
