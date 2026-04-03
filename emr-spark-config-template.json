@@ -1,0 +1,22 @@
+{
+  "applicationConfiguration": [
+    {
+      "classification": "spark-defaults",
+      "properties": {
+        "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        "spark.sql.catalog.lakehouse": "org.apache.iceberg.spark.SparkCatalog",
+        "spark.sql.catalog.lakehouse.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+        "spark.sql.catalog.lakehouse.warehouse": "s3://WAREHOUSE_BUCKET/",
+        "spark.sql.catalog.lakehouse.io-impl": "org.apache.iceberg.aws.s3.S3FileIO",
+        "spark.hadoop.fs.s3.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+        "spark.jars.packages": "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,software.amazon.msk:aws-msk-iam-auth:1.1.9",
+        "spark.dynamicAllocation.minExecutors": "1"
+      }
+    }
+  ],
+  "monitoringConfiguration": {
+    "s3MonitoringConfiguration": {
+      "logUri": "s3://WAREHOUSE_BUCKET/emr-logs/"
+    }
+  }
+}

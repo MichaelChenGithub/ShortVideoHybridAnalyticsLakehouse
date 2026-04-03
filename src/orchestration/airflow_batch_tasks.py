@@ -162,6 +162,7 @@ def _run_emr_job(
 
     spark_submit_params = (
         f"--conf spark.hadoop.fs.s3a.bucket.{WAREHOUSE_BUCKET}.endpoint=s3.amazonaws.com"
+        f" --conf spark.sql.catalog.lakehouse.warehouse=s3://{WAREHOUSE_BUCKET}/"
     )
     if data_date_env is not None:
         spark_submit_params += (
