@@ -33,6 +33,9 @@ EMR_SPARK_CONF_URI = f"s3://{WAREHOUSE_BUCKET}/config/spark-defaults-aws.conf"
 EMR_SCRIPTS_URI = f"s3://{WAREHOUSE_BUCKET}/scripts/spark"
 EMR_POLL_INTERVAL = 15  # seconds
 
+# dbt project dir: volume-mounted in local dev; baked into image on AWS
+AWS_DBT_PROJECT_DIR = "/opt/airflow/dbt"
+
 # ── Job registry ──────────────────────────────────────────────────────────────
 
 SPARK_BATCH_SPECS = {
@@ -203,6 +206,53 @@ def _run_emr_job(
             raise RuntimeError(f"EMR Serverless job {job_key} run {run_id} ended with state {state}")
         time.sleep(EMR_POLL_INTERVAL)
 
+def _run_emr_branch_op(op: str, *, branch_name: str) -> None:
+    """Submit bt_branch_lifecycle.py to EMR Serverless and poll until terminal state."""
+    import boto3
+    client = boto3.client("emr-serverless")
+
+    spark_submit_params = (
+        f"--conf spark.hadoop.fs.s3a.bucket.{WAREHOUSE_BUCKET}.endpoint=s3.amazonaws.com"
+        f" --conf spark.sql.catalog.lakehouse.warehouse=s3://{WAREHOUSE_BUCKET}/"
+        f" --conf spark.emr-serverless.driverEnv.ICEBERG_BRANCH_OP={op}"
+        f" --conf spark.emr-serverless.driverEnv.ICEBERG_WAP_BRANCH={branch_name}"
+    )
+
+    response = client.start_job_run(
+        applicationId=EMR_APPLICATION_ID,
+        executionRoleArn=EMR_EXECUTION_ROLE_ARN,
+        jobDriver={
+            "sparkSubmit": {
+                "entryPoint": f"{EMR_SCRIPTS_URI}/bt_branch_lifecycle.py",
+                "sparkSubmitParameters": spark_submit_params,
+            }
+        },
+        configurationOverrides={
+            "monitoringConfiguration": {
+                "s3MonitoringConfiguration": {
+                    "logUri": f"s3://{WAREHOUSE_BUCKET}/emr-logs/branch_{op}/"
+                }
+            }
+        },
+        name=f"branch_{op}_{branch_name}",
+    )
+    run_id = response["jobRunId"]
+    print(f"[AIRFLOW-BATCH] task=branch_{op} branch={branch_name} emr_run_id={run_id}")
+
+    terminal = {"SUCCESS", "FAILED", "CANCELLING", "CANCELLED"}
+    while True:
+        state = client.get_job_run(
+            applicationId=EMR_APPLICATION_ID, jobRunId=run_id
+        )["jobRun"]["state"]
+        if state == "SUCCESS":
+            break
+        if state in terminal:
+            raise RuntimeError(
+                f"EMR branch op '{op}' run {run_id} ended with state {state}"
+            )
+        time.sleep(EMR_POLL_INTERVAL)
+
+
 # ── Public API (called by DAG) ────────────────────────────────────────────────
 
 def run_spark_batch_job(job_key: str, *, data_date: str, wap_branch: str | None = None) -> None:
@@ -237,10 +287,13 @@ def run_spark_batch_job(job_key: str, *, data_date: str, wap_branch: str | None 
 
 def run_branch_op(op: str, *, branch_name: str) -> None:
     """Execute one Iceberg branch lifecycle operation across all governed tables."""
-    _run_checked(
-        build_branch_lifecycle_command(op, branch_name),
-        label=f"branch_{op}",
-    )
+    if EMR_APPLICATION_ID:
+        _run_emr_branch_op(op, branch_name=branch_name)
+    else:
+        _run_checked(
+            build_branch_lifecycle_command(op, branch_name),
+            label=f"branch_{op}",
+        )
 
 
 def create_iceberg_branch(run_id: str) -> str:
@@ -306,20 +359,24 @@ def run_gold_quality_gates(*, data_date: str) -> None:
 
 
 def run_dbt_quality_gates(*, data_date: str, wap_branch: str) -> None:
-    """Run dbt semantic quality tests against the WAP branch via Trino.
+    """Run dbt semantic quality tests against the WAP branch.
 
-    The ``ICEBERG_WAP_BRANCH`` env var is read by the dbt profile
-    (``profiles.yml``) and forwarded to Trino as a session property so that
-    all dbt queries target the run branch rather than main.
+    Local: connects to Trino via the ``local`` profile target.
+    AWS:   connects to Athena via the ``aws`` profile target (dbt-athena-community).
+
+    The ``ICEBERG_WAP_BRANCH`` env var is forwarded to dbt so all queries
+    target the run branch rather than main.
 
     dbt severity semantics are preserved: ``warn`` tests are non-blocking,
     ``error`` tests block promotion.
     """
+    project_dir = AWS_DBT_PROJECT_DIR if EMR_APPLICATION_ID else DBT_PROJECT_DIR
+    target_args = ["--target", "aws"] if EMR_APPLICATION_ID else []
     env = {**os.environ, "ICEBERG_WAP_BRANCH": wap_branch}
-    dbt_args = ["--profiles-dir", DBT_PROJECT_DIR, "--project-dir", DBT_PROJECT_DIR]
+    dbt_args = ["--profiles-dir", project_dir, "--project-dir", project_dir]
     print(
         f"[AIRFLOW-BATCH] task=dbt_quality_gates "
         f"data_date={data_date} wap_branch={wap_branch}"
     )
-    subprocess.run(["dbt", "run"] + dbt_args, check=True, env=env)
-    subprocess.run(["dbt", "test"] + dbt_args, check=True, env=env)
+    subprocess.run(["dbt", "run"] + dbt_args + target_args, check=True, env=env)
+    subprocess.run(["dbt", "test"] + dbt_args + target_args, check=True, env=env)

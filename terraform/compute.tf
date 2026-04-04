@@ -89,6 +89,7 @@ resource "aws_ecs_task_definition" "airflow" {
       { name = "EMR_EXECUTION_ROLE_ARN",          value = aws_iam_role.emr_execution.arn },
       { name = "GLUE_DATABASE",                   value = aws_glue_catalog_database.main.name },
       { name = "WAREHOUSE_BUCKET",                value = aws_s3_bucket.warehouse.bucket },
+      { name = "ATHENA_RESULTS_BUCKET",          value = aws_s3_bucket.checkpoints.bucket },
       { name = "AIRFLOW_ALERT_EMAIL",             value = "shen.nutrition.ai@gmail.com" },
       { name = "AIRFLOW__SMTP__SMTP_HOST",        value = "email-smtp.${var.aws_region}.amazonaws.com" },
       { name = "AIRFLOW__SMTP__SMTP_PORT",        value = "587" },

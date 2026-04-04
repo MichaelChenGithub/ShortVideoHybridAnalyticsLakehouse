@@ -10,3 +10,10 @@ ShortVideoHybridAnalyticsLakehouse:
       database: lakehouse
       schema: semantic_quality
       threads: 1
+    aws:
+      type: athena
+      region_name: "{{ env_var('AWS_DEFAULT_REGION', 'us-east-1') }}"
+      s3_staging_dir: "s3://{{ env_var('ATHENA_RESULTS_BUCKET') }}/athena-results/dbt/"
+      database: awsdatacatalog
+      schema: "{{ env_var('GLUE_DATABASE') }}"
+      threads: 1
