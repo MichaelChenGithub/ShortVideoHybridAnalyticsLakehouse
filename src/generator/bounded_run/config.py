@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
@@ -47,6 +47,12 @@ class RunConfig:
         }
 
 
+def _default_started_at() -> datetime:
+    """Return yesterday at 12:00:00 UTC — the canonical benchmark started_at."""
+    yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+    return datetime(yesterday.year, yesterday.month, yesterday.day, 12, 0, 0, tzinfo=timezone.utc)
+
+
 def _parse_timestamp(value: Any) -> datetime:
     if isinstance(value, datetime):
         dt = value
@@ -82,7 +88,6 @@ def _validate_config_values(config: Dict[str, Any]) -> None:
         "scenario_mix",
         "late_event_ratio",
         "rule_version",
-        "started_at",
     }
     missing = sorted(required - set(config.keys()))
     if missing:
@@ -161,6 +166,9 @@ def load_run_config(config_path: str | Path, overrides: Optional[Mapping[str, An
         if value is None:
             continue
         merged[key] = value
+
+    if "started_at" not in merged:
+        merged["started_at"] = _default_started_at()
 
     if isinstance(merged.get("scenario_mix"), str):
         try:

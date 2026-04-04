@@ -124,9 +124,14 @@ resource "aws_iam_role_policy" "airflow_task" {
                     aws_s3_bucket.checkpoints.arn,  "${aws_s3_bucket.checkpoints.arn}/*"]
       },
       {
-        Sid      = "GlueAccess"
-        Effect   = "Allow"
-        Action   = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetPartition", "glue:GetPartitions"]
+        Sid    = "GlueAccess"
+        Effect = "Allow"
+        Action = [
+          "glue:GetDatabase", "glue:GetDatabases", "glue:CreateDatabase",
+          "glue:GetTable", "glue:GetTables",
+          "glue:CreateTable", "glue:UpdateTable", "glue:DeleteTable",
+          "glue:GetPartition", "glue:GetPartitions",
+        ]
         Resource = "*"
       },
       {
@@ -134,9 +139,27 @@ resource "aws_iam_role_policy" "airflow_task" {
         Effect   = "Allow"
         Action   = "ses:SendRawEmail"
         Resource = "*"
+      },
+      {
+        Sid      = "AthenaQuery"
+        Effect   = "Allow"
+        Action   = [
+          "athena:StartQueryExecution",
+          "athena:GetQueryExecution",
+          "athena:GetQueryResults",
+          "athena:StopQueryExecution",
+          "athena:ListWorkGroups",
+          "athena:GetWorkGroup",
+        ]
+        Resource = "*"
       }
     ]
   })
+}
+
+output "emr_execution_role_arn" {
+  description = "ARN of the EMR Serverless execution role — used by Makefile _emr-vars"
+  value       = aws_iam_role.emr_execution.arn
 }
 
 # ── Generator Task Role ───────────────────────────────────────────────────────

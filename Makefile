@@ -100,7 +100,7 @@ run-generator-smoke: _ecs-vars
 	  --task-definition $(GEN_TASK_DEF) \
 	  --launch-type FARGATE \
 	  --network-configuration "awsvpcConfiguration={subnets=[$(SUBNET)],securityGroups=[$(SG)],assignPublicIp=DISABLED}" \
-	  --overrides '{"containerOverrides":[{"name":"generator","command":["--seed","99","--duration-minutes","10","--events-per-sec","500","--started-at","$(STARTED_AT)"]}]}'
+	  --overrides '{"containerOverrides":[{"name":"generator","command":["--seed","99","--duration-minutes","10","--events-per-sec","500"]}]}'
 
 ## run-generator-benchmark: Launch 4 generator tasks in parallel (seeds 1-4, 25K events/sec each = 100K total)
 run-generator-benchmark: _ecs-vars
@@ -110,7 +110,7 @@ run-generator-benchmark: _ecs-vars
 	    --task-definition $(GEN_TASK_DEF) \
 	    --launch-type FARGATE \
 	    --network-configuration "awsvpcConfiguration={subnets=[$(SUBNET)],securityGroups=[$(SG)],assignPublicIp=DISABLED}" \
-	    --overrides "{\"containerOverrides\":[{\"name\":\"generator\",\"command\":[\"--seed\",\"$$seed\",\"--started-at\",\"$(STARTED_AT)\"]}]}" \
+	    --overrides "{\"containerOverrides\":[{\"name\":\"generator\",\"command\":[\"--seed\",\"$$seed\"]}]}" \
 	    --query 'tasks[0].taskArn' --output text; \
 	done
 
@@ -126,7 +126,6 @@ _ecs-vars:
 	$(eval SG          := $(shell aws ec2 describe-security-groups --region us-east-1 \
 	  --filters "Name=group-name,Values=lakehouse-ecs-tasks-sg" \
 	  --query "SecurityGroups[0].GroupId" --output text))
-	$(eval STARTED_AT  := $(shell date -u -v-1d '+%Y-%m-%dT12:00:00Z'))
 
 # ── Internal: resolve AWS values from terraform outputs ───────────────────────
 .PHONY: _emr-vars
@@ -135,7 +134,7 @@ _emr-vars:
 	$(eval WAREHOUSE   := $(shell cd terraform && terraform output -raw warehouse_bucket))
 	$(eval CHECKPOINTS := $(shell cd terraform && terraform output -raw checkpoints_bucket))
 	$(eval EMR_APP     := $(shell cd terraform && terraform output -raw emr_application_id))
-	$(eval EMR_ROLE    := $(shell aws iam get-role --role-name lakehouse-emr-execution --query Role.Arn --output text))
+	$(eval EMR_ROLE    := $(shell cd terraform && terraform output -raw emr_execution_role_arn))
 	$(eval MSK         := $(shell cd terraform && terraform output -raw msk_bootstrap_brokers_sasl_iam))
 
 ## help: List available targets

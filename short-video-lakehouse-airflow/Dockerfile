@@ -23,3 +23,12 @@ RUN pip install --no-cache-dir \
 #   docker build -f short-video-lakehouse-airflow/Dockerfile -t short-video-lakehouse-airflow .
 COPY dags/ /opt/airflow/dags/
 COPY src/orchestration/ /opt/airflow/dags/orchestration/
+
+# dbt project — used by run_dbt_quality_gates on AWS (--target aws hits Athena)
+COPY dbt_project.yml /opt/airflow/dbt/dbt_project.yml
+COPY profiles.yml    /opt/airflow/dbt/profiles.yml
+COPY packages.yml    /opt/airflow/dbt/packages.yml
+COPY models/         /opt/airflow/dbt/models/
+COPY macros/         /opt/airflow/dbt/macros/
+COPY tests_dbt/      /opt/airflow/dbt/tests_dbt/
+RUN dbt deps --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt

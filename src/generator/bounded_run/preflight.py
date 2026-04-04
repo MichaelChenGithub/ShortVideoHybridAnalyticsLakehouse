@@ -26,24 +26,25 @@ def build_default_topic_expectations(
     content_events_min_partitions: int = 6,
     cdc_videos_min_partitions: int = 3,
     cdc_users_min_partitions: int = 3,
+    replication_factor: int = 1,
 ) -> Tuple[TopicExpectation, TopicExpectation, TopicExpectation]:
     return (
         TopicExpectation(
             topic=TOPIC_CONTENT_EVENTS,
             min_partitions=content_events_min_partitions,
-            replication_factor=1,
+            replication_factor=replication_factor,
             key_field="video_id",
         ),
         TopicExpectation(
             topic=TOPIC_CDC_VIDEOS,
             min_partitions=cdc_videos_min_partitions,
-            replication_factor=1,
+            replication_factor=replication_factor,
             key_field="video_id",
         ),
         TopicExpectation(
             topic=TOPIC_CDC_USERS,
             min_partitions=cdc_users_min_partitions,
-            replication_factor=1,
+            replication_factor=replication_factor,
             key_field="user_id",
         ),
     )

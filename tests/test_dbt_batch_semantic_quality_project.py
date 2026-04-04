@@ -43,7 +43,7 @@ class DbtBatchSemanticQualityProjectTests(unittest.TestCase):
                 self.assertTrue(path.exists())
                 contents = path.read_text(encoding="utf-8")
                 self.assertIn("select *", contents.lower())
-                self.assertIn("{{ source('gold',", contents)
+                self.assertIn("{{ wap_source('gold',", contents)
                 self.assertNotIn("lakehouse.serving", contents)
 
     def test_schema_yaml_declares_expected_models_and_sources(self) -> None:

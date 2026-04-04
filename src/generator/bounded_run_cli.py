@@ -120,6 +120,7 @@ def main(argv: list[str] | None = None) -> int:
             topic_expectations = build_default_topic_expectations(
                 content_events_min_partitions=args.content_events_min_partitions,
                 cdc_videos_min_partitions=args.cdc_videos_min_partitions,
+                replication_factor=3 if args.msk_iam else 1,
             )
             bootstrap_kafka_topics(
                 bootstrap_servers=args.bootstrap_servers,

@@ -115,14 +115,16 @@ class StorageTfTests(unittest.TestCase):
         parsed = _load("storage.tf")
         self.assertTrue(any("aws_glue_catalog_database" in r for r in _resources(parsed)))
 
-    def test_buckets_have_force_destroy(self) -> None:
+    def test_buckets_have_force_destroy_false(self) -> None:
+        # S3 data must survive terraform destroy — Iceberg tables and benchmark
+        # data are preserved intentionally. Teardown uses targeted NAT-only destroy.
         parsed = _load("storage.tf")
         for block in _resources(parsed):
             if "aws_s3_bucket" in block:
                 for name, bucket in block["aws_s3_bucket"].items():
-                    self.assertTrue(
+                    self.assertFalse(
                         bucket.get("force_destroy"),
-                        f"Bucket {name!r} must have force_destroy=true for demo teardown",
+                        f"Bucket {name!r} must not have force_destroy=true — S3 data must survive terraform destroy",
                     )
 
 
