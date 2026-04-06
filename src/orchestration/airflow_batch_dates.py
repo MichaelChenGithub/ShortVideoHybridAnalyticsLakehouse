@@ -44,3 +44,36 @@ def canonical_data_date_from_iso_logical_date(logical_date: str) -> str:
     """Parse an ISO logical date string and return the canonical data_date."""
     normalized_logical_date = logical_date.replace("Z", "+00:00")
     return canonical_data_date_iso(datetime.fromisoformat(normalized_logical_date))
+
+
+def date_range(start_date: str, end_date: str) -> list[str]:
+    """Return an ordered list of YYYY-MM-DD strings from start_date to end_date inclusive.
+
+    Raises ValueError if:
+    - start_date > end_date
+    - end_date >= today (future dates not allowed)
+    - the range spans more than 90 dates
+    """
+    today = date.today()
+    start = date.fromisoformat(start_date)
+    end = date.fromisoformat(end_date)
+
+    if start > end:
+        raise ValueError(
+            f"start_date {start_date} must be <= end_date {end_date}"
+        )
+    if end >= today:
+        raise ValueError(
+            f"end_date {end_date} must be before today {today.isoformat()}"
+        )
+    if (end - start).days + 1 > 90:
+        raise ValueError(
+            f"Date range exceeds 90 days: {(end - start).days + 1} dates requested"
+        )
+
+    result: list[str] = []
+    current = start
+    while current <= end:
+        result.append(current.isoformat())
+        current += timedelta(days=1)
+    return result
