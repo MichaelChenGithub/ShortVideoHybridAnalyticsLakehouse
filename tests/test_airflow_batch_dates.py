@@ -85,7 +85,7 @@ class TestDateRange(unittest.TestCase):
         result = date_range(start.isoformat(), end.isoformat())
         self.assertEqual(len(result), 90)
         self.assertEqual(result[0], "2026-01-01")
-        self.assertEqual(result[-1], "2026-03-31")
+        self.assertEqual(result[-1], end.isoformat())
 
 
 if __name__ == "__main__":
