@@ -4,34 +4,35 @@ Trigger via the Airflow UI or CLI:
     airflow dags trigger batch_backfill \\
         --conf '{"start_date": "2026-03-01", "end_date": "2026-03-05"}'
 
-The DAG processes each date sequentially through the full pipeline:
-bronze → silver → gold → dbt quality gates → WAP merge.
+Each date is processed by triggering one run of batch_publish_daily, passing
+the target date via the data_date param override. This means backfill uses the
+identical task graph, retry logic, WAP branch management, and publish/evidence
+steps as the scheduled daily pipeline — no separate code path to maintain.
+
+Runs are sequential (max_active_tis_per_dagrun=1) and wait_for_completion=True
+so a failing date halts the backfill before advancing to the next.
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 from airflow import DAG
+from airflow.decorators import task
 from airflow.models.param import Param
-from airflow.operators.python import PythonOperator
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 from orchestration.airflow_batch_dates import et_datetime
-from orchestration.airflow_backfill_tasks import (
-    run_backfill_sequential_task,
-    validate_date_range_task,
-)
+from orchestration.airflow_backfill_tasks import build_trigger_confs as _build_confs
 
 DAG_ID = "batch_backfill"
 
 default_args = {
-    "retries": 0,  # backfill tasks must not auto-retry — operator decides resume point
+    "retries": 0,  # backfill runs must not auto-retry — operator decides resume point
 }
 
 with DAG(
     dag_id=DAG_ID,
     description=(
-        "Manual backfill — reprocesses a date range through the full batch pipeline. "
+        "Manual backfill — triggers batch_publish_daily once per date in range. "
         "Trigger with params: start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)."
     ),
     schedule=None,
@@ -54,20 +55,19 @@ with DAG(
     tags=["batch", "backfill"],
 ) as dag:
 
-    validate = PythonOperator(
-        task_id="validate_date_range",
-        python_callable=validate_date_range_task,
-        op_kwargs={
-            "start_date": "{{ params.start_date }}",
-            "end_date": "{{ params.end_date }}",
-        },
-        execution_timeout=timedelta(minutes=2),
+    @task
+    def build_trigger_confs(start_date: str, end_date: str) -> list[dict]:
+        return _build_confs(start_date, end_date)
+
+    confs = build_trigger_confs(
+        start_date="{{ params.start_date }}",
+        end_date="{{ params.end_date }}",
     )
 
-    run_backfill = PythonOperator(
-        task_id="run_backfill_sequential",
-        python_callable=run_backfill_sequential_task,
-        execution_timeout=timedelta(hours=12),
-    )
-
-    validate >> run_backfill
+    TriggerDagRunOperator.partial(
+        task_id="trigger_daily_pipeline",
+        trigger_dag_id="batch_publish_daily",
+        wait_for_completion=True,
+        reset_dag_run=True,
+        max_active_tis_per_dagrun=1,
+    ).expand(conf=confs)

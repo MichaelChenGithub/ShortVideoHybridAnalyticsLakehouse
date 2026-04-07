@@ -6,6 +6,7 @@ import os
 from datetime import timedelta
 
 from airflow import DAG
+from airflow.models.param import Param
 from airflow.operators.python import PythonOperator
 from airflow.utils.task_group import TaskGroup
 from airflow.utils.trigger_rule import TriggerRule
@@ -48,9 +49,13 @@ default_args = {
 }
 
 
-def resolve_and_log_data_date(logical_date: str) -> str:
-    """Resolve and log the canonical ET D-1 data_date for the DAG run."""
-    data_date = canonical_data_date_from_iso_logical_date(logical_date)
+def resolve_and_log_data_date(logical_date: str, data_date_override: str) -> str:
+    """Resolve and log the canonical data_date for the DAG run.
+
+    When data_date_override is non-empty (backfill triggered run), it is used
+    directly. Otherwise the canonical ET D-1 date is derived from logical_date.
+    """
+    data_date = data_date_override or canonical_data_date_from_iso_logical_date(logical_date)
     print(f"[AIRFLOW-BATCH] logical_date={logical_date} canonical_data_date={data_date}")
     return data_date
 
@@ -63,6 +68,16 @@ with DAG(
     catchup=False,
     max_active_runs=1,
     default_args=default_args,
+    params={
+        "data_date": Param(
+            None,
+            type=["null", "string"],
+            description=(
+                "Override the resolved data_date (backfill use only). "
+                "When set, skips the D-1 resolution from logical_date."
+            ),
+        ),
+    },
     tags=["batch", "local-dev", "airflow"],
 ) as dag:
 
@@ -70,7 +85,10 @@ with DAG(
     resolve_data_date = PythonOperator(
         task_id="resolve_data_date",
         python_callable=resolve_and_log_data_date,
-        op_kwargs={"logical_date": "{{ logical_date.isoformat() }}"},
+        op_kwargs={
+            "logical_date": "{{ logical_date.isoformat() }}",
+            "data_date_override": "{{ params.data_date or '' }}",
+        },
         execution_timeout=RESOLVE_TIMEOUT,
     )
 
