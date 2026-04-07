@@ -45,8 +45,13 @@ terraform apply \
   -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
 
 # AWS — shut down (between demos to avoid idle cost)
+# Destroys idle-cost resources: MSK (~$54/mo), NAT Gateway (~$32/mo), Metabase ECS (~$32/mo)
+# S3 data and Glue catalog are preserved (force_destroy=false)
 terraform destroy \
-  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+  -target=aws_msk_serverless_cluster.main \
+  -target=aws_nat_gateway.main \
+  -target=aws_eip.nat \
+  -target=aws_ecs_service.metabase
 ```
 
 Before any PR: build `.venv` first (`python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`), then run `pytest`. For changes touching acceptance scripts or Spark jobs, run `make integration-test`.
