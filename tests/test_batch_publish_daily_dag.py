@@ -41,6 +41,7 @@ class _FakeDAG:
         catchup: bool,
         max_active_runs: int,
         default_args: dict | None = None,
+        params: dict | None = None,
         tags: list[str],
     ) -> None:
         self.dag_id = dag_id
@@ -50,6 +51,7 @@ class _FakeDAG:
         self.catchup = catchup
         self.max_active_runs = max_active_runs
         self.default_args = default_args or {}
+        self.params = params or {}
         self.tags = tags
         self.tasks: dict[str, _BaseNode] = {}
         self.task_groups: dict[str, _FakeTaskGroup] = {}
@@ -122,10 +124,16 @@ class BatchPublishDailyDagTests(unittest.TestCase):
         trigger_rule_module = types.ModuleType("airflow.utils.trigger_rule")
         trigger_rule_module.TriggerRule = _FAKE_TRIGGER_RULE
 
+        models_module = types.ModuleType("airflow.models")
+        param_module = types.ModuleType("airflow.models.param")
+        param_module.Param = lambda default=None, **kwargs: default
+
         with patch.dict(
             sys.modules,
             {
                 "airflow": airflow_module,
+                "airflow.models": models_module,
+                "airflow.models.param": param_module,
                 "airflow.operators": operators_module,
                 "airflow.operators.empty": empty_module,
                 "airflow.operators.python": python_module,
@@ -219,7 +227,10 @@ class BatchPublishDailyDagTests(unittest.TestCase):
         resolve_data_date = dag.tasks["resolve_data_date"]
         self.assertEqual(
             resolve_data_date.kwargs["op_kwargs"],
-            {"logical_date": "{{ logical_date.isoformat() }}"},
+            {
+                "logical_date": "{{ logical_date.isoformat() }}",
+                "data_date_override": "{{ params.data_date or '' }}",
+            },
         )
         self.assertEqual(resolve_data_date.kwargs["execution_timeout"], timedelta(minutes=5))
 
