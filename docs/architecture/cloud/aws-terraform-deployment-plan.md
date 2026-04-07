@@ -125,14 +125,23 @@ terraform output  # verify all endpoints
 
 ### Shut down between demos (avoid idle cost)
 
+Idle-cost resources to destroy between sessions (~$118/month combined):
+- MSK Serverless cluster: ~$54/month
+- NAT Gateway: ~$32/month
+- Metabase ECS service (always `desired_count=1`): ~$32/month
+
+S3 data and Glue catalog are preserved (`force_destroy=false`). EMR Serverless, IAM, VPC, ECR have no idle cost.
+
 ```bash
 cd terraform
 terraform destroy \
-  -var 'airflow_image=026177432704.dkr.ecr.us-east-1.amazonaws.com/short-video-lakehouse-airflow:latest'
+  -target=aws_msk_serverless_cluster.main \
+  -target=aws_nat_gateway.main \
+  -target=aws_eip.nat \
+  -target=aws_ecs_service.metabase
 ```
 
-NAT gateway and MSK Serverless connection hours are the primary idle costs.
-EMR Serverless and Athena are pay-per-use — no charge when not running jobs.
+To resume: `terraform apply` then `make submit-all-streaming`.
 
 ### Stack outputs reference
 

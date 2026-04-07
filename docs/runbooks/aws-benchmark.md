@@ -175,7 +175,17 @@ Glue metadata survive intact.
 
 ### Between demos (targeted — preserves all data)
 
-Cancel running EMR jobs and stop the application first, then destroy only the NAT Gateway:
+Cancel running EMR jobs and stop the application first, then destroy the idle-cost resources.
+
+**Idle costs to destroy between sessions:**
+| Resource | Cost |
+|----------|------|
+| MSK Serverless cluster | ~$54/month |
+| NAT Gateway | ~$32/month |
+| Metabase ECS service (`desired_count=1`, always running) | ~$32/month |
+
+**Safe to keep** (no idle cost): EMR Serverless application, Glue catalog, IAM, VPC, ECR, CloudWatch log groups.
+**Always keep** (data): S3 buckets (`force_destroy=false`).
 
 ```bash
 # 1. Cancel all running streaming jobs
@@ -192,14 +202,15 @@ aws emr-serverless list-job-runs --region us-east-1 \
 aws emr-serverless stop-application --region us-east-1 \
   --application-id $(cd terraform && terraform output -raw emr_application_id)
 
-# 3. Destroy only the NAT Gateway (the only resource with idle cost)
+# 3. Destroy all idle-cost resources (MSK, NAT Gateway, Metabase)
 cd terraform && terraform destroy \
+  -target=aws_msk_serverless_cluster.main \
   -target=aws_nat_gateway.main \
-  -target=aws_eip.nat
+  -target=aws_eip.nat \
+  -target=aws_ecs_service.metabase
 ```
 
-To resume: `terraform apply` restores the NAT Gateway and all other resources reconnect
-automatically. Then `make submit-all-streaming` to restart the streaming jobs.
+To resume: `terraform apply` restores MSK, NAT Gateway, and Metabase. Then `make submit-all-streaming` to restart the streaming jobs.
 
 ### Full destroy (wipes everything except S3 data)
 

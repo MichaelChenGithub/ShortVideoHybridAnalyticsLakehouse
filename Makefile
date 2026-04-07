@@ -1,4 +1,6 @@
-.PHONY: reset-infra seed-bronze up down clean integration-test upload-aws-scripts package-spark-libs build-generator push-generator submit-all-streaming submit-rt-content-events submit-rt-video-cdc submit-rt-user-cdc run-generator-smoke run-generator-benchmark help
+.PHONY: reset-infra seed-bronze up down clean integration-test upload-aws-scripts package-spark-libs build-generator push-generator submit-all-streaming submit-rt-content-events submit-rt-video-cdc submit-rt-user-cdc run-generator-smoke run-generator-benchmark aws-shutdown aws-resume help
+
+export AWS_PAGER :=
 
 SCRIPTS := src/scripts
 
@@ -136,6 +138,37 @@ _emr-vars:
 	$(eval EMR_APP     := $(shell cd terraform && terraform output -raw emr_application_id))
 	$(eval EMR_ROLE    := $(shell cd terraform && terraform output -raw emr_execution_role_arn))
 	$(eval MSK         := $(shell cd terraform && terraform output -raw msk_bootstrap_brokers_sasl_iam))
+
+## aws-shutdown: Cancel EMR jobs, stop EMR app, destroy all idle-cost resources (keeps S3 + Glue)
+aws-shutdown:
+	@echo "==> Cancelling running EMR streaming jobs..."
+	-aws emr-serverless list-job-runs --region us-east-1 \
+	  --application-id $(shell cd terraform && terraform output -raw emr_application_id) \
+	  --states RUNNING \
+	  --query 'jobRuns[].jobRunId' --output text | \
+	  tr '\t' '\n' | \
+	  xargs -I{} aws emr-serverless cancel-job-run --region us-east-1 \
+	    --application-id $(shell cd terraform && terraform output -raw emr_application_id) \
+	    --job-run-id {}
+	@echo "==> Stopping EMR Serverless application..."
+	-aws emr-serverless stop-application --region us-east-1 \
+	  --application-id $(shell cd terraform && terraform output -raw emr_application_id)
+	@echo "==> Destroying idle-cost resources (MSK ~$$54/mo, NAT ~$$32/mo, Metabase ~$$32/mo)..."
+	@echo "    Keeping: S3 buckets (force_destroy=false) + Glue catalog (Iceberg metadata)"
+	@echo "    Keeping free resources: VPC, IAM, ECR, CloudWatch, Secrets Manager (no idle cost)"
+	cd terraform && terraform destroy \
+	  -target=aws_msk_serverless_cluster.main \
+	  -target=aws_nat_gateway.main \
+	  -target=aws_eip.nat \
+	  -target=aws_ecs_service.metabase \
+	  -auto-approve
+
+## aws-resume: Restore idle-cost resources and restart streaming jobs
+aws-resume:
+	@echo "==> Restoring infrastructure..."
+	cd terraform && terraform apply -auto-approve
+	@echo "==> Restarting streaming jobs..."
+	$(MAKE) submit-all-streaming
 
 ## help: List available targets
 help:
