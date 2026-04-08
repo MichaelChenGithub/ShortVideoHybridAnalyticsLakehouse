@@ -6,4 +6,5 @@ faker==22.5.1
 numpy
 pyiceberg[s3fs]
 pyarrow>=15.0.0
+pytest>=9,<10
 python-hcl2>=4.3
