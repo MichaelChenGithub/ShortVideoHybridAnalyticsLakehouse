@@ -13,7 +13,18 @@ import os
 import re
 import subprocess
 import time
+from datetime import datetime, timezone
 from typing import Iterable
+
+# ── Trino connection constants ────────────────────────────────────────────────
+
+TRINO_HOST = os.environ.get("TRINO_HOST", "lakehouse-trino")
+TRINO_PORT = int(os.environ.get("TRINO_PORT", "8080"))
+TRINO_USER = os.environ.get("TRINO_USER", "airflow")
+
+BRONZE_RAW_EVENTS_TABLE = "lakehouse.bronze.raw_events"
+MANIFEST_TABLE = "lakehouse.qa.bronze_partition_manifest"
+LATE_ARRIVAL_THRESHOLD = int(os.environ.get("LATE_ARRIVAL_THRESHOLD", "1000"))
 
 # ── Local dev constants ───────────────────────────────────────────────────────
 
@@ -253,6 +264,47 @@ def _run_emr_branch_op(op: str, *, branch_name: str) -> None:
         time.sleep(EMR_POLL_INTERVAL)
 
 
+# ── Trino helpers ─────────────────────────────────────────────────────────────
+
+def _trino_connection():
+    """Return an open trino.dbapi connection."""
+    import trino
+    return trino.dbapi.connect(
+        host=TRINO_HOST,
+        port=TRINO_PORT,
+        user=TRINO_USER,
+        catalog="lakehouse",
+    )
+
+
+def _ensure_manifest_table(cursor) -> None:
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS {MANIFEST_TABLE} (
+            event_date       DATE,
+            dag_run_id       VARCHAR,
+            completed_at     TIMESTAMP(6),
+            bronze_row_count BIGINT
+        )
+        WITH (
+            partitioning = ARRAY['days(event_date)']
+        )
+    """)
+
+
+def _read_bronze_partition_count(cursor, event_date: str) -> int:
+    """Read bronze row count for event_date from Iceberg partition metadata.
+
+    Uses the $partitions metadata table — O(partitions), not O(rows).
+    """
+    cursor.execute(f"""
+        SELECT COALESCE(SUM(record_count), 0)
+        FROM "lakehouse"."bronze"."raw_events$partitions"
+        WHERE partition.event_date = DATE '{event_date}'
+    """)
+    row = cursor.fetchone()
+    return int(row[0]) if row else 0
+
+
 # ── Public API (called by DAG) ────────────────────────────────────────────────
 
 def run_spark_batch_job(job_key: str, *, data_date: str, wap_branch: str | None = None) -> None:
@@ -356,6 +408,37 @@ def run_gold_quality_gates(*, data_date: str) -> None:
             label=script_path.rsplit("/", 1)[-1],
             data_date=data_date,
         )
+
+
+def write_bronze_partition_manifest_task(*, data_date: str, dag_run_id: str) -> None:
+    """Write one manifest row for data_date after a successful batch publish.
+
+    Row count is read from the Iceberg $partitions metadata table (O(partitions),
+    not O(rows)). The manifest table is created on first write — idempotent.
+    """
+    conn = _trino_connection()
+    try:
+        cur = conn.cursor()
+        _ensure_manifest_table(cur)
+        bronze_row_count = _read_bronze_partition_count(cur, data_date)
+        completed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
+        cur.execute(f"""
+            INSERT INTO {MANIFEST_TABLE}
+                (event_date, dag_run_id, completed_at, bronze_row_count)
+            VALUES (
+                DATE '{data_date}',
+                '{dag_run_id}',
+                TIMESTAMP '{completed_at}',
+                {bronze_row_count}
+            )
+        """)
+        print(
+            f"[AIRFLOW-BATCH] manifest written: "
+            f"event_date={data_date} dag_run_id={dag_run_id} "
+            f"bronze_row_count={bronze_row_count}"
+        )
+    finally:
+        conn.close()
 
 
 def run_dbt_quality_gates(*, data_date: str, wap_branch: str) -> None:

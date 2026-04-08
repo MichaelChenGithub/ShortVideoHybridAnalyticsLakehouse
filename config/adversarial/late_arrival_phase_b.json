@@ -1,0 +1,12 @@
+{
+  "run_id": "late-arrival-phase-b-seed42",
+  "seed": 42,
+  "started_at": "2026-04-07T12:00:00Z",
+  "duration_minutes": 10,
+  "events_per_sec": 120,
+  "adversarial_scenario": "late_arrival_reprocess",
+  "scenario_params": {
+    "phase": "B",
+    "paired_run_id": "late-arrival-phase-a-seed42"
+  }
+}

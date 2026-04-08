@@ -1,4 +1,4 @@
-.PHONY: reset-infra seed-bronze up down clean integration-test upload-aws-scripts package-spark-libs build-generator push-generator submit-all-streaming submit-rt-content-events submit-rt-video-cdc submit-rt-user-cdc run-generator-smoke run-generator-benchmark aws-shutdown aws-resume help
+.PHONY: reset-infra seed-bronze up down clean integration-test test-late-arrival-reprocess upload-aws-scripts package-spark-libs build-generator push-generator submit-all-streaming submit-rt-content-events submit-rt-video-cdc submit-rt-user-cdc run-generator-smoke run-generator-benchmark aws-shutdown aws-resume help
 
 export AWS_PAGER :=
 
@@ -23,6 +23,10 @@ integration-test: up
 	bash $(SCRIPTS)/run_bt_events_conformed_acceptance.sh
 	bash $(SCRIPTS)/run_bt_user_activity_sessions_30m_acceptance.sh
 	bash $(SCRIPTS)/run_rule_baseline_publish_acceptance.sh
+
+## test-late-arrival-reprocess: reset-infra then run the late arrival reprocess adversarial acceptance
+test-late-arrival-reprocess: reset-infra
+	bash $(SCRIPTS)/run_late_arrival_reprocess_acceptance.sh
 
 ## down: Stop all containers and remove named volumes
 down:
