@@ -32,7 +32,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, help="Override seed")
     parser.add_argument("--duration-minutes", type=int, help="Override duration_minutes")
     parser.add_argument("--events-per-sec", type=int, help="Override events_per_sec")
-    parser.add_argument("--late-event-ratio", type=float, help="Override late_event_ratio")
     parser.add_argument("--rule-version", help="Override rule_version")
     parser.add_argument("--started-at", help="Override started_at ISO-8601")
     parser.add_argument(
@@ -96,7 +95,6 @@ def _build_overrides(args: argparse.Namespace) -> Dict[str, Any]:
         "seed": args.seed,
         "duration_minutes": args.duration_minutes,
         "events_per_sec": args.events_per_sec,
-        "late_event_ratio": args.late_event_ratio,
         "rule_version": args.rule_version,
         "started_at": args.started_at,
     }

@@ -1,5 +1,8 @@
 # Scenario: Duplicate Event Storm
 
+> **Status: Draft — Not Finalized**
+> Design and acceptance criteria are under discussion. Do not implement against this doc yet.
+
 ## 1. The Real-World Problem
 
 Kafka's default delivery guarantee is **at-least-once**. This is a deliberate design

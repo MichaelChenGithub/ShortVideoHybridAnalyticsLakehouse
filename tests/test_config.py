@@ -68,13 +68,6 @@ class RunConfigValidationTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_run_config(cfg_path)
 
-    def test_late_event_ratio_range(self) -> None:
-        payload = build_config({"late_event_ratio": 0.25})
-        with tempfile.TemporaryDirectory() as td:
-            cfg_path = write_config(Path(td), payload)
-            with self.assertRaises(ConfigError):
-                load_run_config(cfg_path)
-
     def test_duration_minimum(self) -> None:
         payload = build_config({"duration_minutes": 9})
         with tempfile.TemporaryDirectory() as td:

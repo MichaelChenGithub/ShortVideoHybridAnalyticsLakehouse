@@ -25,7 +25,6 @@ def base_config() -> Dict[str, Any]:
             "cold_start_under_exposed": 0.10,
             "invalid_payload_burst": 0.05,
         },
-        "late_event_ratio": 0.02,
         "rule_version": "m1_rtv1",
         "started_at": "2026-03-04T14:00:00Z",
     }

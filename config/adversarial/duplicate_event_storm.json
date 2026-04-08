@@ -1,0 +1,12 @@
+{
+  "run_id": "adv-duplicate-storm-seed42",
+  "seed": 42,
+  "duration_minutes": 30,
+  "events_per_sec": 120,
+  "adversarial_scenario": "duplicate_event_storm",
+  "scenario_params": {
+    "duplicate_ratio": 0.20,
+    "replay_delay_seconds": 30,
+    "expected_dedup_floor": 0.99
+  }
+}

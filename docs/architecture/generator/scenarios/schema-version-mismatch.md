@@ -1,5 +1,8 @@
 # Scenario: Schema Version Mismatch
 
+> **Status: Draft — Not Finalized**
+> Design and acceptance criteria are under discussion. Do not implement against this doc yet.
+
 ## 1. The Real-World Problem
 
 No mobile app update is instantaneous. When an engineering team ships a new version of
