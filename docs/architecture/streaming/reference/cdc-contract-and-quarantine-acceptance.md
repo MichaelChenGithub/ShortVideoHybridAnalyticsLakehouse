@@ -11,17 +11,21 @@ Out of scope:
 1. Base CDC upsert bring-up scope (`CDC-UPSERT`).
 2. `content_events` contract enforcement (`CONTENT-CONTRACT`).
 
-## One-Command Entrypoint
+## Automated Coverage
 
 ```bash
-bash src/scripts/run_cdc_contract_acceptance.sh
+bash src/scripts/run_realtime_signoff_acceptance.sh
 ```
 
-Optional invalid-rate gate override:
+Repo-wide acceptance:
 
 ```bash
-MAX_INVALID_RATE=1.0 bash src/scripts/run_cdc_contract_acceptance.sh
+make integration-test
 ```
+
+Current repo note:
+1. There is no dedicated `run_cdc_contract_acceptance.sh` wrapper in this repo.
+2. Use the manual verifier commands below when you need CDC-contract-only validation.
 
 ## Required Environment Variables and Defaults
 

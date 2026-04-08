@@ -43,8 +43,7 @@ Recovery:
 
 1. Watermark handling exists in current streaming baseline, but explicit late-data monitoring and watermark-drop observability instrumentation are not part of current delivery.
 2. Manual release-guard behavior (`WARN/CRIT` style operator review) is inherited as historical baseline, not a current-scope delivery item.
-3. Reference scope anchor:
-   - `docs/milestone/delivered-scope.md`
+3. This section is retained as historical reference for the original realtime baseline.
 
 ## 5. Future Plan (Deferred)
 
@@ -54,5 +53,3 @@ Recovery:
 4. Automated notification mechanisms for freshness/batch/quality breaches.
 5. Automated release-guard workflows and rollout blocking.
 6. Explicit late-data monitoring and watermark-drop observability implementation.
-7. Canonical deferred-scope reference:
-   - `docs/milestone/future-plan.md`

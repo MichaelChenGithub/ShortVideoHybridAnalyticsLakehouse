@@ -69,7 +69,6 @@ Primary contract references:
 
 1. `docs/architecture/serving/trino-batch-semantic-serving-contract.md`
 2. `docs/architecture/batch-analytics/batch-metrics-contract.md`
-3. `docs/milestone/batch-platform-acceptance.md`
 
 Clause mapping:
 

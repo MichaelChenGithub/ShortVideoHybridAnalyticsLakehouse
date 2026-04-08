@@ -63,6 +63,6 @@ Per publish date, retain:
 3. publish manifest record (`data_date`, `published_at`, status, on-time flag)
 4. traceable run identifier linked to orchestration logs
 
-## 7. Future Plan Pointer
+## 7. Deferred Scope
 
-1. canonical deferred-scope reference: `../../milestone/future-plan.md`
+1. Deferred items remain documented inline in the relevant quality and batch contracts.

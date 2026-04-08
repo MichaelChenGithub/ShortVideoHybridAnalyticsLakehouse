@@ -17,7 +17,7 @@ In scope:
 3. automated platform-team-owned execution flow
 4. retries, timeout, concurrency, and SLA handling policies
 5. email-only alerting for failure and SLA miss conditions
-6. bounded operator-approved rerun and backfill workflow
+6. bounded manual rerun and date-range backfill workflow
 7. evidence, auditability, and runbook expectations for production operation
 
 Out of scope:
@@ -104,9 +104,9 @@ Paging, chat integrations, and workflow-driven escalation remain future extensio
 ## 9. Rerun and Backfill Workflow
 
 1. scheduled daily runs are automatic
-2. reruns and backfills are operator-triggered by the platform team
-3. backfill requires explicit `start_date`, `end_date`, and operator-entered reason
-4. current-scope backfill window is bounded to at most `30` calendar days per request
+2. reruns and backfills are manually triggered by the platform team
+3. backfill is a manual date-range trigger with explicit `start_date` and `end_date`
+4. current-scope backfill window is bounded to at most `90` calendar days per request
 5. each rerun or backfill execution must use a distinct `publish_run_id`
 6. rerun and backfill must remain idempotent at partition grain and must not create duplicate publish slices
 7. backfill success does not change the standing `08:00` daily SLA for scheduled runs
@@ -114,7 +114,7 @@ Paging, chat integrations, and workflow-driven escalation remain future extensio
 ## 10. AWS Deployment Boundary
 
 1. Airflow deployment target is Amazon ECS (self-managed, containerized)
-2. Airflow is part of the current AWS baseline stack alongside `MSK + Spark (ECS stream) + Glue (batch) + S3 + Glue Catalog + Athena + dbt Core`
+2. Airflow is part of the current AWS baseline stack alongside `MSK + EMR Serverless + S3 + Glue Catalog + Athena + dbt Core`
 3. DAG code, runtime configuration, and environment references must be deployable through the AWS delivery path used by the platform team
 4. secrets and connection material must be managed through AWS-compatible secure configuration mechanisms rather than hardcoded DAG values
 5. this document defines orchestration behavior, not low-level infrastructure-as-code layout
@@ -142,7 +142,7 @@ Airflow implementation is accepted only when it demonstrates:
 2. correct execution order matching the orchestration contract
 3. blocked publish on any failed quality gate or missing required output
 4. email notification behavior for failure and SLA miss paths
-5. operator-triggered rerun/backfill behavior within the `30`-day bound
+5. manual rerun/backfill behavior within the `90`-day bound
 6. evidence package sufficient for batch acceptance sign-off
 
 ## 13. Future Extension

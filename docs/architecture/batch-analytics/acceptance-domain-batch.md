@@ -37,4 +37,4 @@ Status: Final
 
 ## 5. Future Plan (Deferred)
 
-1. canonical deferred-scope reference: `docs/milestone/future-plan.md`
+1. Deferred items remain documented inline in the relevant batch contracts.

@@ -125,16 +125,14 @@ Acceptance scripts are under `src/scripts/` and verify realtime and batch contra
 
 ## Documentation
 
-For full architecture, contracts, and scope boundaries:
+For full architecture and contracts:
 
 1. [Documentation Overview](docs/README.md)
-2. [Current Scope](docs/milestone/current-scope.md)
-3. [Future Plan](docs/milestone/future-plan.md)
-4. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
-5. [Streaming Contract](docs/architecture/streaming/spark-realtime-jobs-contract.md)
-6. [Data Model Contract](docs/architecture/data-model/data-model-contract.md)
-7. [Serving Contract](docs/architecture/serving/trino-realtime-semantic-serving-contract.md)
-8. [Batch Analytics Contracts](docs/architecture/batch-analytics/README.md)
+2. [Realtime Decisioning Contracts](docs/architecture/realtime-decisioning/README.md)
+3. [Streaming Contract](docs/architecture/streaming/spark-realtime-jobs-contract.md)
+4. [Data Model Contract](docs/architecture/data-model/data-model-contract.md)
+5. [Serving Contract](docs/architecture/serving/trino-realtime-semantic-serving-contract.md)
+6. [Batch Analytics Contracts](docs/architecture/batch-analytics/README.md)
 
 ## For Contributors
 

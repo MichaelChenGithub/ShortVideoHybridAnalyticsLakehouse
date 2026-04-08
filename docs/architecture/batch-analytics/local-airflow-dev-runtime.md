@@ -4,7 +4,7 @@ Status: Draft
 
 ## 1. Purpose
 
-Define the local `docker compose` proving ground for the Airflow batch DAG before the same orchestration contract is promoted to `MWAA`.
+Define the local `docker compose` proving ground for the Airflow batch DAG.
 
 This document covers the MIC-163 runtime boundary only:
 
@@ -37,11 +37,12 @@ Local access:
 
 The local runtime mounts:
 
-1. `./dags` to `/opt/airflow/dags`
-2. `./src` to `/home/iceberg/local/src`
-3. `/var/run/docker.sock` to `/var/run/docker.sock`
+1. repo root `.` to `/home/iceberg/local/repo` for the dbt project and shared repo files
+2. `./dags` to `/opt/airflow/dags`
+3. `./src` to `/home/iceberg/local/src`
+4. `/var/run/docker.sock` to `/var/run/docker.sock`
 
-The container `PYTHONPATH` includes both paths so DAG code can import repo helpers directly.
+The container `PYTHONPATH` includes the DAG and `src` mounts so Airflow tasks can import repo helpers directly.
 
 ## 4. DAG Location and Verification
 
@@ -98,16 +99,18 @@ The local DAG executes these batch tasks for one shared canonical `data_date`:
 5. `src/spark/bt_retention_daily.py`
 6. `src/spark/bt_engagement_daily.py`
 7. `src/spark/bt_sessionization_daily.py`
-8. gold quality gates via:
-   - `src/scripts/verify_bt_retention_daily.py`
-   - `src/scripts/verify_bt_engagement_daily.py`
-   - `src/scripts/verify_bt_sessionization_daily.py`
+8. dbt semantic quality gates via:
+   - `dbt run`
+   - `dbt test`
+   - in-repo project mounted at `/home/iceberg/local/repo`
+   - local target selected by `run_dbt_quality_gates`
 
 The DAG starts at the batch bronze-to-silver normalization boundary (`bt_events_conformed.py`) and
 builds the required SCD2 dimension tables needed by downstream silver/gold jobs.
 It does not start or manage upstream bronze ingestion services such as CDC/realtime producers.
-This local runtime uses Docker socket access as its submission mechanism; future cloud execution can replace
-the underlying command path without changing the DAG dependency graph.
+This local runtime uses Docker socket access as its submission mechanism and executes Spark jobs via `docker exec`
+into the shared `lakehouse-spark` container. The AWS runtime can replace the underlying command path without
+changing the DAG dependency graph.
 
 ## 7. Runtime Boundary
 
@@ -115,7 +118,7 @@ Current local scope still does not implement:
 
 1. publish-ready signal emission beyond a log statement
 2. evidence packaging beyond a log statement
-3. a real in-repo `dbt` project; local quality gates currently use verifier scripts instead
+3. AWS EMR Serverless submission; local runtime still uses `docker exec` into `lakehouse-spark`
 
 ## 8. Task Timeouts
 

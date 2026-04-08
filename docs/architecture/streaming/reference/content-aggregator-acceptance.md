@@ -19,11 +19,21 @@ Runtime defaults (CONTENT-AGGREGATOR):
    - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/raw_events/v1`
    - `s3a://checkpoints/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1`
 
-## One-Command Entrypoint
+## Automated Coverage
 
 ```bash
-bash src/scripts/run_content_aggregator_acceptance.sh
+bash src/scripts/run_realtime_signoff_acceptance.sh
 ```
+
+Repo-wide acceptance:
+
+```bash
+make integration-test
+```
+
+Current repo note:
+1. There is no dedicated `run_content_aggregator_acceptance.sh` wrapper in this repo.
+2. Use the manual verifier command below when you need aggregator-only validation.
 
 ## Required Environment Variables and Defaults
 

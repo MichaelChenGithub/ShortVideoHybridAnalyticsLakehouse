@@ -281,7 +281,6 @@ Storage guidance:
 
 1. `docs/product/business-decision-prd-kpi-tree.md`
 2. `docs/architecture/realtime-decisioning/metric-contract.md`
-3. `docs/architecture/realtime-decisioning/action-queue-contract.md`
-4. `docs/architecture/messaging/kafka-topic-schema-retention-contract.md`
-5. `docs/architecture/streaming/spark-realtime-jobs-contract.md`
-6. `docs/architecture/data-model/data-model-contract.md`
+3. `docs/architecture/messaging/kafka-topic-schema-retention-contract.md`
+4. `docs/architecture/streaming/spark-realtime-jobs-contract.md`
+5. `docs/architecture/data-model/data-model-contract.md`
