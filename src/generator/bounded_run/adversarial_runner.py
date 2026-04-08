@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .adversarial import (
     ADVERSARIAL_DUPLICATE_STORM,
+    ADVERSARIAL_LATE_ARRIVAL_REPROCESS,
     ADVERSARIAL_LATE_BULK_ARRIVAL,
     ADVERSARIAL_SCHEMA_MISMATCH,
 )
@@ -74,6 +75,7 @@ class AdversarialRunner:
             ADVERSARIAL_LATE_BULK_ARRIVAL: self._run_late_bulk_arrival,
             ADVERSARIAL_DUPLICATE_STORM: self._run_duplicate_event_storm,
             ADVERSARIAL_SCHEMA_MISMATCH: self._run_schema_mismatch,
+            ADVERSARIAL_LATE_ARRIVAL_REPROCESS: self._run_late_arrival_reprocess,
         }
 
     def _log(self, message: str) -> None:
@@ -266,4 +268,53 @@ class AdversarialRunner:
         raise NotImplementedError(
             "schema_mismatch scenario is not yet implemented. "
             "Implement _run_schema_mismatch() in adversarial_runner.py."
+        )
+
+    def _run_late_arrival_reprocess(self) -> AdversarialRunResult:
+        """Late arrival reprocess — single-phase normal event emission.
+
+        Phase separation lives in the acceptance script, not here. Each
+        generator run (Phase A or Phase B) is an independent bounded run
+        with the same started_at (D-1). This method emits a standard
+        baseline event stream for whichever phase it is configured as.
+
+        Phase A: full volume, normal duration (e.g. 30 min).
+        Phase B: smaller burst, shorter duration (e.g. 10 min), same started_at.
+
+        The acceptance script orchestrates: run Phase A → batch job → run
+        Phase B → sensor detects delta → backfill triggered.
+        """
+        phase = self.config.scenario_params.get("phase", "A")
+        self._log(f"[late_arrival_reprocess] starting phase={phase} run_id={self.config.run_id}")
+
+        video_rows, video_ids = self._build_baseline_video_registry()
+        user_rows = self._build_user_registry()
+
+        if phase == "A":
+            # Phase A bootstraps the CDC registries. Phase B skips this —
+            # video catalog and user registry are already in the system.
+            self._emit_video_cdc_bootstrap(video_rows)
+            self.clock.sleep(float(self.cdc_gate_seconds))
+            self._emit_user_cdc_bootstrap(user_rows)
+            self.clock.sleep(float(self.cdc_gate_seconds))
+
+        emitted = self._emit_baseline_event_stream(
+            video_ids,
+            user_rows,
+            event_timestamp_fn=lambda _idx, second_start: second_start,
+        )
+
+        self._log(
+            f"[late_arrival_reprocess] phase={phase} emitted={len(emitted)} events "
+            f"started_at={self.config.started_at.isoformat()}"
+        )
+        return AdversarialRunResult(
+            summary={
+                "scenario": "late_arrival_reprocess",
+                "phase": phase,
+                "run_id": self.config.run_id,
+                "paired_run_id": self.config.scenario_params.get("paired_run_id", ""),
+                "started_at": self.config.started_at.isoformat(),
+                "total_emitted": len(emitted),
+            }
         )

@@ -26,11 +26,13 @@ from typing import Dict, Sequence, Tuple
 ADVERSARIAL_LATE_BULK_ARRIVAL = "late_bulk_arrival"
 ADVERSARIAL_DUPLICATE_STORM = "duplicate_event_storm"
 ADVERSARIAL_SCHEMA_MISMATCH = "schema_mismatch"
+ADVERSARIAL_LATE_ARRIVAL_REPROCESS = "late_arrival_reprocess"
 
 ADVERSARIAL_SCENARIO_KEYS: Tuple[str, ...] = (
     ADVERSARIAL_LATE_BULK_ARRIVAL,
     ADVERSARIAL_DUPLICATE_STORM,
     ADVERSARIAL_SCHEMA_MISMATCH,
+    ADVERSARIAL_LATE_ARRIVAL_REPROCESS,
 )
 
 
@@ -52,6 +54,23 @@ class AdversarialTemplate:
 # ---------------------------------------------------------------------------
 
 ADVERSARIAL_REGISTRY: Dict[str, AdversarialTemplate] = {
+    ADVERSARIAL_LATE_ARRIVAL_REPROCESS: AdversarialTemplate(
+        scenario_id=ADVERSARIAL_LATE_ARRIVAL_REPROCESS,
+        description=(
+            "Two-phase batch late-arrival scenario. Phase A emits a normal "
+            "event stream (D-1 started_at) representing the pre-batch window. "
+            "Phase B emits a smaller burst with the same started_at, simulating "
+            "mobile clients flushing buffered events after the batch job has "
+            "already published D-1 metrics. Phase separation and orchestration "
+            "live in the acceptance script — each phase is an independent "
+            "generator run."
+        ),
+        required_params=("phase",),
+        default_params={
+            "phase": "A",
+            "paired_run_id": "",
+        },
+    ),
     ADVERSARIAL_LATE_BULK_ARRIVAL: AdversarialTemplate(
         scenario_id=ADVERSARIAL_LATE_BULK_ARRIVAL,
         description=(
