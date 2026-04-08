@@ -19,6 +19,7 @@ from orchestration.airflow_batch_tasks import (
     package_run_evidence_task,
     run_dbt_quality_gates,
     run_spark_batch_job,
+    write_bronze_partition_manifest_task,
 )
 from orchestration.airflow_batch_dates import (
     canonical_data_date_from_iso_logical_date,
@@ -216,6 +217,15 @@ with DAG(
             },
             execution_timeout=EVIDENCE_TIMEOUT,
         )
+        write_manifest = PythonOperator(
+            task_id="write_bronze_partition_manifest",
+            python_callable=write_bronze_partition_manifest_task,
+            op_kwargs={
+                "data_date": DATA_DATE_TEMPLATE,
+                "dag_run_id": "{{ run_id }}",
+            },
+            execution_timeout=EVIDENCE_TIMEOUT,
+        )
         package_evidence = PythonOperator(
             task_id="package_run_evidence",
             python_callable=package_run_evidence_task,
@@ -226,7 +236,7 @@ with DAG(
             execution_timeout=EVIDENCE_TIMEOUT,
             sla=PIPELINE_SLA,
         )
-        emit_publish_ready >> package_evidence
+        emit_publish_ready >> write_manifest >> package_evidence
 
     # ── Step 7b: drop run branch (ALL_DONE — always runs) ────────────────────
     cleanup_branch = PythonOperator(

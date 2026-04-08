@@ -31,6 +31,8 @@ In scope tables:
 13. `lakehouse.gold.batch_sessionization_daily`
 14. `lakehouse.qa.run_manifest`
 15. `lakehouse.qa.expected_actions`
+16. `lakehouse.qa.bronze_partition_manifest`
+17. `lakehouse.qa.late_arrival_trigger_log`
 
 Out of scope (deferred):
 
@@ -289,7 +291,35 @@ Data contract notes:
 
 ---
 
-### 5.8 `lakehouse.dims.rt_rule_quantile_baselines`
+### 5.9 `lakehouse.qa.bronze_partition_manifest`
+
+Role:
+
+1. baseline bookmark for late arrival detection — records the bronze row count per `event_date` at the moment each batch run completed
+
+Grain:
+
+1. `event_date + dag_run_id` (one row per DAG run; append-only)
+
+Required fields:
+
+1. `event_date` DATE
+2. `dag_run_id` STRING
+3. `completed_at` TIMESTAMP
+4. `bronze_row_count` BIGINT
+
+Data contract notes:
+
+1. append-only (`INSERT INTO`) — never upserted; multiple rows per `event_date` are expected when a date is reprocessed
+2. `bronze_row_count` sourced from `raw_events$partitions` Iceberg metadata, not `COUNT(*)` — O(partitions) read, not O(rows)
+3. detection queries use `MAX(bronze_row_count)` per `event_date` as the latest baseline; both sides of the comparison read from `$partitions` metadata
+4. written via Trino client in the `publish-and-evidence` task group of `batch_publish_daily`, after merge succeeds
+5. partitioned by `days(event_date)`
+6. table created with `CREATE TABLE IF NOT EXISTS` on first write — no separate migration
+
+---
+
+### 5.10 `lakehouse.dims.rt_rule_quantile_baselines`
 
 Role:
 
