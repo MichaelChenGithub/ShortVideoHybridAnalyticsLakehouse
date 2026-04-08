@@ -1,0 +1,13 @@
+{
+  "run_id": "adv-late-bulk-arrival-seed42",
+  "seed": 42,
+  "duration_minutes": 30,
+  "events_per_sec": 120,
+  "adversarial_scenario": "late_bulk_arrival",
+  "scenario_params": {
+    "phase_gap_seconds": 75,
+    "phase_b_ratio": 0.3,
+    "late_offset_seconds": 150,
+    "expected_drop_floor": 0.90
+  }
+}

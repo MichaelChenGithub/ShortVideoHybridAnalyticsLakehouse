@@ -1,0 +1,17 @@
+{
+  "run_id": "adv-schema-mismatch-seed42",
+  "seed": 42,
+  "duration_minutes": 30,
+  "events_per_sec": 120,
+  "adversarial_scenario": "schema_mismatch",
+  "scenario_params": {
+    "mismatch_ratio": 0.10,
+    "mismatch_types": [
+      "wrong_schema_version",
+      "missing_required_field",
+      "null_event_type",
+      "malformed_payload_json"
+    ],
+    "expected_dlq_floor": 0.99
+  }
+}
