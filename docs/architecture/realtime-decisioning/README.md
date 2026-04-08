@@ -2,11 +2,6 @@
 
 This module defines realtime decisioning contracts for operational preview.
 
-Scope anchors:
-
-1. `docs/milestone/current-scope.md`
-2. `docs/milestone/future-plan.md`
-
 Scope boundary:
 
 1. Batch metrics, semantic expansion, and dbt quality workflows are defined outside this module.
@@ -51,17 +46,14 @@ Serving surface:
 6. baseline publish semantics = insert-only (`rule_version + effective_from`)
 7. threshold scope = global `p90` (`velocity_30m`) + global `p40` (`impressions_30m`)
 
-## 4. Future Plan (Deferred)
+## 4. Current Boundary
 
-1. Queue execution semantics are outside current delivery scope.
+1. Recommendation preview is the terminal realtime decision surface in current delivery scope.
 2. T+1 reconciliation implementation is outside current delivery scope.
 3. Automated degraded-mode switching and automated rollout blocking are outside current delivery scope.
-4. Canonical deferred-scope reference:
-   - `docs/milestone/future-plan.md`
 
 ## 5. Spec Files
 
 1. `metric-contract.md`
 2. `reconciliation-and-slo.md`
 3. `acceptance-domain-realtime.md`
-4. `action-queue-future-plan.md`

@@ -30,10 +30,10 @@ In scope:
 
 Out of scope (deferred):
 
-1. queue-serving views (`v_rt_action_queue_current`, `v_rt_action_queue_active`) and execution semantics (Future Plan)
+1. operational action execution workflows beyond recommendation preview
 2. replacing Gold tables as source of truth (not planned in current scope)
 3. full production hardening and advanced performance optimization
-4. advanced automation workflows deferred to future plan (`docs/milestone/future-plan.md`)
+4. advanced automation workflows are deferred from the current repository scope
 
 ## 3. Contract Precedence
 
@@ -42,7 +42,6 @@ Authoritative upstream contracts:
 1. `docs/architecture/data-model/data-model-contract.md`
 2. `docs/architecture/realtime-decisioning/metric-contract.md`
 3. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
-4. `docs/architecture/realtime-decisioning/action-queue-future-plan.md`
 
 Conflict resolution for this design:
 
@@ -244,10 +243,7 @@ Current boundary:
 
 Deferred boundary:
 
-1. Action-queue execution and queue-serving views are deferred.
-2. Advanced semantic automation workflows are deferred.
-3. Canonical deferred-scope reference:
-   - `docs/milestone/future-plan.md`
+1. Advanced semantic automation workflows are deferred.
 
 ## 11. Acceptance Mapping
 
@@ -269,7 +265,7 @@ Deferred boundary:
 5. split-view strategy is retained:
    - `v_rt_video_metrics_30m_1m` for global/trend analysis
    - `v_rt_video_decision_context_30m_1m` for traceable metadata-rich drill-down
-6. queue execution semantics are deferred to future plan (`docs/milestone/future-plan.md`).
+6. recommendation preview is the terminal delivery surface for realtime decisions in current scope.
 
 ## 13. Future Plan
 

@@ -8,7 +8,7 @@ Define the baseline realtime data model delivered in initial realtime scope and 
 2. `REVIEW`
 3. `RESCUE`
 
-This is a semantic-first baseline model. Advanced optimization and extended future-scope modeling are deferred to `docs/milestone/future-plan.md`.
+This is a semantic-first baseline model. Advanced optimization and extended future-scope modeling are deferred from the current repository scope.
 
 ---
 
@@ -37,7 +37,6 @@ Out of scope (deferred):
 1. full Silver canonical model
 2. storage optimization tuning (partition tuning, compression strategy, compaction policy details)
 3. QA dashboarding and automated alert/notification workflow
-4. operational `rt_action_queue` execution and queue-consumer automation
 
 ---
 
@@ -231,17 +230,7 @@ Contract:
 
 ---
 
-### 5.6 `lakehouse.gold.rt_action_queue`
-
-This table is deferred to future plan and is not part of current delivery scope.
-
-Reference:
-
-1. `docs/architecture/realtime-decisioning/action-queue-future-plan.md`
-
----
-
-### 5.7 `lakehouse.qa.run_manifest`
+### 5.6 `lakehouse.qa.run_manifest`
 
 Role:
 
@@ -272,7 +261,7 @@ Data contract notes:
 
 ---
 
-### 5.8 `lakehouse.qa.expected_actions`
+### 5.7 `lakehouse.qa.expected_actions`
 
 Role:
 
@@ -300,7 +289,7 @@ Data contract notes:
 
 ---
 
-### 5.9 `lakehouse.dims.rt_rule_quantile_baselines`
+### 5.8 `lakehouse.dims.rt_rule_quantile_baselines`
 
 Role:
 
@@ -633,7 +622,6 @@ Guardrails:
 
 1. Silver-layer compression and storage optimization strategy
 2. explicit batch metric versioning contract for retention/engagement/sessionization outputs
-3. canonical deferred-scope reference: `docs/milestone/future-plan.md`
 
 ---
 

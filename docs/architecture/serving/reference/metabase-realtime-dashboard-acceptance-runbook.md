@@ -15,9 +15,8 @@ In scope:
 
 Out of scope:
 
-1. `v_rt_action_queue_current` and `v_rt_action_queue_active` (future plan reference only)
-2. production queue-consumer automation (deferred)
-3. batch semantic quality/test pipelines
+1. operational action execution workflows beyond recommendation preview
+2. batch semantic quality/test pipelines
 
 ## 2. Canonical SQL Pack
 
@@ -65,7 +64,7 @@ Serving views used by this pack:
 Primary contract references:
 
 1. `docs/architecture/serving/trino-realtime-semantic-serving-contract.md`
-2. `docs/architecture/realtime-decisioning/realtime-action-queue-decision-behavior-spec.md` (future-plan reference for execution semantics)
+2. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
 
 Clause mapping:
 
@@ -79,7 +78,7 @@ Clause mapping:
    - serving contract section 11
    - evidence: Section B checks B1-B8
 4. observability fit for recommendation workflow:
-   - decision behavior spec section 11
+   - reconciliation and SLO sections 1 and 2
    - evidence: B4 freshness, B5/B6 null-rate observability, B8 decision distribution snapshot
 
 ## 6. Execution Checklist

@@ -30,7 +30,4 @@ Status: Draft
 
 ## 5. Future Plan (Deferred)
 
-1. `rt_action_queue` execution and queue-consumer validation.
-2. Automated degraded-mode switching and automated `WARN/CRIT` rollout blocking.
-3. Canonical deferred-scope reference:
-   - `docs/milestone/future-plan.md`
+1. Automated degraded-mode switching and automated `WARN/CRIT` rollout blocking.

@@ -44,7 +44,7 @@ Deliver a coherent decision + analytics platform that provides:
 ### 5.2 Out of Scope (Deferred)
 
 1. T+1 reconciliation implementation and operationalization.
-2. Operational `rt_action_queue` execution and queue-consumer automation.
+2. Operational action execution automation beyond recommendation preview.
 3. Automated degraded-mode switching and automated rollout blocking workflow.
 4. Full autonomous policy optimization loop in production.
 
@@ -150,16 +150,13 @@ Mitigation: enforce semantic contracts and dbt quality coverage before publish.
 Mitigation: preserve benchmark artifacts and tune incrementally by measured bottlenecks.
 
 4. Deferred future-plan items may be requested early by stakeholders.  
-Mitigation: keep deferred scope centralized and explicit in future-plan references.
+Mitigation: keep deferred scope explicit in the relevant contract sections.
 
 ## 10. Linked Contracts and Scope Anchors
 
-1. `docs/milestone/delivered-scope.md`
-2. `docs/milestone/current-scope.md`
-3. `docs/milestone/future-plan.md`
-4. `docs/architecture/realtime-decisioning/metric-contract.md`
-5. `docs/architecture/realtime-decisioning/acceptance-domain-realtime.md`
-6. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
-7. `docs/architecture/batch-analytics/batch-metrics-contract.md`
-8. `docs/architecture/quality/dbt-semantic-quality-contract.md`
-9. `docs/architecture/cloud/aws-deployment-and-scale-benchmark.md`
+1. `docs/architecture/realtime-decisioning/metric-contract.md`
+2. `docs/architecture/realtime-decisioning/acceptance-domain-realtime.md`
+3. `docs/architecture/realtime-decisioning/reconciliation-and-slo.md`
+4. `docs/architecture/batch-analytics/batch-metrics-contract.md`
+5. `docs/architecture/quality/dbt-semantic-quality-contract.md`
+6. `docs/architecture/cloud/aws-deployment-and-scale-benchmark.md`
