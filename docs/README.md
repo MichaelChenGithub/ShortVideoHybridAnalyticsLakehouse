@@ -32,7 +32,7 @@ This documentation set covers end-to-end platform capabilities and impact:
 1. `architecture/`
    - Long-lived architecture and domain-level design specs.
 2. `architecture/realtime-decisioning/`
-   - Realtime metric definitions, policy rules, reconciliation, acceptance criteria, and queue future-plan references.
+   - Realtime metric definitions, policy rules, reconciliation, and acceptance criteria.
 3. `architecture/data-model/`
    - Core model contracts and table-grain definitions.
 4. `architecture/messaging/`
@@ -45,8 +45,6 @@ This documentation set covers end-to-end platform capabilities and impact:
    - Mock event generator run contract and scenario matrix.
 8. `product/`
    - Business-layer PRD and KPI definitions that drive technical contracts.
-9. `milestone/`
-   - Scope anchors (`delivered-scope`, `current-scope`, `future-plan`) for delivered/current/future boundaries.
 
 ## Ownership
 
@@ -55,27 +53,17 @@ This documentation set covers end-to-end platform capabilities and impact:
 
 ## Entry Points
 
-1. Current scope anchor:
-   - `docs/milestone/current-scope.md`
-2. Future plan anchor:
-   - `docs/milestone/future-plan.md`
-3. Delivered scope anchor:
-   - `docs/milestone/delivered-scope.md`
-4. Business objective and KPI tree:
+1. Business objective and KPI tree:
    - `docs/product/business-decision-prd-kpi-tree.md`
-5. Realtime technical contracts:
+2. Realtime technical contracts:
    - `docs/architecture/realtime-decisioning/`
-6. Data model baseline contracts:
+3. Data model baseline contracts:
    - `docs/architecture/data-model/data-model-contract.md`
-7. Messaging contract for streaming interface:
+4. Messaging contract for streaming interface:
    - `docs/architecture/messaging/kafka-topic-schema-retention-contract.md`
-8. Spark realtime execution contract:
+5. Spark realtime execution contract:
    - `docs/architecture/streaming/spark-realtime-jobs-contract.md`
-9. Trino semantic layer and serving contract:
+6. Trino semantic layer and serving contract:
    - `docs/architecture/serving/trino-realtime-semantic-serving-contract.md`
-10. Mock event generator contract and scenario matrix:
+7. Mock event generator contract and scenario matrix:
    - `docs/architecture/generator/mock-event-generator-contract-and-scenario-matrix.md`
-11. Deferred queue scope reference:
-   - `docs/architecture/realtime-decisioning/action-queue-future-plan.md`
-12. Portfolio case study draft:
-   - `docs/portfolio-case-study.md`

@@ -46,4 +46,3 @@ Cloud baseline stack:
 
 1. current scope demonstrates benchmark evidence and architecture readiness
 2. long-running cost optimization and autoscaling policies are future plan items
-3. canonical deferred-scope reference: `../../milestone/future-plan.md`

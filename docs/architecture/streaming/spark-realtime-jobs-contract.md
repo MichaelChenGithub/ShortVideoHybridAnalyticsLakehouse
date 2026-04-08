@@ -186,7 +186,7 @@ Minimum runtime checks:
 Observability note:
 
 1. Prometheus/Grafana deep instrumentation is deferred to future scope.
-2. Explicit dropped-by-watermark observability instrumentation is deferred to future plan (`docs/milestone/future-plan.md`).
+2. Explicit dropped-by-watermark observability instrumentation is deferred from the current repository scope.
 
 ---
 

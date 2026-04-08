@@ -212,7 +212,7 @@ Alert intent:
 Monitoring implementation note:
 
 1. current scope supports lightweight monitoring (logs + periodic checks).
-2. Prometheus/Grafana integration and automated notification routing are deferred to future plan (`docs/milestone/future-plan.md`).
+2. Prometheus/Grafana integration and automated notification routing are deferred from the current repository scope.
 
 ---
 
@@ -239,4 +239,3 @@ Monitoring implementation note:
 1. introduce Kafka DLQ topics and replay workflow
 2. integrate Prometheus/Grafana observability for producer/consumer/Kafka metrics
 3. add automated notification mechanisms for lag/spike/failure conditions
-4. canonical deferred-scope reference: `docs/milestone/future-plan.md`

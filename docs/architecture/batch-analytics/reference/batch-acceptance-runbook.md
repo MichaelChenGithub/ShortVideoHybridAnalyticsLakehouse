@@ -63,6 +63,6 @@ Acceptance summary must include:
 4. unresolved issues (if any)
 5. operator/reviewer sign-off metadata
 
-## 7. Future Plan Pointer
+## 7. Deferred Scope
 
-1. canonical deferred-scope reference: `../../../milestone/future-plan.md`
+1. Deferred items remain documented inline in the relevant batch contracts.

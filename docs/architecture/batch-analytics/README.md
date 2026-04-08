@@ -31,6 +31,6 @@ This module defines production-facing batch analytics contracts for the platform
 2. `lakehouse.gold.batch_engagement_daily`
 3. `lakehouse.gold.batch_sessionization_daily`
 
-## 5. Future Plan Pointer
+## 5. Deferred Scope
 
-1. canonical deferred-scope reference: `../../milestone/future-plan.md`
+1. Deferred items remain documented inline in the relevant batch contracts.
