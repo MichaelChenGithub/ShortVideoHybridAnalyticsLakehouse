@@ -16,11 +16,21 @@ Runtime defaults (CDC-UPSERT):
 2. trigger interval `1 minute`
 3. checkpoint `s3a://checkpoints/jobs/spark_rt_video_cdc_upsert/dim_videos/v1`
 
-## One-Command Entrypoint
+## Automated Coverage
 
 ```bash
-bash src/scripts/run_cdc_upsert_acceptance.sh
+bash src/scripts/run_realtime_signoff_acceptance.sh
 ```
+
+Repo-wide acceptance:
+
+```bash
+make integration-test
+```
+
+Current repo note:
+1. There is no dedicated `run_cdc_upsert_acceptance.sh` wrapper in this repo.
+2. Use the manual verifier commands below when you need CDC-upsert-only validation.
 
 ## Required Environment Variables and Defaults
 

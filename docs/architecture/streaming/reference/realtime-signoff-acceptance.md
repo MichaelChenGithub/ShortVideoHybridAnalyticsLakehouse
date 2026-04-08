@@ -16,9 +16,14 @@ Out of scope:
 
 ## 2. Canonical Entrypoints
 
-Primary acceptance:
+Primary streaming acceptance:
 ```bash
 bash src/scripts/run_realtime_signoff_acceptance.sh
+```
+
+Full repo acceptance:
+```bash
+make integration-test
 ```
 
 Optional checkpoint reset for acceptance flow:
@@ -26,25 +31,12 @@ Optional checkpoint reset for acceptance flow:
 bash src/scripts/run_realtime_signoff_acceptance.sh --reset-checkpoints
 ```
 
-Dual-scenario acceptance (baseline then lag-prone):
+Manual observation (no RT-SIGNOFF verifier gates):
 ```bash
-bash src/scripts/run_realtime_signoff_dual_acceptance.sh
+make up
 ```
 
-Optional checkpoint reset for dual-scenario flow:
-```bash
-bash src/scripts/run_realtime_signoff_dual_acceptance.sh --reset-checkpoints
-```
-
-Manual observation (no verifier gates):
-```bash
-bash src/scripts/run_realtime_observe.sh
-```
-
-Optional checkpoint reset for observation flow:
-```bash
-bash src/scripts/run_realtime_observe.sh --reset-checkpoints
-```
+To compare watermark scenarios, rerun `run_realtime_signoff_acceptance.sh` with different `RT_SIGNOFF_WATERMARK_SCENARIO` values rather than using a separate dual-scenario wrapper.
 
 ## 3. Runtime Profiles and Defaults
 
@@ -107,9 +99,9 @@ Step 2: Execute acceptance
 ```bash
 RT_SIGNOFF_WATERMARK_SCENARIO=baseline bash src/scripts/run_realtime_signoff_acceptance.sh
 ```
-2. Dual scenario:
+2. Alternate scenario:
 ```bash
-RT_SIGNOFF_RUN_ID=mic38_signoff_20260310 bash src/scripts/run_realtime_signoff_dual_acceptance.sh
+RT_SIGNOFF_WATERMARK_SCENARIO=lag_prone bash src/scripts/run_realtime_signoff_acceptance.sh
 ```
 3. Dynamic-time bounded-run:
 ```bash
@@ -153,10 +145,9 @@ Expected files:
 2. `signoff_summary.md` is reviewer-oriented summary text.
 3. Script exits non-zero on any failed gate.
 4. Single-scenario run appends scenario suffix (`_baseline` or `_lag_prone`) to run id.
-5. Dual run emits two report folders under the same base run id.
 
 Manual observation mode:
-1. Runs integrated dataflow but does not execute verifier gates.
+1. `make up` runs the integrated dataflow but does not execute RT-SIGNOFF verifier gates.
 2. Use Spark logs and query tools (for example Trino) for manual inspection.
 
 Acceptance cleanup behavior:
