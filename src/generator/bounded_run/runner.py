@@ -206,25 +206,6 @@ class BoundedRunGenerator:
             cdc_update_count += 1
         return cdc_update_count
 
-    def _build_late_offsets(self, total_events: int) -> Dict[int, int]:
-        late_count = int(round(total_events * self.config.late_event_ratio))
-        if late_count <= 0:
-            return {}
-
-        index_rng = make_rng(self.config.seed, "late-indexes")
-        offset_rng = make_rng(self.config.seed, "late-offsets")
-
-        indexes = index_rng.sample(range(total_events), late_count)
-        indexes.sort()
-
-        offsets: Dict[int, int] = {}
-        for event_index in indexes:
-            if offset_rng.random() < 0.8:
-                offsets[event_index] = offset_rng.randint(121, 150)
-            else:
-                offsets[event_index] = offset_rng.randint(151, 210)
-        return offsets
-
     def _make_invalid_event(self, user_id: str, event_id: str, event_index: int) -> Dict[str, Any]:
         return {
             "event_id": event_id,
@@ -306,7 +287,6 @@ class BoundedRunGenerator:
 
         registry_rows, videos_by_scenario = self._build_registry(planned_counts)
         user_registry_rows = self._build_user_registry(total_events)
-        late_offsets = self._build_late_offsets(total_events)
 
         self._log("[m1] run init complete")
 
@@ -328,7 +308,6 @@ class BoundedRunGenerator:
 
         scenario_emitted_counts = {scenario: 0 for scenario in SCENARIO_KEYS}
         invalid_payload_events = 0
-        late_histogram = {"121_150": 0, "151_210": 0}
 
         user_rng = make_rng(self.config.seed, "user-selection")
         total_seconds = self.config.duration_seconds
@@ -340,16 +319,9 @@ class BoundedRunGenerator:
                 scenario = scenario_sequence[event_index]
                 scenario_emitted_counts[scenario] += 1
 
-                base_timestamp = second_start + timedelta(
+                event_timestamp = second_start + timedelta(
                     microseconds=int((slot / self.config.events_per_sec) * 1_000_000)
                 )
-                late_offset = late_offsets.get(event_index, 0)
-                if late_offset:
-                    if late_offset <= 150:
-                        late_histogram["121_150"] += 1
-                    else:
-                        late_histogram["151_210"] += 1
-                event_timestamp = base_timestamp - timedelta(seconds=late_offset)
 
                 event_id = self.id_factory.next_event_id()
                 user_row = user_registry_rows[user_rng.randint(0, len(user_registry_rows) - 1)]
@@ -408,10 +380,6 @@ class BoundedRunGenerator:
             "scenario_mix_target": self.config.scenario_mix,
             "scenario_mix_realized": realized,
             "scenario_mix_abs_error": abs_errors,
-            "late_event_count": len(late_offsets),
-            "late_event_histogram": late_histogram,
-            "late_offset_min_seconds": min(late_offsets.values()) if late_offsets else 0,
-            "late_offset_max_seconds": max(late_offsets.values()) if late_offsets else 0,
             "lifecycle": lifecycle,
             "acceptance": {
                 "scenario_abs_error_max": max(abs_errors.values()),
@@ -436,8 +404,7 @@ class BoundedRunGenerator:
 
         self._log(
             "[m1] run complete: "
-            "content="
-            f"{event_index}, video_cdc_bootstrap={video_cdc_count}, "
+            f"content={event_index}, video_cdc_bootstrap={video_cdc_count}, "
             f"video_cdc_updates={video_cdc_update_count}, video_cdc_total={video_cdc_total_count}, "
             f"user_cdc_bootstrap={user_cdc_count}, "
             f"user_cdc_updates={user_cdc_update_count}, user_cdc_total={user_cdc_total_count}, "

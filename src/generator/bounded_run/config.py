@@ -22,7 +22,6 @@ class RunConfig:
     duration_minutes: int
     events_per_sec: int
     scenario_mix: Dict[str, float]
-    late_event_ratio: float
     rule_version: str
     started_at: datetime
 
@@ -41,7 +40,6 @@ class RunConfig:
             "duration_minutes": self.duration_minutes,
             "events_per_sec": self.events_per_sec,
             "scenario_mix": {key: self.scenario_mix[key] for key in SCENARIO_KEYS},
-            "late_event_ratio": self.late_event_ratio,
             "rule_version": self.rule_version,
             "started_at": self.started_at.isoformat().replace("+00:00", "Z"),
         }
@@ -86,7 +84,6 @@ def _validate_config_values(config: Dict[str, Any]) -> None:
         "duration_minutes",
         "events_per_sec",
         "scenario_mix",
-        "late_event_ratio",
         "rule_version",
     }
     missing = sorted(required - set(config.keys()))
@@ -116,13 +113,6 @@ def _validate_config_values(config: Dict[str, Any]) -> None:
         raise ConfigError("events_per_sec must be an integer") from exc
     if events_per_sec <= 0:
         raise ConfigError("events_per_sec must be > 0")
-
-    try:
-        late_event_ratio = float(config["late_event_ratio"])
-    except (TypeError, ValueError) as exc:
-        raise ConfigError("late_event_ratio must be numeric") from exc
-    if not 0.0 <= late_event_ratio <= 0.2:
-        raise ConfigError("late_event_ratio must be in [0, 0.2]")
 
     raw_mix = config["scenario_mix"]
     if not isinstance(raw_mix, Mapping):
@@ -186,7 +176,6 @@ def load_run_config(config_path: str | Path, overrides: Optional[Mapping[str, An
         duration_minutes=int(merged["duration_minutes"]),
         events_per_sec=int(merged["events_per_sec"]),
         scenario_mix={key: float(scenario_mix[key]) for key in SCENARIO_KEYS},
-        late_event_ratio=float(merged["late_event_ratio"]),
         rule_version=str(merged["rule_version"]).strip(),
         started_at=_parse_timestamp(merged["started_at"]),
     )

@@ -69,17 +69,15 @@ Required fields:
 3. `duration_minutes` INT
 4. `events_per_sec` INT
 5. `scenario_mix` MAP<STRING, DOUBLE>
-6. `late_event_ratio` DOUBLE
-7. `rule_version` STRING
-8. `started_at` TIMESTAMP
+6. `rule_version` STRING
+7. `started_at` TIMESTAMP
 
 Validation rules:
 
 1. all `scenario_mix` values must be non-negative
 2. sum(`scenario_mix`) must equal 1.0 (+/- 1e-6)
-3. `late_event_ratio` must be in `[0, 0.2]` 
-4. `duration_minutes >= 10`
-5. `scenario_mix` must contain exactly these keys in current baseline:
+3. `duration_minutes >= 10`
+4. `scenario_mix` must contain exactly these keys in current baseline:
    - `normal_baseline`
    - `viral_high_quality`
    - `viral_low_quality`
@@ -102,7 +100,6 @@ Example:
     "cold_start_under_exposed": 0.10,
     "invalid_payload_burst": 0.05
   },
-  "late_event_ratio": 0.02,
   "rule_version": "m1_rtv1",
   "started_at": "2026-03-04T14:00:00Z"
 }
@@ -168,32 +165,11 @@ Generator maintains a deterministic in-memory registry and writes run artifacts:
 
 ### 6.4 Late-event simulation
 
-1. late events are simulated by offsetting `event_timestamp` backwards.
-2. `late_event_ratio` defines the fraction of emitted `content_events` treated as late events.
-3. for late events, lateness offset is sampled deterministically in `[121 seconds, 210 seconds]`.
-4. recommended lateness split in current baseline:
-   - 80% in `[121s, 150s]`
-   - 20% in `[151s, 210s]`
-5. maximum lateness in current baseline is `210 seconds`.
-6. generator does not control runtime watermark and does not auto-tune it in current baseline.
-7. streaming runtime watermark policy follows `spark-realtime-jobs-contract.md` (baseline `2 minutes`, lag-prone target `5 minutes`).
+Late event resilience testing has been moved out of behavioral runs entirely.
 
-### 6.5 Delivery profile for strict late-drop validation
+Behavioral runs emit clean, on-time event streams. Mixing late events into a behavioral run added noise with no attached acceptance gate, making decisioning failures harder to diagnose.
 
-1. `event_timestamp` backshift alone validates out-of-order behavior, but does not guarantee watermark drop behavior.
-2. strict late-drop validation requires arrival-timing control across phases, not only payload timestamp offsets.
-3. add `delivery_profile` with values:
-   - `out_of_order` (default): current behavior; mixed arrival, no phase guarantees.
-   - `watermark_pushback`: two-phase emission for deterministic watermark-drop checks.
-4. `watermark_pushback` phase contract:
-   - phase A emits on-time events to advance query watermark.
-   - phase B emits delayed events (`121s..210s`) after phase gap to force late arrival evaluation.
-5. required timing controls for `watermark_pushback`:
-   - `phase_gap_seconds` must be >= gold trigger interval plus safety buffer.
-   - baseline recommended default: `phase_gap_seconds >= 75`.
-   - lag-prone recommended default: `phase_gap_seconds >= 75` with higher delayed-event volume.
-6. RT-SIGNOFF/watermark-drop late-drop gates should use `watermark_pushback` when validating non-zero drop expectations.
-7. without `watermark_pushback`, `watermark_drop_ratio` may legitimately be `0.0` even when late offsets exist.
+Late arrival testing is now owned by the `late_bulk_arrival` adversarial scenario, which uses a controlled two-phase emission (watermark advance → bulk backdated replay) with explicit acceptance criteria. See `src/generator/bounded_run/adversarial.py`.
 
 ---
 
