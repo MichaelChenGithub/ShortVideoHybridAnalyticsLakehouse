@@ -34,9 +34,6 @@ poll_until() {
 
 SPARK_PACKAGES="org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1"
 
-# Fresh checkpoint root inside the Spark container — wiped on every call.
-CP_ROOT="/tmp/streaming_cp"
-
 cd "$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
@@ -100,20 +97,14 @@ done
 sleep 2
 
 # ---------------------------------------------------------------------------
-# 4. Reset checkpoint directory inside Spark container
+# 4. Start streaming Spark jobs (background)
 # ---------------------------------------------------------------------------
-log "Resetting checkpoint directory $CP_ROOT in Spark container..."
-docker exec lakehouse-spark bash -lc "rm -rf '${CP_ROOT}' && mkdir -p '${CP_ROOT}'"
-
-# ---------------------------------------------------------------------------
-# 5. Start streaming Spark jobs (background)
-# ---------------------------------------------------------------------------
+# Checkpoint locations default to s3a://checkpoints/jobs/... (MinIO) as defined
+# in each job's contract file. No override needed here — the acceptance scripts
+# snapshot those MinIO paths to verify checkpoint growth.
 log "Starting rt_content_events_aggregator..."
 docker exec lakehouse-spark bash -lc "nohup env \
   RT_CONTENT_EVENTS_STARTING_OFFSETS=earliest \
-  RT_CONTENT_EVENTS_CHECKPOINT_RAW=${CP_ROOT}/content/raw \
-  RT_CONTENT_EVENTS_CHECKPOINT_GOLD=${CP_ROOT}/content/gold \
-  RT_CONTENT_EVENTS_CHECKPOINT_INVALID=${CP_ROOT}/content/invalid \
   /opt/spark/bin/spark-submit \
     --packages '${SPARK_PACKAGES}' \
     --conf spark.driver.memory=512m \
@@ -124,9 +115,6 @@ docker exec lakehouse-spark bash -lc "nohup env \
 log "Starting rt_video_cdc_upsert..."
 docker exec lakehouse-spark bash -lc "nohup env \
   RT_VIDEO_CDC_STARTING_OFFSETS=earliest \
-  RT_VIDEO_CDC_CHECKPOINT_DIM_VIDEOS=${CP_ROOT}/video/dim \
-  RT_VIDEO_CDC_CHECKPOINT_RAW=${CP_ROOT}/video/raw \
-  RT_VIDEO_CDC_CHECKPOINT_INVALID_CDC_VIDEOS=${CP_ROOT}/video/invalid \
   /opt/spark/bin/spark-submit \
     --packages '${SPARK_PACKAGES}' \
     --conf spark.driver.memory=512m \
@@ -137,8 +125,6 @@ docker exec lakehouse-spark bash -lc "nohup env \
 log "Starting rt_user_cdc_raw..."
 docker exec lakehouse-spark bash -lc "nohup env \
   RT_USER_CDC_STARTING_OFFSETS=earliest \
-  RT_USER_CDC_CHECKPOINT_RAW=${CP_ROOT}/user/raw \
-  RT_USER_CDC_CHECKPOINT_INVALID=${CP_ROOT}/user/invalid \
   /opt/spark/bin/spark-submit \
     --packages '${SPARK_PACKAGES}' \
     --conf spark.driver.memory=512m \
