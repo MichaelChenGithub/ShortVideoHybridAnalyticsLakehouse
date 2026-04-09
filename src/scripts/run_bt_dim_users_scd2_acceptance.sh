@@ -15,7 +15,6 @@ Environment overrides:
   USER_ID
   BOOTSTRAP_SERVERS
   PYTHON_BIN
-  WAIT_AFTER_JOB_START_SECONDS
   WAIT_AFTER_FIXTURE_SECONDS
   WAIT_AFTER_BATCH_SECONDS
   RAW_READY_RETRIES
@@ -54,7 +53,6 @@ fi
 USER_ID="${USER_ID:-bt_dim_user_001}"
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_FIXTURE_SECONDS="${WAIT_AFTER_FIXTURE_SECONDS:-75}"
 WAIT_AFTER_BATCH_SECONDS="${WAIT_AFTER_BATCH_SECONDS:-10}"
 RAW_READY_RETRIES="${RAW_READY_RETRIES:-18}"
@@ -64,7 +62,7 @@ WARMUP_WAIT_RETRIES="${WARMUP_WAIT_RETRIES:-45}"
 WARMUP_WAIT_SLEEP_SECONDS="${WARMUP_WAIT_SLEEP_SECONDS:-2}"
 POST_FIXTURE_BATCH_READY_RETRIES="${POST_FIXTURE_BATCH_READY_RETRIES:-45}"
 POST_FIXTURE_BATCH_READY_SLEEP_SECONDS="${POST_FIXTURE_BATCH_READY_SLEEP_SECONDS:-2}"
-USER_CDC_JOB_LOG="${USER_CDC_JOB_LOG:-/tmp/bt_dim_users_scd2_user_cdc_raw.log}"
+USER_CDC_JOB_LOG="${USER_CDC_JOB_LOG:-/tmp/streaming_user.log}"
 BOUNDED_RUN_CONFIG="${BOUNDED_RUN_CONFIG:-docs/architecture/generator/examples/bounded_run_config.example.json}"
 BOUNDED_RUN_SINK="${BOUNDED_RUN_SINK:-kafka}"
 BASE_TS_MS="${BASE_TS_MS:-$(( $(date +%s) * 1000 ))}"
@@ -121,23 +119,7 @@ wait_for_min_batch_id() {
 }
 
 cd "$REPO_ROOT"
-printf '[BT-DIM-USERS-SCD2] Assuming infrastructure is up. Run: make reset-infra\n'
-
-printf '[BT-DIM-USERS-SCD2] Ensuring CDC topic exists...\n'
-docker exec lakehouse-kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --create \
-  --if-not-exists \
-  --topic cdc.users.profiles \
-  --partitions 3 \
-  --replication-factor 1
-
-printf '[BT-DIM-USERS-SCD2] Starting Spark user CDC raw sink job...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '[r]t_user_cdc_raw.py' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
-docker exec lakehouse-spark bash -lc "rm -rf /tmp/spark-* /tmp/blockmgr-* || true"
-docker exec lakehouse-spark bash -lc "aws_jar='/root/.ivy2/jars/com.amazonaws_aws-java-sdk-bundle-1.12.262.jar'; iceberg_jar='/root/.ivy2/jars/org.apache.iceberg_iceberg-spark-runtime-3.5_2.12-1.5.0.jar'; if [ -f \"\$aws_jar\" ] && ( [ ! -s \"\$aws_jar\" ] || ! jar tf \"\$aws_jar\" >/dev/null 2>&1 ); then echo '[BT-DIM-USERS-SCD2] WARN: removing corrupted aws sdk bundle from ivy cache'; rm -f \"\$aws_jar\"; rm -rf /root/.ivy2/cache/com.amazonaws/aws-java-sdk-bundle; fi; if [ -f \"\$iceberg_jar\" ] && ( [ ! -s \"\$iceberg_jar\" ] || ! jar tf \"\$iceberg_jar\" >/dev/null 2>&1 ); then echo '[BT-DIM-USERS-SCD2] WARN: removing corrupted iceberg runtime from ivy cache'; rm -f \"\$iceberg_jar\"; rm -rf /root/.ivy2/cache/org.apache.iceberg/iceberg-spark-runtime-3.5_2.12; fi"
-docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_user_cdc_raw.py > '${USER_CDC_JOB_LOG}' 2>&1 &"
-sleep "$WAIT_AFTER_JOB_START_SECONDS"
+printf '[BT-DIM-USERS-SCD2] Assuming infra + streaming are up. Run: make infra && make streaming\n'
 
 printf '[BT-DIM-USERS-SCD2] Warming up stream readiness via single valid user CDC record...\n'
 batch_before_warmup="$(max_batch_id_from_log "${USER_CDC_JOB_LOG}" | tr -d '[:space:]')"

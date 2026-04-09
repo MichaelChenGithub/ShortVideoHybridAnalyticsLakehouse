@@ -7,34 +7,21 @@ source "$SCRIPT_DIR/common.sh"
 MINIO_CHECKPOINT_ROOT="${MINIO_CHECKPOINT_ROOT:-/data/checkpoints}"
 
 RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
-KEEP_JOBS_RUNNING="${KEEP_JOBS_RUNNING:-0}"
 
 usage() {
   cat <<'EOF'
-Usage: run_realtime_signoff_acceptance.sh [--reset-checkpoints] [--keep-jobs-running]
+Usage: run_realtime_signoff_acceptance.sh [--reset-checkpoints]
+
+Precondition: make infra && make streaming must be run first.
 
 Options:
-  --reset-checkpoints  Remove streaming checkpoint paths before starting jobs.
-  --keep-jobs-running  Do not stop started Spark jobs on script exit.
+  --reset-checkpoints  Remove streaming checkpoint paths before the run.
   -h, --help           Show this help.
 
 Equivalent env flags:
   RESET_CHECKPOINTS=1
-  KEEP_JOBS_RUNNING=1
   BOUNDED_RUN_TIME_MODE=dynamic
   BOUNDED_RUN_STARTED_AT=2026-03-20T14:00:00Z
-
-Resource-bound env flags (optional overrides):
-  RT_SIGNOFF_SPARK_DRIVER_CORES
-  RT_SIGNOFF_SPARK_DRIVER_MEMORY
-  RT_SIGNOFF_SPARK_DRIVER_MEMORY_OVERHEAD
-  RT_SIGNOFF_SPARK_EXECUTOR_INSTANCES
-  RT_SIGNOFF_SPARK_EXECUTOR_CORES
-  RT_SIGNOFF_SPARK_EXECUTOR_MEMORY
-  RT_SIGNOFF_SPARK_EXECUTOR_MEMORY_OVERHEAD
-  RT_SIGNOFF_SPARK_CORES_MAX
-  RT_SIGNOFF_SPARK_SQL_SHUFFLE_PARTITIONS
-  RT_SIGNOFF_SPARK_DEFAULT_PARALLELISM
 
 Readiness tuning env flags (optional overrides):
   STREAM_BATCH_READY_RETRIES
@@ -46,10 +33,6 @@ while (($# > 0)); do
   case "$1" in
     --reset-checkpoints)
       RESET_CHECKPOINTS=1
-      shift
-      ;;
-    --keep-jobs-running)
-      KEEP_JOBS_RUNNING=1
       shift
       ;;
     -h|--help)
@@ -71,24 +54,12 @@ if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
 fi
 PYTHON_BIN="${PYTHON_BIN:-$DEFAULT_PYTHON_BIN}"
 
-SPARK_DRIVER_CORES="${RT_SIGNOFF_SPARK_DRIVER_CORES:-1}"
-SPARK_DRIVER_MEMORY="${RT_SIGNOFF_SPARK_DRIVER_MEMORY:-1g}"
-SPARK_DRIVER_MEMORY_OVERHEAD="${RT_SIGNOFF_SPARK_DRIVER_MEMORY_OVERHEAD:-512m}"
-SPARK_EXECUTOR_INSTANCES="${RT_SIGNOFF_SPARK_EXECUTOR_INSTANCES:-1}"
-SPARK_EXECUTOR_CORES="${RT_SIGNOFF_SPARK_EXECUTOR_CORES:-1}"
-SPARK_EXECUTOR_MEMORY="${RT_SIGNOFF_SPARK_EXECUTOR_MEMORY:-1g}"
-SPARK_EXECUTOR_MEMORY_OVERHEAD="${RT_SIGNOFF_SPARK_EXECUTOR_MEMORY_OVERHEAD:-512m}"
-SPARK_CORES_MAX="${RT_SIGNOFF_SPARK_CORES_MAX:-2}"
-SPARK_SQL_SHUFFLE_PARTITIONS="${RT_SIGNOFF_SPARK_SQL_SHUFFLE_PARTITIONS:-8}"
-SPARK_DEFAULT_PARALLELISM="${RT_SIGNOFF_SPARK_DEFAULT_PARALLELISM:-8}"
-
 RT_SIGNOFF_WATERMARK_SCENARIO="${RT_SIGNOFF_WATERMARK_SCENARIO:-baseline}"
 BASE_RT_SIGNOFF_RUN_ID="${RT_SIGNOFF_RUN_ID:-realtime_signoff_$(date -u +%Y%m%dT%H%M%SZ)}"
 RT_SIGNOFF_RUN_ID="${BASE_RT_SIGNOFF_RUN_ID}_${RT_SIGNOFF_WATERMARK_SCENARIO}"
 RT_SIGNOFF_VIDEO_ID="${RT_SIGNOFF_VIDEO_ID:-${RT_SIGNOFF_RUN_ID}_cdc_vid_001}"
 EXPECTED_CDC_STATUS="${EXPECTED_CDC_STATUS:-copyright_strike}"
 
-WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_BOUNDED_RUN_SECONDS="${WAIT_AFTER_BOUNDED_RUN_SECONDS:-75}"
 WAIT_AFTER_CDC_FIXTURE_SECONDS="${WAIT_AFTER_CDC_FIXTURE_SECONDS:-75}"
 
@@ -119,11 +90,10 @@ POST_RUN_BATCH_READY_RETRIES="${POST_RUN_BATCH_READY_RETRIES:-120}"
 POST_RUN_BATCH_READY_SLEEP_SECONDS="${POST_RUN_BATCH_READY_SLEEP_SECONDS:-5}"
 
 RUN_CONTEXT="realtime_signoff:${RT_SIGNOFF_RUN_ID}"
-CONTENT_JOB_LOG="/tmp/${RT_SIGNOFF_RUN_ID}_content_agg.log"
-CDC_JOB_LOG="/tmp/${RT_SIGNOFF_RUN_ID}_cdc_upsert.log"
+CONTENT_JOB_LOG="/tmp/streaming_content.log"
+CDC_JOB_LOG="/tmp/streaming_video.log"
 CONTENT_JOB_PATTERN="[r]t_content_events_aggregator.py"
 CDC_JOB_PATTERN="[r]t_video_cdc_upsert.py"
-STARTED_SPARK_JOBS=0
 
 ARTIFACT_DIR="${RT_SIGNOFF_ARTIFACT_DIR:-artifacts/realtime_signoff/${RT_SIGNOFF_RUN_ID}}"
 CONTENT_METRICS_LOG="${ARTIFACT_DIR}/content_metrics.log"
@@ -172,32 +142,6 @@ now_ms_spark_container() {
   now_ms
 }
 
-ensure_topic() {
-  local topic="$1"
-  local partitions="$2"
-  docker exec lakehouse-kafka kafka-topics \
-    --bootstrap-server kafka:29092 \
-    --create \
-    --if-not-exists \
-    --topic "$topic" \
-    --partitions "$partitions" \
-    --replication-factor 1
-  docker exec lakehouse-kafka kafka-topics \
-    --bootstrap-server kafka:29092 \
-    --alter \
-    --topic "$topic" \
-    --partitions "$partitions" || true
-}
-
-stop_spark_job_if_running() {
-  local pattern="$1"
-  docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '${pattern}' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
-}
-
-stop_realtime_signoff_spark_jobs() {
-  stop_spark_job_if_running "$CONTENT_JOB_PATTERN"
-  stop_spark_job_if_running "$CDC_JOB_PATTERN"
-}
 
 reset_checkpoints() {
   printf '[RT-SIGNOFF] Resetting checkpoint directories...\n'
@@ -208,42 +152,6 @@ reset_checkpoints() {
     ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
     ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
     ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
-}
-
-cleanup_on_exit() {
-  local exit_code="$1"
-  set +e
-  if [ "$KEEP_JOBS_RUNNING" = "1" ]; then
-    printf '[RT-SIGNOFF] KEEP_JOBS_RUNNING=1, leaving Spark jobs running.\n'
-    return
-  fi
-  if [ "$STARTED_SPARK_JOBS" = "1" ]; then
-    printf '[RT-SIGNOFF] Stopping Spark jobs started by this run...\n'
-    stop_realtime_signoff_spark_jobs || true
-  fi
-  return "$exit_code"
-}
-
-trap 'cleanup_on_exit $?' EXIT
-
-start_spark_job() {
-  local script_path="$1"
-  local log_file="$2"
-  local ivy_cache="/tmp/ivy/realtime_signoff/shared"
-  docker exec lakehouse-spark bash -lc "mkdir -p '${ivy_cache}' && RT_SIGNOFF_RUN_ID='${RT_SIGNOFF_RUN_ID}' RT_CONTENT_EVENTS_WATERMARK='${RT_CONTENT_EVENTS_WATERMARK}' nohup /opt/spark/bin/spark-submit \
-    --conf spark.jars.ivy='${ivy_cache}' \
-    --conf spark.driver.cores='${SPARK_DRIVER_CORES}' \
-    --conf spark.driver.memory='${SPARK_DRIVER_MEMORY}' \
-    --conf spark.driver.memoryOverhead='${SPARK_DRIVER_MEMORY_OVERHEAD}' \
-    --conf spark.executor.instances='${SPARK_EXECUTOR_INSTANCES}' \
-    --conf spark.executor.cores='${SPARK_EXECUTOR_CORES}' \
-    --conf spark.executor.memory='${SPARK_EXECUTOR_MEMORY}' \
-    --conf spark.executor.memoryOverhead='${SPARK_EXECUTOR_MEMORY_OVERHEAD}' \
-    --conf spark.cores.max='${SPARK_CORES_MAX}' \
-    --conf spark.sql.shuffle.partitions='${SPARK_SQL_SHUFFLE_PARTITIONS}' \
-    --conf spark.default.parallelism='${SPARK_DEFAULT_PARALLELISM}' \
-    --conf spark.dynamicAllocation.enabled='false' \
-    '${script_path}' > '${log_file}' 2>&1 &"
 }
 
 wait_for_spark_job() {
@@ -360,17 +268,6 @@ printf '[RT-SIGNOFF] cdc_video_id=%s\n' "$RT_SIGNOFF_VIDEO_ID"
 printf '[RT-SIGNOFF] watermark_scenario=%s\n' "$RT_SIGNOFF_WATERMARK_SCENARIO"
 printf '[RT-SIGNOFF] content_watermark=%s\n' "$RT_CONTENT_EVENTS_WATERMARK"
 printf '[RT-SIGNOFF] reset_checkpoints=%s\n' "$RESET_CHECKPOINTS"
-printf '[RT-SIGNOFF] keep_jobs_running=%s\n' "$KEEP_JOBS_RUNNING"
-printf '[RT-SIGNOFF] spark_driver_cores=%s\n' "$SPARK_DRIVER_CORES"
-printf '[RT-SIGNOFF] spark_driver_memory=%s\n' "$SPARK_DRIVER_MEMORY"
-printf '[RT-SIGNOFF] spark_driver_memory_overhead=%s\n' "$SPARK_DRIVER_MEMORY_OVERHEAD"
-printf '[RT-SIGNOFF] spark_executor_instances=%s\n' "$SPARK_EXECUTOR_INSTANCES"
-printf '[RT-SIGNOFF] spark_executor_cores=%s\n' "$SPARK_EXECUTOR_CORES"
-printf '[RT-SIGNOFF] spark_executor_memory=%s\n' "$SPARK_EXECUTOR_MEMORY"
-printf '[RT-SIGNOFF] spark_executor_memory_overhead=%s\n' "$SPARK_EXECUTOR_MEMORY_OVERHEAD"
-printf '[RT-SIGNOFF] spark_cores_max=%s\n' "$SPARK_CORES_MAX"
-printf '[RT-SIGNOFF] spark_sql_shuffle_partitions=%s\n' "$SPARK_SQL_SHUFFLE_PARTITIONS"
-printf '[RT-SIGNOFF] spark_default_parallelism=%s\n' "$SPARK_DEFAULT_PARALLELISM"
 printf '[RT-SIGNOFF] stream_batch_ready_retries=%s\n' "$STREAM_BATCH_READY_RETRIES"
 printf '[RT-SIGNOFF] stream_batch_ready_sleep_seconds=%s\n' "$STREAM_BATCH_READY_SLEEP_SECONDS"
 printf '[RT-SIGNOFF] post_run_batch_ready_retries=%s\n' "$POST_RUN_BATCH_READY_RETRIES"
@@ -393,11 +290,7 @@ printf '[RT-SIGNOFF] artifact_dir=%s\n' "$ARTIFACT_DIR"
 printf '[RT-SIGNOFF] content_job_log=%s\n' "$CONTENT_JOB_LOG"
 printf '[RT-SIGNOFF] cdc_job_log=%s\n' "$CDC_JOB_LOG"
 
-printf '[RT-SIGNOFF] Assuming infrastructure is up. Run: make reset-infra\n'
-
-printf '[RT-SIGNOFF] Ensuring required topics exist with Sprint-1 partitions...\n'
-ensure_topic content_events 6
-ensure_topic cdc.content.videos 3
+printf '[RT-SIGNOFF] Assuming infra + streaming are up. Run: make infra && make streaming\n'
 
 if [ -z "${RUN_START_MS:-}" ]; then
   RUN_START_MS="$(now_ms_spark_container)"
@@ -412,23 +305,13 @@ printf '[RT-SIGNOFF] run_start_ms=%s\n' "$RUN_START_MS"
 printf '[RT-SIGNOFF] min_processed_at_ms=%s\n' "$MIN_PROCESSED_AT_MS"
 printf '[RT-SIGNOFF] min_ingested_at_ms=%s\n' "$MIN_INGESTED_AT_MS"
 
-printf '[RT-SIGNOFF] Starting both Spark jobs for integrated E2E run...\n'
-stop_realtime_signoff_spark_jobs
+printf '[RT-SIGNOFF] Probing streaming jobs...\n'
+wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+
 if [ "$RESET_CHECKPOINTS" = "1" ]; then
   reset_checkpoints
 fi
-
-# Start jobs sequentially to avoid Ivy/Maven cache races when resolving Spark packages.
-start_spark_job /home/iceberg/local/src/spark/rt_content_events_aggregator.py "$CONTENT_JOB_LOG"
-sleep "$WAIT_AFTER_JOB_START_SECONDS"
-wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
-# Pre-data runs may not emit "Batch N" logs until first fixture lands; rely on post-run batch-id gates.
-
-start_spark_job /home/iceberg/local/src/spark/rt_video_cdc_upsert.py "$CDC_JOB_LOG"
-sleep "$WAIT_AFTER_JOB_START_SECONDS"
-wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
-# Pre-data runs may not emit "Batch N" logs until first fixture lands; rely on post-run batch-id gates.
-STARTED_SPARK_JOBS=1
 
 printf '[RT-SIGNOFF] Capturing pre-run runtime/checkpoint snapshots...\n'
 runtime_snapshot "$RUNTIME_START_JSON"
@@ -478,12 +361,6 @@ if [ -z "$RUNTIME_END_SAMPLE_MS" ]; then
   RUNTIME_END_SAMPLE_MS="$RUN_START_MS"
 fi
 printf '[RT-SIGNOFF] runtime_end_sample_ms=%s\n' "$RUNTIME_END_SAMPLE_MS"
-
-if [ "$KEEP_JOBS_RUNNING" != "1" ]; then
-  printf '[RT-SIGNOFF] Stopping Spark jobs before verifier Spark sessions...\n'
-  stop_realtime_signoff_spark_jobs
-  STARTED_SPARK_JOBS=0
-fi
 
 printf '[RT-SIGNOFF] Verifying content valid path (CONTENT-AGGREGATOR style gate)...\n'
 declare -a WATERMARK_DROP_ARGS=()

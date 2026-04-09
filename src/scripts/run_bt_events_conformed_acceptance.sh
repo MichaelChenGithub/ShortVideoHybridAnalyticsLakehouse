@@ -15,7 +15,6 @@ Environment overrides:
   BOOTSTRAP_SERVERS
   PYTHON_BIN
   BOUNDED_RUN_CONFIG
-  WAIT_AFTER_JOB_START_SECONDS
   WAIT_AFTER_BOUNDED_RUN_SECONDS
   WAIT_AFTER_BATCH_SECONDS
   MIN_RAW_ROWS
@@ -45,7 +44,6 @@ fi
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 BOUNDED_RUN_CONFIG="${BOUNDED_RUN_CONFIG:-docs/architecture/generator/examples/bounded_run_config.example.json}"
-WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_BOUNDED_RUN_SECONDS="${WAIT_AFTER_BOUNDED_RUN_SECONDS:-75}"
 WAIT_AFTER_BATCH_SECONDS="${WAIT_AFTER_BATCH_SECONDS:-10}"
 MIN_RAW_ROWS="${MIN_RAW_ROWS:-1}"
@@ -79,41 +77,7 @@ PY
 fi
 
 cd "$REPO_ROOT"
-printf '[BT-EVENTS-CONFORMED] Assuming infrastructure is up. Run: make reset-infra\n'
-
-printf '[BT-EVENTS-CONFORMED] Ensuring required topics exist...\n'
-docker exec lakehouse-kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --create \
-  --if-not-exists \
-  --topic content_events \
-  --partitions 6 \
-  --replication-factor 1
-
-docker exec lakehouse-kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --create \
-  --if-not-exists \
-  --topic cdc.content.videos \
-  --partitions 3 \
-  --replication-factor 1
-
-docker exec lakehouse-kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --alter \
-  --topic content_events \
-  --partitions 6 || true
-
-docker exec lakehouse-kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --alter \
-  --topic cdc.content.videos \
-  --partitions 3 || true
-
-printf '[BT-EVENTS-CONFORMED] Starting Spark content aggregator job (raw_events producer)...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '[r]t_content_events_aggregator.py' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
-docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit /home/iceberg/local/src/spark/rt_content_events_aggregator.py > /tmp/bt_events_conformed_content_agg.log 2>&1 &"
-sleep "$WAIT_AFTER_JOB_START_SECONDS"
+printf '[BT-EVENTS-CONFORMED] Assuming infra + streaming are up. Run: make infra && make streaming\n'
 
 printf '[BT-EVENTS-CONFORMED] Running bounded generator...\n'
 printf '[BT-EVENTS-CONFORMED] Generator run id: %s\n' "$EVENTS_CONFORMED_RUN_ID"
