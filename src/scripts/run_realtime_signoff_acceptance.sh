@@ -4,22 +4,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/common.sh"
-MINIO_CHECKPOINT_ROOT="${MINIO_CHECKPOINT_ROOT:-/data/checkpoints}"
-
-RESET_CHECKPOINTS="${RESET_CHECKPOINTS:-0}"
 
 usage() {
   cat <<'EOF'
-Usage: run_realtime_signoff_acceptance.sh [--reset-checkpoints]
+Usage: run_realtime_signoff_acceptance.sh
 
 Precondition: make infra && make streaming must be run first.
+For a clean checkpoint state run make infra, which recreates the MinIO
+volume. There is no in-script checkpoint reset — wiping checkpoints
+while streaming jobs are running destabilises the active queries.
 
 Options:
-  --reset-checkpoints  Remove streaming checkpoint paths before the run.
-  -h, --help           Show this help.
+  -h, --help  Show this help.
 
 Equivalent env flags:
-  RESET_CHECKPOINTS=1
   BOUNDED_RUN_TIME_MODE=dynamic
   BOUNDED_RUN_STARTED_AT=2026-03-20T14:00:00Z
 
@@ -31,10 +29,6 @@ EOF
 
 while (($# > 0)); do
   case "$1" in
-    --reset-checkpoints)
-      RESET_CHECKPOINTS=1
-      shift
-      ;;
     -h|--help)
       usage
       exit 0
@@ -144,16 +138,6 @@ now_ms_spark_container() {
 }
 
 
-reset_checkpoints() {
-  printf '[RT-SIGNOFF] Resetting checkpoint directories...\n'
-  docker exec lakehouse-minio sh -lc "rm -rf \
-    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/raw_events/v1 \
-    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/rt_video_stats_1min/v1 \
-    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_content_events_aggregator/invalid_events_content/v1 \
-    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/dim_videos/v1 \
-    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/raw_cdc_videos/v1 \
-    ${MINIO_CHECKPOINT_ROOT}/jobs/spark_rt_video_cdc_upsert/invalid_events_cdc_videos/v1"
-}
 
 wait_for_spark_job() {
   local pattern="$1"
@@ -337,10 +321,6 @@ printf '[RT-SIGNOFF] min_ingested_at_ms=%s\n' "$MIN_INGESTED_AT_MS"
 printf '[RT-SIGNOFF] Probing streaming jobs...\n'
 wait_for_spark_job rt_content_events_aggregator.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
 wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
-
-if [ "$RESET_CHECKPOINTS" = "1" ]; then
-  reset_checkpoints
-fi
 
 # For non-baseline scenarios the content aggregator must run with the
 # scenario-specific watermark (e.g. 5 minutes for lag_prone).  Restart only
