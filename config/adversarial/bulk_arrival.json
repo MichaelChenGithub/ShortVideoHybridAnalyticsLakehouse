@@ -1,0 +1,16 @@
+{
+  "run_id": "adv-bulk-arrival-seed42",
+  "seed": 42,
+  "started_at": "2026-04-07T12:00:00Z",
+  "duration_minutes": 30,
+  "events_per_sec": 120,
+  "adversarial_scenario": "bulk_arrival",
+  "scenario_params": {
+    "burst_multiplier": 10,
+    "burst_duration_seconds": 60,
+    "baseline_duration_seconds": 300,
+    "recovery_duration_seconds": 300,
+    "max_lag_threshold": 50000,
+    "recovery_timeout_seconds": 120
+  }
+}

@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .adversarial import (
+    ADVERSARIAL_BULK_ARRIVAL,
     ADVERSARIAL_DUPLICATE_STORM,
     ADVERSARIAL_LATE_ARRIVAL_REPROCESS,
     ADVERSARIAL_LATE_BULK_ARRIVAL,
@@ -76,6 +77,7 @@ class AdversarialRunner:
             ADVERSARIAL_DUPLICATE_STORM: self._run_duplicate_event_storm,
             ADVERSARIAL_SCHEMA_MISMATCH: self._run_schema_mismatch,
             ADVERSARIAL_LATE_ARRIVAL_REPROCESS: self._run_late_arrival_reprocess,
+            ADVERSARIAL_BULK_ARRIVAL: self._run_bulk_arrival,
         }
 
     def _log(self, message: str) -> None:
@@ -225,6 +227,54 @@ class AdversarialRunner:
 
         return emitted
 
+    def _emit_phase(
+        self,
+        video_ids: List[str],
+        user_rows: List[Dict[str, Any]],
+        duration_seconds: int,
+        rate_per_sec: int,
+        event_index: int,
+    ) -> Tuple[int, int]:
+        """Emit events at rate_per_sec for duration_seconds.
+
+        Returns (events_emitted, updated_event_index).
+        User RNG is seeded per call using event_index so phases are
+        independent but each call is deterministic.
+        """
+        user_rng = make_rng(self.config.seed, f"adv-bulk-arrival-user-{event_index}")
+        payload_rng_seed = self.config.seed
+        emitted = 0
+
+        for _ in range(duration_seconds):
+            second_start = self.clock.now()
+            for _ in range(rate_per_sec):
+                event_id = self.id_factory.next_event_id()
+                user_id = user_rows[user_rng.randint(0, len(user_rows) - 1)]["user_id"]
+                video_id = video_ids[event_index % len(video_ids)]
+                p_rng = make_rng(payload_rng_seed + event_index, "adv-payload")
+                event: Dict[str, Any] = {
+                    "event_id": event_id,
+                    "event_timestamp": _to_utc_iso(second_start),
+                    "video_id": video_id,
+                    "user_id": user_id,
+                    "event_type": p_rng.choice(["impression", "play_start", "play_finish"]),
+                    "schema_version": self.config.schema_version,
+                    "payload_json": json.dumps(
+                        {
+                            "watch_time_ms": p_rng.randint(0, 90000),
+                            "device_os": p_rng.choice(["iOS", "Android"]),
+                            "network_type": p_rng.choice(["5G", "WiFi", "4G"]),
+                        },
+                        separators=(",", ":"),
+                    ),
+                }
+                self.sink.emit_content_event(video_id, event, self.clock.now())
+                event_index += 1
+                emitted += 1
+            self.clock.sleep(1.0)
+
+        return emitted, event_index
+
     # ------------------------------------------------------------------
     # Scenario implementations (stubs — filled in per-scenario iteration)
     # ------------------------------------------------------------------
@@ -316,5 +366,86 @@ class AdversarialRunner:
                 "paired_run_id": self.config.scenario_params.get("paired_run_id", ""),
                 "started_at": self.config.started_at.isoformat(),
                 "total_emitted": len(emitted),
+            }
+        )
+
+    def _run_bulk_arrival(self) -> AdversarialRunResult:
+        """Three-phase peak load scenario.
+
+        Phase 1 — baseline: events_per_sec for baseline_duration_seconds.
+        Phase 2 — burst:    burst_multiplier × events_per_sec for burst_duration_seconds.
+        Phase 3 — recovery: events_per_sec for recovery_duration_seconds.
+
+        Validates maxOffsetsPerTrigger backpressure (bounded batch size prevents OOM)
+        and Iceberg post-burst compaction (bounds small file count).
+        """
+        params = self.config.scenario_params
+        burst_multiplier: int = int(params["burst_multiplier"])
+        baseline_duration: int = int(params.get("baseline_duration_seconds", 300))
+        burst_duration: int = int(params.get("burst_duration_seconds", 60))
+        recovery_duration: int = int(params.get("recovery_duration_seconds", 300))
+
+        total_phase_seconds = baseline_duration + burst_duration + recovery_duration
+        if total_phase_seconds > self.config.duration_seconds:
+            raise ValueError(
+                f"bulk_arrival phase durations sum to {total_phase_seconds}s but "
+                f"duration_minutes={self.config.duration_minutes} allows only "
+                f"{self.config.duration_seconds}s. Increase duration_minutes or "
+                f"reduce phase durations."
+            )
+
+        video_rows, video_ids = self._build_baseline_video_registry()
+        user_rows = self._build_user_registry()
+
+        self._emit_video_cdc_bootstrap(video_rows)
+        self.clock.sleep(float(self.cdc_gate_seconds))
+        self._emit_user_cdc_bootstrap(user_rows)
+        self.clock.sleep(float(self.cdc_gate_seconds))
+
+        event_index = 0
+        burst_rate = self.config.events_per_sec * burst_multiplier
+
+        self._log(
+            f"[bulk_arrival] phase=1 baseline "
+            f"duration={baseline_duration}s rate={self.config.events_per_sec}/s"
+        )
+        phase1_emitted, event_index = self._emit_phase(
+            video_ids, user_rows, baseline_duration, self.config.events_per_sec, event_index
+        )
+
+        self._log(
+            f"[bulk_arrival] phase=2 burst "
+            f"duration={burst_duration}s rate={burst_rate}/s"
+        )
+        phase2_emitted, event_index = self._emit_phase(
+            video_ids, user_rows, burst_duration, burst_rate, event_index
+        )
+
+        self._log(
+            f"[bulk_arrival] phase=3 recovery "
+            f"duration={recovery_duration}s rate={self.config.events_per_sec}/s"
+        )
+        phase3_emitted, event_index = self._emit_phase(
+            video_ids, user_rows, recovery_duration, self.config.events_per_sec, event_index
+        )
+
+        total_emitted = phase1_emitted + phase2_emitted + phase3_emitted
+        self._log(
+            f"[bulk_arrival] complete total_emitted={total_emitted} "
+            f"phase1={phase1_emitted} phase2={phase2_emitted} phase3={phase3_emitted}"
+        )
+
+        return AdversarialRunResult(
+            summary={
+                "scenario": "bulk_arrival",
+                "run_id": self.config.run_id,
+                "started_at": self.config.started_at.isoformat(),
+                "events_per_sec": self.config.events_per_sec,
+                "burst_multiplier": burst_multiplier,
+                "burst_rate": burst_rate,
+                "phase1_emitted": phase1_emitted,
+                "phase2_emitted": phase2_emitted,
+                "phase3_emitted": phase3_emitted,
+                "total_emitted": total_emitted,
             }
         )

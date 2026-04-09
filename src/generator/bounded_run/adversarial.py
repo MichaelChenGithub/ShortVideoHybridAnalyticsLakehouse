@@ -27,12 +27,14 @@ ADVERSARIAL_LATE_BULK_ARRIVAL = "late_bulk_arrival"
 ADVERSARIAL_DUPLICATE_STORM = "duplicate_event_storm"
 ADVERSARIAL_SCHEMA_MISMATCH = "schema_mismatch"
 ADVERSARIAL_LATE_ARRIVAL_REPROCESS = "late_arrival_reprocess"
+ADVERSARIAL_BULK_ARRIVAL = "bulk_arrival"
 
 ADVERSARIAL_SCENARIO_KEYS: Tuple[str, ...] = (
     ADVERSARIAL_LATE_BULK_ARRIVAL,
     ADVERSARIAL_DUPLICATE_STORM,
     ADVERSARIAL_SCHEMA_MISMATCH,
     ADVERSARIAL_LATE_ARRIVAL_REPROCESS,
+    ADVERSARIAL_BULK_ARRIVAL,
 )
 
 
@@ -118,6 +120,25 @@ ADVERSARIAL_REGISTRY: Dict[str, AdversarialTemplate] = {
                 "malformed_payload_json",
             ],
             "expected_dlq_floor": 0.99,
+        },
+    ),
+    ADVERSARIAL_BULK_ARRIVAL: AdversarialTemplate(
+        scenario_id=ADVERSARIAL_BULK_ARRIVAL,
+        description=(
+            "Three-phase peak load scenario. Phase 1 establishes baseline traffic; "
+            "Phase 2 spikes to burst_multiplier × rate to build Kafka consumer lag; "
+            "Phase 3 returns to baseline so lag drains. Validates maxOffsetsPerTrigger "
+            "backpressure (bounded batch size prevents OOM) and Iceberg post-burst "
+            "compaction (bounds file count for read performance)."
+        ),
+        required_params=("burst_multiplier",),
+        default_params={
+            "burst_multiplier": 10,
+            "burst_duration_seconds": 60,
+            "baseline_duration_seconds": 300,
+            "recovery_duration_seconds": 300,
+            "max_lag_threshold": 50000,
+            "recovery_timeout_seconds": 120,
         },
     ),
 }
