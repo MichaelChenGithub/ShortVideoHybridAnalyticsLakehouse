@@ -14,6 +14,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from generator.bounded_run.adversarial import (
+    ADVERSARIAL_BULK_ARRIVAL,
     ADVERSARIAL_DUPLICATE_STORM,
     ADVERSARIAL_LATE_BULK_ARRIVAL,
     ADVERSARIAL_SCHEMA_MISMATCH,
@@ -186,6 +187,16 @@ class AdversarialRunnerDispatchTests(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             runner.run()
 
+    def test_bulk_arrival_does_not_raise(self) -> None:
+        # duration_minutes must cover the default phases (300+60+300=660s=11min).
+        with tempfile.TemporaryDirectory() as td:
+            payload = _make_config(ADVERSARIAL_BULK_ARRIVAL)
+            payload["duration_minutes"] = 12
+            config = _write_and_load(Path(td), payload)
+        runner = _make_runner(config)
+        result = runner.run()
+        self.assertIsNotNone(result)
+
 
 # ---------------------------------------------------------------------------
 # Determinism
@@ -241,6 +252,116 @@ class AdversarialDeterminismTests(unittest.TestCase):
         ids_a = _make_runner(config_a)._build_baseline_video_registry()[1]
         ids_b = _make_runner(config_b)._build_baseline_video_registry()[1]
         self.assertNotEqual(ids_a, ids_b)
+
+
+# ---------------------------------------------------------------------------
+# BulkArrival scenario
+# ---------------------------------------------------------------------------
+
+# Minimal phase durations keep the test fast under SimulatedClock.
+# events_per_sec=1, burst_multiplier=3, phases=3s/2s/3s
+# → phase1=3, phase2=6, phase3=3, total=12
+_BULK_ARRIVAL_FAST_PARAMS = {
+    "burst_multiplier": 3,
+    "baseline_duration_seconds": 3,
+    "burst_duration_seconds": 2,
+    "recovery_duration_seconds": 3,
+    "max_lag_threshold": 50000,
+    "recovery_timeout_seconds": 120,
+}
+
+
+def _make_bulk_arrival_config() -> Dict[str, Any]:
+    return {
+        **BASE_CONFIG,
+        "events_per_sec": 1,
+        "adversarial_scenario": ADVERSARIAL_BULK_ARRIVAL,
+        "scenario_params": _BULK_ARRIVAL_FAST_PARAMS,
+    }
+
+
+class BulkArrivalRunnerTests(unittest.TestCase):
+    def _run(self) -> Any:
+        with tempfile.TemporaryDirectory() as td:
+            config = _write_and_load(Path(td), _make_bulk_arrival_config())
+        sink = InMemoryEventSink()
+        runner = AdversarialRunner(
+            config=config,
+            sink=sink,
+            clock=SimulatedClock(config.started_at),
+            logger=lambda _: None,
+        )
+        result = runner.run()
+        return result, sink
+
+    def test_bulk_arrival_returns_result(self) -> None:
+        result, _ = self._run()
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result.summary, dict)
+
+    def test_bulk_arrival_summary_keys(self) -> None:
+        result, _ = self._run()
+        for key in (
+            "scenario",
+            "run_id",
+            "total_emitted",
+            "phase1_emitted",
+            "phase2_emitted",
+            "phase3_emitted",
+            "burst_multiplier",
+            "burst_rate",
+        ):
+            self.assertIn(key, result.summary, msg=f"missing key: {key}")
+        self.assertEqual(result.summary["scenario"], "bulk_arrival")
+
+    def test_bulk_arrival_phase_counts(self) -> None:
+        result, _ = self._run()
+        p = _BULK_ARRIVAL_FAST_PARAMS
+        eps = 1  # events_per_sec from BASE_CONFIG override
+        expected_phase1 = p["baseline_duration_seconds"] * eps
+        expected_phase2 = p["burst_duration_seconds"] * eps * p["burst_multiplier"]
+        expected_phase3 = p["recovery_duration_seconds"] * eps
+        expected_total = expected_phase1 + expected_phase2 + expected_phase3
+
+        self.assertEqual(result.summary["phase1_emitted"], expected_phase1)
+        self.assertEqual(result.summary["phase2_emitted"], expected_phase2)
+        self.assertEqual(result.summary["phase3_emitted"], expected_phase3)
+        self.assertEqual(result.summary["total_emitted"], expected_total)
+
+    def test_bulk_arrival_burst_exceeds_baseline(self) -> None:
+        result, _ = self._run()
+        self.assertGreater(result.summary["phase2_emitted"], result.summary["phase1_emitted"])
+
+    def test_bulk_arrival_is_deterministic(self) -> None:
+        result_a, sink_a = self._run()
+        result_b, sink_b = self._run()
+        self.assertEqual(result_a.summary["total_emitted"], result_b.summary["total_emitted"])
+        ids_a = [e.value["event_id"] for e in sink_a.content_events]
+        ids_b = [e.value["event_id"] for e in sink_b.content_events]
+        self.assertEqual(ids_a, ids_b)
+
+    def test_bulk_arrival_raises_when_phases_exceed_duration(self) -> None:
+        # duration_minutes=10 → 600s, but phases sum to 3+2+3=8s here — invert:
+        # set phases that exceed the envelope to trigger the guard.
+        with tempfile.TemporaryDirectory() as td:
+            payload = {
+                **BASE_CONFIG,
+                "events_per_sec": 1,
+                "duration_minutes": 10,  # 600s envelope
+                "adversarial_scenario": ADVERSARIAL_BULK_ARRIVAL,
+                "scenario_params": {
+                    "burst_multiplier": 2,
+                    "baseline_duration_seconds": 300,
+                    "burst_duration_seconds": 200,
+                    "recovery_duration_seconds": 200,  # total=700s > 600s
+                    "max_lag_threshold": 50000,
+                    "recovery_timeout_seconds": 120,
+                },
+            }
+            config = _write_and_load(Path(td), payload)
+        runner = _make_runner(config)
+        with self.assertRaises(ValueError):
+            runner.run()
 
 
 if __name__ == "__main__":

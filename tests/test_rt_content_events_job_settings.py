@@ -22,6 +22,7 @@ from spark.rt_content_events_contract import (  # noqa: E402
     ENV_CONSUMER_GROUP,
     ENV_GOLD_TABLE,
     ENV_INVALID_TABLE,
+    ENV_MAX_OFFSETS_PER_TRIGGER,
     ENV_RAW_TABLE,
     ENV_STARTING_OFFSETS,
     ENV_TOPIC,
@@ -30,6 +31,7 @@ from spark.rt_content_events_contract import (  # noqa: E402
     ENV_WATERMARK_GOLD,
     INVALID_EVENTS_CONTENT_TABLE,
     JOB_NAME,
+    MAX_OFFSETS_PER_TRIGGER,
     RAW_EVENTS_TABLE,
     RT_VIDEO_STATS_1MIN_TABLE,
     STARTING_OFFSETS,
@@ -58,6 +60,7 @@ class RtContentEventsJobSettingsTests(unittest.TestCase):
         self.assertEqual(settings.raw_table, RAW_EVENTS_TABLE)
         self.assertEqual(settings.gold_table, RT_VIDEO_STATS_1MIN_TABLE)
         self.assertEqual(settings.invalid_table, INVALID_EVENTS_CONTENT_TABLE)
+        self.assertEqual(settings.max_offsets_per_trigger, MAX_OFFSETS_PER_TRIGGER)
 
     def test_load_job_settings_honors_env_overrides(self) -> None:
         settings = load_job_settings(
@@ -76,6 +79,7 @@ class RtContentEventsJobSettingsTests(unittest.TestCase):
                 ENV_RAW_TABLE: "lakehouse.bronze.raw_events_custom",
                 ENV_GOLD_TABLE: "lakehouse.gold.rt_video_stats_1min_custom",
                 ENV_INVALID_TABLE: "lakehouse.bronze.invalid_events_content_custom",
+                ENV_MAX_OFFSETS_PER_TRIGGER: "2500",
             }
         )
         self.assertEqual(settings.app_name, "custom-content-app")
@@ -92,6 +96,7 @@ class RtContentEventsJobSettingsTests(unittest.TestCase):
         self.assertEqual(settings.raw_table, "lakehouse.bronze.raw_events_custom")
         self.assertEqual(settings.gold_table, "lakehouse.gold.rt_video_stats_1min_custom")
         self.assertEqual(settings.invalid_table, "lakehouse.bronze.invalid_events_content_custom")
+        self.assertEqual(settings.max_offsets_per_trigger, 2500)
 
 
 if __name__ == "__main__":
