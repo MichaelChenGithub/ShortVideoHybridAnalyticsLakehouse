@@ -105,6 +105,7 @@ sleep 2
 log "Starting rt_content_events_aggregator..."
 docker exec lakehouse-spark bash -lc "nohup env \
   RT_CONTENT_EVENTS_STARTING_OFFSETS=earliest \
+  RT_CONTENT_EVENTS_MAX_OFFSETS_PER_TRIGGER=5000 \
   /opt/spark/bin/spark-submit \
     --packages '${SPARK_PACKAGES}' \
     --conf spark.driver.memory=512m \

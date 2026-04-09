@@ -166,6 +166,8 @@ def read_content_events_stream(spark: SparkSession, settings: JobSettings) -> Da
         .option("kafka.bootstrap.servers", settings.bootstrap_servers)
         .option("subscribe", settings.topic)
         .option("startingOffsets", settings.starting_offsets)
+        .option("maxOffsetsPerTrigger", settings.max_offsets_per_trigger)
+        .option("groupIdPrefix", settings.consumer_group)
     )
     if settings.use_msk_iam:
         reader = (

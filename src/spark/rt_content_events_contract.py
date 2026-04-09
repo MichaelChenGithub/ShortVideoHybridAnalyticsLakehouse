@@ -23,6 +23,7 @@ CHECKPOINT_INVALID = "s3a://checkpoints/jobs/spark_rt_content_events_aggregator/
 
 DEFAULT_BOOTSTRAP_SERVERS = "kafka:29092"
 DEFAULT_CONSUMER_GROUP = "cg_rt_content_events_aggregator_v1"
+MAX_OFFSETS_PER_TRIGGER = 5000
 
 ENV_BOOTSTRAP_SERVERS = "RT_CONTENT_EVENTS_BOOTSTRAP_SERVERS"
 ENV_TOPIC = "RT_CONTENT_EVENTS_TOPIC"
@@ -39,6 +40,7 @@ ENV_RAW_TABLE = "RT_CONTENT_EVENTS_RAW_TABLE"
 ENV_GOLD_TABLE = "RT_CONTENT_EVENTS_GOLD_TABLE"
 ENV_INVALID_TABLE = "RT_CONTENT_EVENTS_INVALID_TABLE"
 ENV_MSK_IAM_AUTH = "RT_CONTENT_EVENTS_MSK_IAM_AUTH"
+ENV_MAX_OFFSETS_PER_TRIGGER = "RT_CONTENT_EVENTS_MAX_OFFSETS_PER_TRIGGER"
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,7 @@ class JobSettings:
     gold_table: str
     invalid_table: str
     use_msk_iam: bool = False
+    max_offsets_per_trigger: int = MAX_OFFSETS_PER_TRIGGER
 
 
 def checkpoint_for_sink(sink_name: str, version: str = "v1") -> str:
@@ -85,4 +88,7 @@ def load_job_settings(env: Mapping[str, str] | None = None) -> JobSettings:
         gold_table=values.get(ENV_GOLD_TABLE, RT_VIDEO_STATS_1MIN_TABLE),
         invalid_table=values.get(ENV_INVALID_TABLE, INVALID_EVENTS_CONTENT_TABLE),
         use_msk_iam=values.get(ENV_MSK_IAM_AUTH, "").lower() in ("1", "true", "yes"),
+        max_offsets_per_trigger=int(
+            values.get(ENV_MAX_OFFSETS_PER_TRIGGER, MAX_OFFSETS_PER_TRIGGER)
+        ),
     )
