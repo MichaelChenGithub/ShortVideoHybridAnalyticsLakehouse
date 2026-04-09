@@ -48,6 +48,7 @@ while (($# > 0)); do
 done
 
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
+SPARK_PACKAGES="org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1"
 DEFAULT_PYTHON_BIN="python3"
 if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
   DEFAULT_PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
@@ -206,6 +207,34 @@ max_batch_id_from_log() {
   docker exec lakehouse-spark bash -lc "if [ -f '${log_file}' ]; then awk '{for (i=1; i<=NF; i++) if (\$i==\"Batch\" && (i+1)<=NF) {n=\$(i+1); gsub(/[^0-9]/, \"\", n); if ((n+0)>max) max=(n+0)}} END{if (max==\"\") print -1; else print max}' '${log_file}'; else echo -1; fi"
 }
 
+restart_content_aggregator_for_scenario() {
+  # Kill the existing content aggregator and restart it with the watermark
+  # configured for the current scenario.  Called only for non-baseline scenarios
+  # where the watermark differs from the start_streaming.sh default (2 minutes).
+  local watermark="$1"
+  printf '[RT-SIGNOFF] Restarting content aggregator for scenario "%s" (watermark: %s)...\n' \
+    "$RT_SIGNOFF_WATERMARK_SCENARIO" "$watermark"
+
+  docker exec lakehouse-spark bash -lc \
+    "pids=\$(pgrep -f '[r]t_content_events_aggregator.py' || true); [ -n \"\$pids\" ] && kill \$pids || true"
+  sleep 3
+
+  docker exec lakehouse-spark bash -lc "nohup env \
+    RT_CONTENT_EVENTS_STARTING_OFFSETS=latest \
+    RT_CONTENT_EVENTS_WATERMARK='${watermark}' \
+    /opt/spark/bin/spark-submit \
+      --packages '${SPARK_PACKAGES}' \
+      --conf spark.driver.memory=512m \
+      --conf spark.executor.memory=512m \
+      /home/iceberg/local/src/spark/rt_content_events_aggregator.py \
+    > /tmp/streaming_content.log 2>&1 &"
+
+  # Wait for the restarted aggregator to appear before continuing.
+  wait_for_spark_job rt_content_events_aggregator.py \
+    "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB_READY_SLEEP_SECONDS"
+  printf '[RT-SIGNOFF] Content aggregator restarted and running.\n'
+}
+
 runtime_snapshot() {
   local outfile="$1"
   local sample_at_ms
@@ -311,6 +340,13 @@ wait_for_spark_job rt_video_cdc_upsert.py "$SPARK_JOB_READY_RETRIES" "$SPARK_JOB
 
 if [ "$RESET_CHECKPOINTS" = "1" ]; then
   reset_checkpoints
+fi
+
+# For non-baseline scenarios the content aggregator must run with the
+# scenario-specific watermark (e.g. 5 minutes for lag_prone).  Restart only
+# that job so the watermark assertion is valid; the other two jobs keep running.
+if [ "$RT_SIGNOFF_WATERMARK_SCENARIO" != "baseline" ]; then
+  restart_content_aggregator_for_scenario "$RT_CONTENT_EVENTS_WATERMARK"
 fi
 
 printf '[RT-SIGNOFF] Capturing pre-run runtime/checkpoint snapshots...\n'
