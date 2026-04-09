@@ -104,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             sink=sink,
             artifacts_root=Path(args.artifacts_root),
             clock=clock,
+            logger=lambda msg: print(msg, file=sys.stderr),
         )
 
         result = runner.run()
