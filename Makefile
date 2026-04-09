@@ -1,19 +1,23 @@
-.PHONY: reset-infra seed-bronze up down clean integration-test test-late-arrival-reprocess upload-aws-scripts package-spark-libs build-generator push-generator submit-all-streaming submit-rt-content-events submit-rt-video-cdc submit-rt-user-cdc run-generator-smoke run-generator-benchmark aws-shutdown aws-resume help
+.PHONY: infra streaming seed-bronze up down clean integration-test test-late-arrival-reprocess upload-aws-scripts package-spark-libs build-generator push-generator submit-all-streaming submit-rt-content-events submit-rt-video-cdc submit-rt-user-cdc run-generator-smoke run-generator-benchmark aws-shutdown aws-resume help
 
 export AWS_PAGER :=
 
 SCRIPTS := src/scripts
 
-## reset-infra: Tear down, clean state, and rebuild the core pipeline stack
-reset-infra:
+## infra: Tear down, clean state, and bring up all services (Spark, Trino, Airflow, etc.)
+infra:
 	bash $(SCRIPTS)/reset_infra.sh
 
-## seed-bronze: Start streaming jobs, run generator, drain, and verify MinIO
-seed-bronze:
+## streaming: Create Kafka topics and start the three realtime Spark streaming jobs (idempotent)
+streaming:
+	bash $(SCRIPTS)/start_streaming.sh
+
+## seed-bronze: Run the bounded generator and verify parquet files landed in MinIO
+seed-bronze: streaming
 	bash $(SCRIPTS)/seed_bronze.sh
 
-## up: Full reset + seed in one shot
-up: reset-infra seed-bronze
+## up: Full reset + streaming + seed in one shot
+up: infra seed-bronze
 
 ## integration-test: Full reset + seed then run all 6 acceptance scripts
 integration-test: up
@@ -24,15 +28,18 @@ integration-test: up
 	bash $(SCRIPTS)/run_bt_user_activity_sessions_30m_acceptance.sh
 	bash $(SCRIPTS)/run_rule_baseline_publish_acceptance.sh
 
-## test-late-arrival-reprocess: reset-infra then run the late arrival reprocess adversarial acceptance
-test-late-arrival-reprocess: reset-infra
+## test-late-arrival-reprocess: Full infra + streaming reset then run the late arrival adversarial acceptance
+test-late-arrival-reprocess: infra streaming
 	bash $(SCRIPTS)/run_late_arrival_reprocess_acceptance.sh
 
-## down: Stop all containers and remove named volumes
+## down: Stop streaming jobs then stop all containers and remove named volumes
 down:
+	-docker exec lakehouse-spark bash -lc \
+	  "pkill -f 'rt_content_events_aggregator\.py\|rt_video_cdc_upsert\.py\|rt_user_cdc_raw\.py' || true" \
+	  2>/dev/null || true
 	docker compose down -v --remove-orphans
 
-## clean: reset-infra + wipe ivy_cache (forces jar re-download; use when deps are corrupted)
+## clean: infra + wipe ivy_cache (forces jar re-download; use when deps are corrupted)
 clean:
 	WIPE_IVY_CACHE=1 bash $(SCRIPTS)/reset_infra.sh
 

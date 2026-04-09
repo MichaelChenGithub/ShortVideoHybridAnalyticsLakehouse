@@ -307,16 +307,22 @@ def build_signoff_report(
     content_pid_end = _as_int(runtime_end.get("content_pid_count"))
     cdc_pid_start = _as_int(runtime_start.get("cdc_pid_count"))
     cdc_pid_end = _as_int(runtime_end.get("cdc_pid_count"))
+    content_exception_start = _as_int(runtime_start.get("content_exception_lines"))
+    cdc_exception_start = _as_int(runtime_start.get("cdc_exception_lines"))
     content_exception_end = _as_int(runtime_end.get("content_exception_lines"))
     cdc_exception_end = _as_int(runtime_end.get("cdc_exception_lines"))
+    # Use delta so that exception lines from prior runs (cumulative in a shared
+    # log file) do not fail a currently-healthy run.
+    content_exception_delta = content_exception_end - content_exception_start
+    cdc_exception_delta = cdc_exception_end - cdc_exception_start
 
     health_checks = {
         "content_pid_alive_start": content_pid_start >= 1,
         "content_pid_alive_end": content_pid_end >= 1,
         "cdc_pid_alive_start": cdc_pid_start >= 1,
         "cdc_pid_alive_end": cdc_pid_end >= 1,
-        "content_exception_lines_zero": content_exception_end == 0,
-        "cdc_exception_lines_zero": cdc_exception_end == 0,
+        "content_exception_lines_zero": content_exception_delta == 0,
+        "cdc_exception_lines_zero": cdc_exception_delta == 0,
     }
     gate = _gate(
         "query_health_active_no_exception",
@@ -330,8 +336,12 @@ def build_signoff_report(
             "content_pid_end": content_pid_end,
             "cdc_pid_start": cdc_pid_start,
             "cdc_pid_end": cdc_pid_end,
+            "content_exception_lines_start": content_exception_start,
             "content_exception_lines_end": content_exception_end,
+            "content_exception_lines_delta": content_exception_delta,
+            "cdc_exception_lines_start": cdc_exception_start,
             "cdc_exception_lines_end": cdc_exception_end,
+            "cdc_exception_lines_delta": cdc_exception_delta,
         },
     )
     gates.append(gate)

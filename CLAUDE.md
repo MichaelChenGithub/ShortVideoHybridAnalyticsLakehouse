@@ -17,13 +17,15 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m pytest tests/test_rt_action_decisioning.py       # single file
 
 # Local infrastructure — use the Makefile targets (source of truth)
-make up                 # Full reset + seed in one shot (reset-infra then seed-bronze)
-make reset-infra        # Tear down, clean state, and rebuild the core pipeline stack
-make seed-bronze        # Start streaming jobs, run generator, drain, and verify MinIO
-make integration-test   # make up + run all 6 acceptance scripts end-to-end
-make down               # Stop all containers and remove named volumes
-make clean              # reset-infra + wipe ivy_cache (use when deps are corrupted)
-make help               # List all available targets
+make up                              # Full reset: infra → streaming → seed-bronze
+make infra                           # Tear down, clean state, bring up all services (incl. Trino, Airflow)
+make streaming                       # Create Kafka topics + start 3 realtime Spark streaming jobs (idempotent)
+make seed-bronze                     # Run generator + verify MinIO (runs streaming first if needed)
+make integration-test                # make up + run all 6 acceptance scripts end-to-end
+make test-late-arrival-reprocess     # infra + streaming + run late arrival adversarial acceptance
+make down                            # Stop streaming jobs, then stop all containers and remove volumes
+make clean                           # infra + wipe ivy_cache (use when deps are corrupted)
+make help                            # List all available targets
 
 # Airflow Docker image (build from repo root)
 docker build -f short-video-lakehouse-airflow/Dockerfile \
@@ -78,7 +80,7 @@ Bronze Iceberg tables
 - **`src/orchestration/airflow_batch_tasks.py`** — `SPARK_BATCH_SPECS` registry mapping job names to Spark scripts. Local dev: `docker exec` into Spark container. AWS: boto3 EMR Serverless `start_job_run` when `EMR_APPLICATION_ID` env var is set.
 - **`src/spark/`** — Realtime Spark jobs (prefix `rt_`) and batch Spark jobs (prefix `bt_`). Each file is scoped to one contract surface.
 - **`src/generator/bounded_run/`** — Synthetic event/CDC generator used in acceptance testing.
-- **`src/scripts/`** — 6 integration acceptance scripts (`run_*_acceptance.sh`), contract verifiers (`verify_*.py`), and `common.sh` (shared `resolve_bounded_run_started_at` utility). Scripts assume infra is up (`make reset-infra`); use `make integration-test` to run them all.
+- **`src/scripts/`** — 7 integration acceptance scripts (`run_*_acceptance.sh`), contract verifiers (`verify_*.py`), `start_streaming.sh` (Kafka topics + 3 Spark streaming jobs), and `common.sh` (shared `resolve_bounded_run_started_at` utility). Acceptance scripts only run generators and validate output — they assume `make infra` and `make streaming` have already been run. Use `make integration-test` or `make test-late-arrival-reprocess` for self-contained runs.
 - **`src/trino/`** — Semantic serving SQL for both realtime (`rt_video_metrics_serving.sql`) and batch (`bt_semantic_serving.sql`).
 - **`src/metabase/realtime-metrics-sql-pack.sql`** — Pre-built SQL queries for the Metabase realtime metrics dashboard.
 - **`tests/`** — Mirrors `src/` structure; uses `pytest` with `unittest`-style classes. Deterministic (fixed seeds, explicit timestamps).

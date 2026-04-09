@@ -15,7 +15,6 @@ Environment overrides:
   VIDEO_ID
   BOOTSTRAP_SERVERS
   PYTHON_BIN
-  WAIT_AFTER_JOB_START_SECONDS
   WAIT_AFTER_FIXTURE_SECONDS
   WAIT_AFTER_BATCH_SECONDS
   RAW_READY_RETRIES
@@ -46,7 +45,6 @@ fi
 VIDEO_ID="${VIDEO_ID:-bt_dim_vid_001}"
 BOOTSTRAP_SERVERS="${BOOTSTRAP_SERVERS:-localhost:9092}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-WAIT_AFTER_JOB_START_SECONDS="${WAIT_AFTER_JOB_START_SECONDS:-30}"
 WAIT_AFTER_FIXTURE_SECONDS="${WAIT_AFTER_FIXTURE_SECONDS:-75}"
 WAIT_AFTER_BATCH_SECONDS="${WAIT_AFTER_BATCH_SECONDS:-10}"
 RAW_READY_RETRIES="${RAW_READY_RETRIES:-18}"
@@ -61,24 +59,7 @@ EXPECT_STATUS="${EXPECT_STATUS:-copyright_strike}"
 resolve_bounded_run_started_at "BT-DIM-VIDEOS-SCD2"
 
 cd "$REPO_ROOT"
-printf '[BT-DIM-VIDEOS-SCD2] Assuming infrastructure is up. Run: make reset-infra\n'
-
-printf '[BT-DIM-VIDEOS-SCD2] Ensuring CDC topic exists...\n'
-docker exec lakehouse-kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --create \
-  --if-not-exists \
-  --topic cdc.content.videos \
-  --partitions 3 \
-  --replication-factor 1
-
-printf '[BT-DIM-VIDEOS-SCD2] Starting Spark CDC upsert job (raw bronze source)...\n'
-docker exec lakehouse-spark bash -lc "pids=\$(pgrep -f '[r]t_video_cdc_upsert.py' || true); [ -n \"\$pids\" ] && kill \$pids || true" 2>/dev/null || true
-docker exec lakehouse-spark bash -lc "aws_jar='/root/.ivy2/jars/com.amazonaws_aws-java-sdk-bundle-1.12.262.jar'; if [ -f \"\$aws_jar\" ] && ! jar tf \"\$aws_jar\" >/dev/null 2>&1; then echo '[BT-DIM-VIDEOS-SCD2] WARN: removing corrupted aws sdk bundle from ivy cache'; rm -f \"\$aws_jar\"; rm -rf /root/.ivy2/cache/com.amazonaws/aws-java-sdk-bundle; fi"
-docker exec lakehouse-spark bash -lc "nohup /opt/spark/bin/spark-submit \
-  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 \
-  /home/iceberg/local/src/spark/rt_video_cdc_upsert.py > /tmp/bt_dim_videos_scd2_cdc_upsert.log 2>&1 &"
-sleep "$WAIT_AFTER_JOB_START_SECONDS"
+printf '[BT-DIM-VIDEOS-SCD2] Assuming infra + streaming are up. Run: make infra && make streaming\n'
 
 printf '[BT-DIM-VIDEOS-SCD2] Running bounded generator...\n'
 if [ -n "$BOUNDED_RUN_EFFECTIVE_STARTED_AT" ]; then

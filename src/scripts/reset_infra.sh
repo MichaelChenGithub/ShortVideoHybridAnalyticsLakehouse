@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # reset_infra.sh — Tear down the entire stack, clean all cached state, and bring
-# up the core data pipeline services in dependency order.
+# up all pipeline services in dependency order.
 #
-# Services started: minio, catalog-postgres, zookeeper, kafka, iceberg-rest, spark
-# Services NOT started: airflow, trino, grafana, metabase (start manually when needed)
+# Services started: minio, catalog-postgres, zookeeper, kafka, iceberg-rest, spark,
+#                   trino, airflow
+# Services NOT started: grafana, metabase (start manually when needed)
 #
 # Usage:
 #   bash src/scripts/reset_infra.sh
@@ -106,13 +107,32 @@ docker exec lakehouse-spark \
   /home/iceberg/local/src/scripts/bootstrap_lakehouse_tables.py
 
 # ---------------------------------------------------------------------------
-# 7. Done
+# 7. Start Trino and Airflow
 # ---------------------------------------------------------------------------
-log "Core pipeline stack is ready."
+log "Starting Trino..."
+docker compose -f "$COMPOSE_FILE" up -d trino
+
+log "Waiting for Trino..."
+poll_until "Trino" 30 3 \
+  curl -sf http://localhost:8081/v1/info
+
+log "Starting Airflow..."
+docker compose -f "$COMPOSE_FILE" up -d airflow
+
+log "Waiting for Airflow (db init + webserver startup may take ~60s)..."
+poll_until "Airflow" 40 5 \
+  docker exec lakehouse-airflow airflow dags list
+
+# ---------------------------------------------------------------------------
+# 8. Done
+# ---------------------------------------------------------------------------
+log "Full pipeline stack is ready."
 printf '\n'
 printf '  MinIO console:   http://localhost:9001  (admin / password)\n'
 printf '  Iceberg REST:    http://localhost:8181\n'
 printf '  Kafka:           localhost:9092\n'
 printf '  Spark UI:        http://localhost:9090\n'
+printf '  Trino UI:        http://localhost:8081\n'
+printf '  Airflow UI:      http://localhost:8082  (admin / admin)\n'
 printf '\n'
-printf 'Next: run  bash src/scripts/seed_bronze.sh  to seed bronze tables.\n'
+printf 'Next: run  make streaming  then  make seed-bronze\n'
